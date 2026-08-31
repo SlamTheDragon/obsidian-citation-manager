@@ -12,23 +12,18 @@ export class UsageLocationsModal extends Modal {
   }
 
   onOpen() {
+    this.titleEl.setText(`Active Citations for [${this.citekey}]`);
+
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-standard-modal-root");
-
-    const header = contentEl.createDiv({ cls: "citation-modal-header-row" });
-    const iconSpan = header.createSpan({ cls: "modal-header-icon danger" });
-    setIcon(iconSpan, "alert-triangle");
-    header.createEl("h2", { text: `Active Citations for [${this.citekey}]` });
-
-    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-area" });
+    contentEl.addClass("citation-modal-content-unified");
 
     // Clear instruction signifier
-    const hintBox = scrollBody.createDiv({ cls: "citation-usage-instruction-box" });
+    const hintBox = contentEl.createDiv({ cls: "citation-usage-instruction-box" });
     setIcon(hintBox.createSpan({ cls: "inline-icon" }), "info");
-    hintBox.createSpan({ text: " Deletion is protected. Click any line below to jump directly to that note." });
+    hintBox.createSpan({ text: " Deletion is protected. Click any occurrence below to jump directly to that note." });
 
-    const list = scrollBody.createDiv({ cls: "citation-occurrence-list" });
+    const list = contentEl.createDiv({ cls: "citation-occurrence-list" });
 
     for (const occ of this.occurrences) {
       const card = list.createDiv({ cls: "citation-occurrence-card" });
@@ -61,8 +56,8 @@ export class UsageLocationsModal extends Modal {
       });
     }
 
-    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
-    const closeBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Close" });
+    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
+    const closeBtn = buttonContainer.createEl("button", { text: "Close" });
     closeBtn.addEventListener("click", () => this.close());
   }
 

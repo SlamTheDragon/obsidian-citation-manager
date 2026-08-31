@@ -1,4 +1,4 @@
-import { App, Modal, Setting, Notice, setIcon } from 'obsidian';
+import { App, Modal, Setting, Notice, setIcon, ButtonComponent } from 'obsidian';
 import { ReferenceMetadata, ProjectRecord } from '../types';
 import { StorageManager } from '../storageManager';
 import { MetadataResolvers } from '../metadataResolvers';
@@ -74,6 +74,8 @@ export class PDFImportModal extends Modal {
   }
 
   async onOpen() {
+    this.titleEl.setText("Import PDF Document");
+
     try {
       const buffer = await this.pdfFile.arrayBuffer();
       const detectedDOI = ProjectIndexer.extractDOIFromBuffer(buffer);
@@ -98,13 +100,7 @@ export class PDFImportModal extends Modal {
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-native-modal-content");
-
-    // Modal Header
-    const header = contentEl.createDiv({ cls: "citation-modal-header-row" });
-    const iconSpan = header.createSpan({ cls: "modal-header-icon" });
-    setIcon(iconSpan, "paperclip");
-    header.createEl("h2", { text: "Import PDF Document" });
+    contentEl.addClass("citation-modal-content-unified");
 
     // File Info Card
     const fileCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
@@ -159,7 +155,7 @@ export class PDFImportModal extends Modal {
         cls: "fetch-text-input",
         value: this.ref.doi || ""
       });
-      const fetchBtn = fetchInputRow.createEl("button", { cls: "citation-small-btn", text: "Fetch & Fill" });
+      const fetchBtn = fetchInputRow.createEl("button", { cls: "mod-cta", text: "Fetch & Fill" });
 
       const doFetch = async () => {
         const val = fetchInput.value.trim();
@@ -207,7 +203,7 @@ export class PDFImportModal extends Modal {
           text.inputEl.addClass("setting-full-width-input");
         });
 
-      // Authors (Header on top, full-width chip box on new line)
+      // Authors
       const authorSection = coreCard.createDiv({ cls: "form-stacked-group" });
       const authorHeader = authorSection.createDiv({ cls: "stacked-label-with-desc" });
       authorHeader.createEl("label", { cls: "stacked-label", text: "Authors" });
@@ -326,13 +322,13 @@ export class PDFImportModal extends Modal {
       this.updatePreviews();
     }
 
-    // Sticky Bottom Footer Bar
-    const footerBar = contentEl.createDiv({ cls: "citation-modal-sticky-footer" });
+    // Obsidian Native Button Container
+    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
     
-    const cancelBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Cancel" });
+    const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());
 
-    const importBtn = footerBar.createEl("button", { cls: "citation-small-btn", text: "Import & Save" });
+    const importBtn = buttonContainer.createEl("button", { cls: "mod-cta", text: "Import & Save" });
     importBtn.addEventListener("click", async () => {
       importBtn.disabled = true;
       importBtn.setText("Importing...");

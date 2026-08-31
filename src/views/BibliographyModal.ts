@@ -28,19 +28,14 @@ export class BibliographyModal extends Modal {
   }
 
   onOpen() {
+    this.titleEl.setText(`Bibliography: ${this.project ? this.project.name : "All References"}`);
+    
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-standard-modal-root");
-
-    const header = contentEl.createDiv({ cls: "citation-modal-header-row" });
-    const iconSpan = header.createSpan({ cls: "modal-header-icon" });
-    setIcon(iconSpan, "quote-glyph");
-    header.createEl("h2", { text: `Bibliography: ${this.project ? this.project.name : "All References"}` });
-
-    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-area" });
+    contentEl.addClass("citation-modal-content-unified");
 
     // Controls Card
-    const controlsDiv = scrollBody.createDiv({ cls: "citation-modal-section-card" });
+    const controlsDiv = contentEl.createDiv({ cls: "citation-modal-section-card" });
 
     new Setting(controlsDiv)
       .setName("Citation Standard")
@@ -70,12 +65,12 @@ export class BibliographyModal extends Modal {
     }
 
     // Live Preview Box
-    scrollBody.createEl("div", { cls: "preview-section-title", text: "Formatted Output" });
-    const previewEl = scrollBody.createEl("pre", { cls: "citation-bib-preview-box" });
+    contentEl.createEl("div", { cls: "preview-section-title", text: "Formatted Output" });
+    const previewEl = contentEl.createEl("pre", { cls: "citation-bib-preview-box" });
     this.updatePreview(previewEl);
 
-    // Export Options Card
-    const exportDiv = scrollBody.createDiv({ cls: "citation-modal-section-card" });
+    // Export Note Card
+    const exportDiv = contentEl.createDiv({ cls: "citation-modal-section-card" });
     new Setting(exportDiv)
       .setName("Export Target Note")
       .setDesc("Create or overwrite a dedicated bibliography note")
@@ -86,13 +81,13 @@ export class BibliographyModal extends Modal {
         text.inputEl.addClass("setting-full-width-input");
       });
 
-    // Pinned Footer Bar
-    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
+    // Native Modal Button Container
+    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
 
-    const closeBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Close" });
+    const closeBtn = buttonContainer.createEl("button", { text: "Close" });
     closeBtn.addEventListener("click", () => this.close());
 
-    const copyBtn = footerBar.createEl("button", { cls: "citation-small-btn", text: "Copy to Clipboard" });
+    const copyBtn = buttonContainer.createEl("button", { text: "Copy to Clipboard" });
     copyBtn.addEventListener("click", async () => {
       await navigator.clipboard.writeText(previewEl.getText());
       new Notice("Bibliography copied to clipboard!");
@@ -100,7 +95,7 @@ export class BibliographyModal extends Modal {
 
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeView) {
-      const appendBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Append to Note" });
+      const appendBtn = buttonContainer.createEl("button", { text: "Append to Note" });
       appendBtn.addEventListener("click", () => {
         const bibText = previewEl.getText();
         const editor = activeView.editor;
@@ -112,7 +107,7 @@ export class BibliographyModal extends Modal {
       });
     }
 
-    const exportBtn = footerBar.createEl("button", { cls: "citation-small-btn", text: "Export File" });
+    const exportBtn = buttonContainer.createEl("button", { cls: "mod-cta", text: "Export File" });
     exportBtn.addEventListener("click", async () => {
       if (!this.exportPath.trim()) {
         new Notice("Please specify a target file path.");

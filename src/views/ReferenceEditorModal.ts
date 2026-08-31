@@ -1,4 +1,4 @@
-import { App, Modal, Setting, Notice, setIcon } from 'obsidian';
+import { App, Modal, Setting, Notice, setIcon, ButtonComponent } from 'obsidian';
 import { ReferenceMetadata, ReferenceType } from '../types';
 import { CitationEngine } from '../citationEngine';
 import { MetadataResolvers } from '../metadataResolvers';
@@ -55,21 +55,16 @@ export class ReferenceEditorModal extends Modal {
   }
 
   onOpen() {
+    this.titleEl.setText(this.isNew ? "New Citation" : `Edit Citation: ${this.ref.citekey}`);
     this.renderModal();
   }
 
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-native-modal-content");
+    contentEl.addClass("citation-modal-content-unified");
 
-    // Modal Title Header
-    const headerRow = contentEl.createDiv({ cls: "citation-modal-header-row" });
-    const iconSpan = headerRow.createSpan({ cls: "modal-header-icon" });
-    setIcon(iconSpan, this.isNew ? "plus-circle" : "edit-3");
-    headerRow.createEl("h2", { text: this.isNew ? "New Citation" : `Edit Citation: ${this.ref.citekey}` });
-
-    // 1. Auto-Fetch Card
+    // 1. Auto-Fetch Section Card
     const fetchBox = contentEl.createDiv({ cls: "citation-modal-section-card" });
     fetchBox.createEl("div", { cls: "section-card-title", text: "Auto-Fetch Metadata" });
     fetchBox.createEl("div", { cls: "section-card-desc", text: "Paste DOI, arXiv ID, ISBN, URL, or BibTeX snippet to auto-fill" });
@@ -80,7 +75,7 @@ export class ReferenceEditorModal extends Modal {
       placeholder: "e.g. 10.1145/3313831.3376722 or https://...",
       cls: "fetch-text-input"
     });
-    const fetchBtn = fetchInputRow.createEl("button", { cls: "citation-small-btn", text: "Fetch & Fill" });
+    const fetchBtn = fetchInputRow.createEl("button", { cls: "mod-cta", text: "Fetch & Fill" });
 
     const doFetch = async () => {
       const val = fetchInput.value.trim();
@@ -114,7 +109,7 @@ export class ReferenceEditorModal extends Modal {
     const coreCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
     coreCard.createEl("div", { cls: "section-card-title", text: "Core Information" });
 
-    // Title (Setting row with full-width input)
+    // Title
     new Setting(coreCard)
       .setName("Title")
       .addText(text => {
@@ -127,7 +122,7 @@ export class ReferenceEditorModal extends Modal {
         text.inputEl.addClass("setting-full-width-input");
       });
 
-    // Authors (Stacked header on top, interactive chips on new line)
+    // Authors
     const authorSection = coreCard.createDiv({ cls: "form-stacked-group" });
     const authorHeader = authorSection.createDiv({ cls: "stacked-label-with-desc" });
     authorHeader.createEl("label", { cls: "stacked-label", text: "Authors" });
@@ -136,7 +131,7 @@ export class ReferenceEditorModal extends Modal {
     const authorContainer = authorSection.createDiv({ cls: "author-chips-input-container" });
     this.renderAuthorChips(authorContainer);
 
-    // Metadata 3-Column Grid (Year, Type, Citekey)
+    // Metadata Grid (Year, Type, Citekey)
     const metaGrid = coreCard.createDiv({ cls: "form-grid-3" });
 
     const yearCol = metaGrid.createDiv({ cls: "form-grid-col" });
@@ -261,14 +256,14 @@ export class ReferenceEditorModal extends Modal {
     this.previewEl = contentEl.createDiv({ cls: "citation-modal-preview-box" });
     this.updatePreviews();
 
-    // 7. Sticky Bottom Footer Bar
-    const footerBar = contentEl.createDiv({ cls: "citation-modal-sticky-footer" });
+    // 7. Obsidian Native Modal Button Container
+    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
     
-    const cancelBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Cancel" });
+    const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());
 
-    const saveBtn = footerBar.createEl("button", { 
-      cls: "citation-small-btn", 
+    const saveBtn = buttonContainer.createEl("button", { 
+      cls: "mod-cta", 
       text: this.isNew ? "Create Citation" : "Save Citation" 
     });
     saveBtn.addEventListener("click", async () => {
