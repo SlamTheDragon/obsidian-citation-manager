@@ -211,49 +211,100 @@ export class ExportPublicationModal extends Modal {
     let content = await this.app.vault.read(file);
     const usedCitekeys: string[] = [];
 
-    // 1. Identify citekeys in document
-    for (const [key, ref] of this.allReferences.entries()) {
-      const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
-      const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-      const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
+    const bracketGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
+    const singleCitekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;
 
-      if (citekeyRegex.test(content) || footnoteCallRegex.test(content) || (parenthetical && content.includes(parenthetical))) {
+    // 1. Identify citekeys in document
+    let groupMatch: RegExpExecArray | null;
+    while ((groupMatch = bracketGroupRegex.exec(content)) !== null) {
+      const groupContent = groupMatch[1];
+      let subMatch: RegExpExecArray | null;
+      singleCitekeyRegex.lastIndex = 0;
+      while ((subMatch = singleCitekeyRegex.exec(groupContent)) !== null) {
+        const key = subMatch[1];
         if (!usedCitekeys.includes(key)) {
           usedCitekeys.push(key);
         }
       }
     }
 
-    // 2. Format in-body markers based on selected style
-    let numericIndex = 1;
+    for (const [key, ref] of this.allReferences.entries()) {
+      const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+      const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
+
+      if (footnoteCallRegex.test(content) || (parenthetical && content.includes(parenthetical))) {
+        if (!usedCitekeys.includes(key)) {
+          usedCitekeys.push(key);
+        }
+      }
+    }
+
+    // Sort citekeys alphabetically if Author-Date
+    if (this.selectedStyle === 'apa7' || this.selectedStyle === 'harvard' || this.selectedStyle === 'chicago') {
+      usedCitekeys.sort((a, b) => {
+        const refA = this.allReferences.get(a);
+        const refB = this.allReferences.get(b);
+        const nameA = refA?.authors?.[0] || a;
+        const nameB = refB?.authors?.[0] || b;
+        return nameA.localeCompare(nameB);
+      });
+    }
+
+    const localIndexMap = new Map<string, number>();
+    usedCitekeys.forEach((key, idx) => {
+      localIndexMap.set(key, idx + 1);
+    });
+
+    // 2. Format multi-citation and single-citation bracket groups
+    content = content.replace(bracketGroupRegex, (fullMatch, groupInner) => {
+      const keysInGroup: string[] = [];
+      let kMatch: RegExpExecArray | null;
+      singleCitekeyRegex.lastIndex = 0;
+      while ((kMatch = singleCitekeyRegex.exec(groupInner)) !== null) {
+        keysInGroup.push(kMatch[1]);
+      }
+
+      if (keysInGroup.length === 0) return fullMatch;
+
+      if (this.selectedStyle === 'ieee') {
+        const numbers = keysInGroup.map(k => localIndexMap.get(k)).filter(n => n !== undefined);
+        return numbers.length > 0 ? `[${numbers.join(', ')}]` : fullMatch;
+      } else if (this.selectedStyle === 'vancouver') {
+        const numbers = keysInGroup.map(k => localIndexMap.get(k)).filter(n => n !== undefined);
+        return numbers.length > 0 ? `(${numbers.join(', ')})` : fullMatch;
+      } else {
+        const formattedParts = keysInGroup.map(k => {
+          const ref = this.allReferences.get(k);
+          if (!ref) return null;
+          const inBody = CitationEngine.formatInBody(ref, 'parenthetical');
+          return inBody.replace(/^\(|\)$/g, '');
+        }).filter(Boolean);
+        return formattedParts.length > 0 ? `(${formattedParts.join('; ')})` : fullMatch;
+      }
+    });
+
+    // 3. Format individual footnotes and clean definitions
     for (const key of usedCitekeys) {
       const ref = this.allReferences.get(key);
       if (!ref) continue;
 
+      const localIdx = localIndexMap.get(key) || 1;
       let inBodyFormatted = "";
       if (this.selectedStyle === 'ieee') {
-        inBodyFormatted = `[${numericIndex}]`;
+        inBodyFormatted = `[${localIdx}]`;
       } else if (this.selectedStyle === 'vancouver') {
-        inBodyFormatted = `(${numericIndex})`;
-      } else if (this.selectedStyle === 'harvard') {
-        inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
-      } else if (this.selectedStyle === 'chicago') {
-        inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
+        inBodyFormatted = `(${localIdx})`;
       } else {
         inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
       }
 
-      const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
       const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-      content = content.replace(citekeyRegex, inBodyFormatted);
       content = content.replace(footnoteCallRegex, inBodyFormatted);
 
       if (this.cleanFootnotes) {
         const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
         content = content.replace(fnCleanRegex, "");
       }
-
-      numericIndex++;
     }
 
     content = content.replace(/\n{3,}$/, "\n\n");

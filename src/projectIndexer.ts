@@ -198,6 +198,20 @@ export class ProjectIndexer {
   }
 
   /**
+   * Masks code blocks, inline code, and frontmatter to ensure academic citations
+   * are extracted without false positives from programming snippets or YAML.
+   */
+  static maskIgnoredMarkdown(content: string): string {
+    // 1. Mask frontmatter
+    let masked = content.replace(/^---[\s\S]*?---\n?/m, (match) => ' '.repeat(match.length));
+    // 2. Mask fenced code blocks ``` ... ```
+    masked = masked.replace(/```[\s\S]*?```/g, (match) => ' '.repeat(match.length));
+    // 3. Mask inline code ` ... `
+    masked = masked.replace(/`[^`\n]+`/g, (match) => ' '.repeat(match.length));
+    return masked;
+  }
+
+  /**
    * Scans project documents and computes ProjectHealthStats
    */
   async indexProject(
@@ -211,9 +225,10 @@ export class ProjectIndexer {
     const unresolvedCitations: { rawCitation: string; file: string; line: number }[] = [];
     let totalCitationsInFiles = 0;
 
-    const citekeyRegex = /\[@([a-zA-Z0-9_-]+)\]/g;
-    const footnoteRegex = /\[\^([a-zA-Z0-9_-]+)\](?!:)/g;
-    const parentheticalRegex = /\(([A-Z][a-zA-Z\s]+(?:,\s*\d{4}|\s+et\s+al\.,\s*\d{4}))\)/g;
+    const bracketCitekeyGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
+    const citekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;
+    const footnoteRegex = /\[\^([a-zA-Z0-9_:\.-]+)\](?!:)/g;
+    const parentheticalRegex = /\(([A-Z][a-zA-Z\s&]+(?:,\s*\d{4}|\s+et\s+al\.,\s*\d{4}))\)/g;
 
     const authorYearIndex = new Map<string, string>();
     for (const [key, ref] of allReferences.entries()) {
@@ -226,27 +241,35 @@ export class ProjectIndexer {
 
     for (const file of files) {
       try {
-        const content = await this.app.vault.cachedRead(file);
-        const lines = content.split('\n');
+        const rawContent = await this.app.vault.cachedRead(file);
+        const maskedContent = ProjectIndexer.maskIgnoredMarkdown(rawContent);
+        const lines = maskedContent.split('\n');
+        const rawLines = rawContent.split('\n');
 
         lines.forEach((lineText, lineIdx) => {
           let match: RegExpExecArray | null;
+          const displayLine = (rawLines[lineIdx] || lineText).trim();
 
-          // 1. Citekeys [@citekey]
-          citekeyRegex.lastIndex = 0;
-          while ((match = citekeyRegex.exec(lineText)) !== null) {
-            const key = match[1];
-            totalCitationsInFiles++;
-            if (allReferences.has(key)) {
-              if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
-              referenceUsageMap[key].push({
-                filePath: file.path,
-                fileName: file.basename,
-                lineNumber: lineIdx + 1,
-                lineContent: lineText.trim(),
-              });
-            } else {
-              unresolvedCitations.push({ rawCitation: match[0], file: file.path, line: lineIdx + 1 });
+          // 1. Citekeys in bracket groups [@key] or [@key1; @key2]
+          bracketCitekeyGroupRegex.lastIndex = 0;
+          while ((match = bracketCitekeyGroupRegex.exec(lineText)) !== null) {
+            const groupContent = match[1];
+            let subMatch: RegExpExecArray | null;
+            citekeyRegex.lastIndex = 0;
+            while ((subMatch = citekeyRegex.exec(groupContent)) !== null) {
+              const key = subMatch[1];
+              totalCitationsInFiles++;
+              if (allReferences.has(key)) {
+                if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
+                referenceUsageMap[key].push({
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx + 1,
+                  lineContent: displayLine,
+                });
+              } else {
+                unresolvedCitations.push({ rawCitation: `@${key}`, file: file.path, line: lineIdx + 1 });
+              }
             }
           }
 
@@ -261,7 +284,7 @@ export class ProjectIndexer {
                 filePath: file.path,
                 fileName: file.basename,
                 lineNumber: lineIdx + 1,
-                lineContent: lineText.trim(),
+                lineContent: displayLine,
               });
             }
           }
@@ -282,7 +305,7 @@ export class ProjectIndexer {
                   filePath: file.path,
                   fileName: file.basename,
                   lineNumber: lineIdx + 1,
-                  lineContent: lineText.trim(),
+                  lineContent: displayLine,
                 });
               }
             }
@@ -659,10 +682,43 @@ export class ProjectIndexer {
     let compiledFilesCount = 0;
 
     // 2. Batch Compile and write every file into publication folder
+    const bracketGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
+    const singleCitekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;
+
     for (const file of files) {
       let content = fileContents.get(file.path);
       if (content === undefined) continue;
 
+      // Replace multi-citation or single-citation bracket groups
+      content = content.replace(bracketGroupRegex, (fullMatch, groupInner) => {
+        const keysInGroup: string[] = [];
+        let kMatch: RegExpExecArray | null;
+        singleCitekeyRegex.lastIndex = 0;
+        while ((kMatch = singleCitekeyRegex.exec(groupInner)) !== null) {
+          keysInGroup.push(kMatch[1]);
+        }
+
+        if (keysInGroup.length === 0) return fullMatch;
+
+        if (style === 'ieee') {
+          const numbers = keysInGroup.map(k => globalIndexMap.get(k)).filter(n => n !== undefined);
+          return numbers.length > 0 ? `[${numbers.join(', ')}]` : fullMatch;
+        } else if (style === 'vancouver') {
+          const numbers = keysInGroup.map(k => globalIndexMap.get(k)).filter(n => n !== undefined);
+          return numbers.length > 0 ? `(${numbers.join(', ')})` : fullMatch;
+        } else {
+          // APA 7 / Harvard / Chicago
+          const formattedParts = keysInGroup.map(k => {
+            const ref = allReferences.get(k);
+            if (!ref) return null;
+            const inBody = CitationEngine.formatInBody(ref, 'parenthetical');
+            return inBody.replace(/^\(|\)$/g, '');
+          }).filter(Boolean);
+          return formattedParts.length > 0 ? `(${formattedParts.join('; ')})` : fullMatch;
+        }
+      });
+
+      // Replace individual footnotes and clean footnote definitions
       for (const [key, globalIdx] of globalIndexMap.entries()) {
         const ref = allReferences.get(key);
         if (!ref) continue;
@@ -672,17 +728,11 @@ export class ProjectIndexer {
           inBodyFormatted = `[${globalIdx}]`;
         } else if (style === 'vancouver') {
           inBodyFormatted = `(${globalIdx})`;
-        } else if (style === 'harvard') {
-          inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
-        } else if (style === 'chicago') {
-          inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
         } else {
           inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
         }
 
-        const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
         const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-        content = content.replace(citekeyRegex, inBodyFormatted);
         content = content.replace(footnoteCallRegex, inBodyFormatted);
 
         // Strip local footnote definition
