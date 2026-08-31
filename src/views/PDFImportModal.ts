@@ -1,4 +1,4 @@
-import { App, Modal, Setting, Notice, setIcon, ButtonComponent } from 'obsidian';
+import { App, Modal, Setting, Notice, setIcon } from 'obsidian';
 import { ReferenceMetadata, ProjectRecord } from '../types';
 import { StorageManager } from '../storageManager';
 import { MetadataResolvers } from '../metadataResolvers';
@@ -19,9 +19,8 @@ export class PDFImportModal extends Modal {
   // Reference state
   private ref: ReferenceMetadata;
   private statusLog: string = '';
-  private activeAccordion: string | null = null;
+  private openSection: 'pub' | 'ids' | 'abs' | null = null;
   private previewEl: HTMLElement | null = null;
-  private accordionCards: Map<string, { cardEl: HTMLElement; iconEl: HTMLElement }> = new Map();
 
   constructor(
     app: App,
@@ -100,9 +99,9 @@ export class PDFImportModal extends Modal {
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-modal-content-unified");
+    contentEl.addClass("citation-modal-body");
 
-    // File Info Card
+    // 1. File Info Card
     const fileCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
     const fileRow = fileCard.createDiv({ cls: "fetch-title" });
     setIcon(fileRow.createSpan({ cls: "inline-icon" }), "file-text");
@@ -142,11 +141,10 @@ export class PDFImportModal extends Modal {
           drop.onChange(val => { this.selectedExistingCitekey = val; });
         });
     } else {
-      // Auto-Fetch Card
+      // 2. Auto-Fetch Card
       const fetchBox = contentEl.createDiv({ cls: "citation-modal-section-card" });
-      const fetchTitleRow = fetchBox.createDiv({ cls: "section-card-header" });
-      fetchTitleRow.createEl("div", { cls: "section-card-title", text: "Auto-Fetch Metadata" });
-      fetchTitleRow.createEl("div", { cls: "section-card-desc", text: "Paste DOI or URL to pull publication details automatically" });
+      fetchBox.createEl("div", { cls: "section-card-title", text: "Auto-Fetch Metadata" });
+      fetchBox.createEl("div", { cls: "section-card-desc", text: "Paste DOI or URL to pull publication details automatically" });
 
       const fetchInputRow = fetchBox.createDiv({ cls: "fetch-input-row" });
       const fetchInput = fetchInputRow.createEl("input", {
@@ -155,7 +153,7 @@ export class PDFImportModal extends Modal {
         cls: "fetch-text-input",
         value: this.ref.doi || ""
       });
-      const fetchBtn = fetchInputRow.createEl("button", { cls: "mod-cta", text: "Fetch & Fill" });
+      const fetchBtn = fetchInputRow.createEl("button", { cls: "mod-cta citation-fetch-btn", text: "Fetch & Fill" });
 
       const doFetch = async () => {
         const val = fetchInput.value.trim();
@@ -186,7 +184,7 @@ export class PDFImportModal extends Modal {
         }
       });
 
-      // --- SECTION 1: CORE INFORMATION ---
+      // 3. Core Information
       const coreCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
       coreCard.createEl("div", { cls: "section-card-title", text: "Core Information" });
 
@@ -207,112 +205,103 @@ export class PDFImportModal extends Modal {
       const authorSection = coreCard.createDiv({ cls: "form-stacked-group" });
       const authorHeader = authorSection.createDiv({ cls: "stacked-label-with-desc" });
       authorHeader.createEl("label", { cls: "stacked-label", text: "Authors" });
-      authorHeader.createSpan({ cls: "stacked-desc", text: "(Type name and press Enter or comma)" });
+      authorHeader.createSpan({ cls: "stacked-desc", text: "(Type author name and press Enter or comma)" });
       
       const authorContainer = authorSection.createDiv({ cls: "author-chips-input-container" });
       this.renderAuthorChips(authorContainer);
 
-      // 3. Year, Type, Citekey in a spacious 3-column stacked grid
-      const metaGrid = coreCard.createDiv({ cls: "form-grid-3" });
+      // Metadata (Year, Type, Citekey)
+      new Setting(coreCard)
+        .setName("Metadata")
+        .addText(text => text
+          .setPlaceholder("Year (e.g. 2026)")
+          .setValue(String(this.ref.year || ""))
+          .onChange(val => {
+            this.ref.year = val;
+            this.updatePreviews();
+          }))
+        .addDropdown(drop => {
+          const types: ('journal' | 'conference' | 'book' | 'webpage' | 'blog' | 'video' | 'preprint' | 'report' | 'standard' | 'thesis' | 'other')[] = 
+            ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
+          types.forEach(t => drop.addOption(t, t.toUpperCase()));
+          drop.setValue(this.ref.type);
+          drop.onChange(val => {
+            this.ref.type = val as any;
+            this.updatePreviews();
+          });
+        })
+        .addText(text => text
+          .setPlaceholder("Citekey (Auto-generated)")
+          .setValue(this.ref.citekey)
+          .onChange(val => {
+            this.ref.citekey = val.replace(/[^a-zA-Z0-9_-]/g, "");
+            this.updatePreviews();
+          }));
 
-      const yearCol = metaGrid.createDiv({ cls: "form-grid-col" });
-      yearCol.createEl("label", { cls: "stacked-label", text: "Year" });
-      const yearInput = yearCol.createEl("input", { type: "text", cls: "grid-input", placeholder: "e.g. 2026", value: String(this.ref.year || "") });
-      yearInput.addEventListener("input", () => {
-        this.ref.year = yearInput.value;
-        this.updatePreviews();
-      });
-
-      const typeCol = metaGrid.createDiv({ cls: "form-grid-col" });
-      typeCol.createEl("label", { cls: "stacked-label", text: "Type" });
-      const typeSelect = typeCol.createEl("select", { cls: "dropdown grid-input-dropdown" });
-      const types = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
-      types.forEach(t => {
-        const opt = typeSelect.createEl("option", { value: t, text: t.toUpperCase() });
-        if (t === this.ref.type) opt.selected = true;
-      });
-      typeSelect.addEventListener("change", () => {
-        this.ref.type = typeSelect.value as any;
-        this.updatePreviews();
-      });
-
-      const keyCol = metaGrid.createDiv({ cls: "form-grid-col" });
-      keyCol.createEl("label", { cls: "stacked-label", text: "Citekey" });
-      const keyInput = keyCol.createEl("input", { type: "text", cls: "grid-input", placeholder: "Auto-generated", value: this.ref.citekey });
-      keyInput.addEventListener("input", () => {
-        this.ref.citekey = keyInput.value.replace(/[^a-zA-Z0-9_-]/g, "");
-        this.updatePreviews();
-      });
-
-      // --- ACCORDION 1: PUBLICATION & VENUE ---
-      this.createExclusiveAccordion(
+      // Accordion 1: Publication & Venue
+      this.renderAccordionSection(
         contentEl,
-        "pub",
+        'pub',
         "Publication & Venue",
         (body) => {
-          const pubGroup = body.createDiv({ cls: "form-stacked-group" });
-          pubGroup.createEl("label", { cls: "stacked-label", text: "Journal / Conference / Publication" });
-          const pubInput = pubGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "Publication venue", value: this.ref.publication || "" });
-          pubInput.addEventListener("input", () => {
-            this.ref.publication = pubInput.value;
-            this.updatePreviews();
-          });
+          new Setting(body)
+            .setName("Journal / Conference")
+            .addText(text => {
+              text.setValue(this.ref.publication || "")
+                .onChange(val => {
+                  this.ref.publication = val;
+                  this.updatePreviews();
+                });
+              text.inputEl.addClass("setting-full-width-input");
+            });
 
-          const volGrid = body.createDiv({ cls: "form-grid-3" });
-          
-          const volItem = volGrid.createDiv({ cls: "form-grid-col" });
-          volItem.createEl("label", { cls: "stacked-label", text: "Volume" });
-          const volIn = volItem.createEl("input", { type: "text", cls: "grid-input", placeholder: "Vol", value: this.ref.volume || "" });
-          volIn.addEventListener("input", () => { this.ref.volume = volIn.value; this.updatePreviews(); });
-
-          const issItem = volGrid.createDiv({ cls: "form-grid-col" });
-          issItem.createEl("label", { cls: "stacked-label", text: "Issue" });
-          const issIn = issItem.createEl("input", { type: "text", cls: "grid-input", placeholder: "Issue", value: this.ref.issue || "" });
-          issIn.addEventListener("input", () => { this.ref.issue = issIn.value; this.updatePreviews(); });
-
-          const pageItem = volGrid.createDiv({ cls: "form-grid-col" });
-          pageItem.createEl("label", { cls: "stacked-label", text: "Pages" });
-          const pageIn = pageItem.createEl("input", { type: "text", cls: "grid-input", placeholder: "Pages", value: this.ref.pages || "" });
-          pageIn.addEventListener("input", () => { this.ref.pages = pageIn.value; this.updatePreviews(); });
+          new Setting(body)
+            .setName("Vol / Issue / Pages")
+            .addText(t => t.setPlaceholder("Vol").setValue(this.ref.volume || "").onChange(v => { this.ref.volume = v; this.updatePreviews(); }))
+            .addText(t => t.setPlaceholder("Issue").setValue(this.ref.issue || "").onChange(v => { this.ref.issue = v; this.updatePreviews(); }))
+            .addText(t => t.setPlaceholder("Pages").setValue(this.ref.pages || "").onChange(v => { this.ref.pages = v; this.updatePreviews(); }));
         }
       );
 
-      // --- ACCORDION 2: IDENTIFIERS & DOI ---
-      this.createExclusiveAccordion(
+      // Accordion 2: Identifiers & DOI
+      this.renderAccordionSection(
         contentEl,
-        "ids",
+        'ids',
         "Identifiers, DOI & URL",
         (body) => {
-          const idGrid = body.createDiv({ cls: "form-grid-2" });
+          new Setting(body)
+            .setName("DOI")
+            .addText(text => text
+              .setValue(this.ref.doi || "")
+              .onChange(val => {
+                this.ref.doi = val;
+                this.updatePreviews();
+              }));
 
-          const doiGroup = idGrid.createDiv({ cls: "form-grid-col" });
-          doiGroup.createEl("label", { cls: "stacked-label", text: "DOI" });
-          const doiInput = doiGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "10.xxxx/yyyy", value: this.ref.doi || "" });
-          doiInput.addEventListener("input", () => {
-            this.ref.doi = doiInput.value;
-            this.updatePreviews();
-          });
-
-          const urlGroup = idGrid.createDiv({ cls: "form-grid-col" });
-          urlGroup.createEl("label", { cls: "stacked-label", text: "URL" });
-          const urlInput = urlGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "https://...", value: this.ref.url || "" });
-          urlInput.addEventListener("input", () => {
-            this.ref.url = urlInput.value;
-            this.updatePreviews();
-          });
+          new Setting(body)
+            .setName("URL")
+            .addText(text => text
+              .setValue(this.ref.url || "")
+              .onChange(val => {
+                this.ref.url = val;
+                this.updatePreviews();
+              }));
         }
       );
 
-      // --- ACCORDION 3: ABSTRACT ---
-      this.createExclusiveAccordion(
+      // Accordion 3: Abstract
+      this.renderAccordionSection(
         contentEl,
-        "abstract",
+        'abs',
         "Abstract & Notes",
         (body) => {
-          const absGroup = body.createDiv({ cls: "form-stacked-group" });
-          const absArea = absGroup.createEl("textarea", { cls: "stacked-textarea", rows: 4, placeholder: "Paste document abstract or notes..." });
-          absArea.value = this.ref.abstract || "";
-          absArea.addEventListener("input", () => { this.ref.abstract = absArea.value; });
+          new Setting(body)
+            .addTextArea(text => {
+              text.setValue(this.ref.abstract || "")
+                .onChange(val => { this.ref.abstract = val; });
+              text.inputEl.rows = 4;
+              text.inputEl.addClass("setting-full-width-input");
+            });
         }
       );
 
@@ -323,12 +312,12 @@ export class PDFImportModal extends Modal {
     }
 
     // Obsidian Native Button Container
-    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
+    const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
     
-    const cancelBtn = buttonContainer.createEl("button", { text: "Cancel" });
+    const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());
 
-    const importBtn = buttonContainer.createEl("button", { cls: "mod-cta", text: "Import & Save" });
+    const importBtn = buttonRow.createEl("button", { cls: "mod-cta", text: "Import & Save" });
     importBtn.addEventListener("click", async () => {
       importBtn.disabled = true;
       importBtn.setText("Importing...");
@@ -433,42 +422,28 @@ export class PDFImportModal extends Modal {
     });
   }
 
-  private createExclusiveAccordion(
+  private renderAccordionSection(
     parent: HTMLElement,
-    id: string,
+    sectionId: 'pub' | 'ids' | 'abs',
     title: string,
     renderBody: (bodyEl: HTMLElement) => void
   ) {
-    const card = parent.createDiv({ cls: "citation-modal-accordion-card" });
-    const isCurrentlyOpen = this.activeAccordion === id;
-    if (isCurrentlyOpen) card.addClass("open");
+    const isOpen = this.openSection === sectionId;
+    const card = parent.createDiv({ cls: `citation-modal-accordion-card ${isOpen ? 'open' : ''}` });
 
     const header = card.createDiv({ cls: "accordion-header-row" });
     header.createEl("span", { cls: "accordion-title-text", text: title });
     const toggleIcon = header.createSpan({ cls: "accordion-icon-wrap" });
-    setIcon(toggleIcon, isCurrentlyOpen ? "chevron-up" : "chevron-down");
+    setIcon(toggleIcon, isOpen ? "chevron-up" : "chevron-down");
 
-    const body = card.createDiv({ cls: "accordion-body-collapse" });
-    renderBody(body);
-
-    this.accordionCards.set(id, { cardEl: card, iconEl: toggleIcon });
+    if (isOpen) {
+      const body = card.createDiv({ cls: "accordion-body-content" });
+      renderBody(body);
+    }
 
     header.addEventListener("click", () => {
-      if (this.activeAccordion === id) {
-        this.activeAccordion = null;
-        card.removeClass("open");
-        setIcon(toggleIcon, "chevron-down");
-      } else {
-        for (const [otherId, item] of this.accordionCards.entries()) {
-          if (otherId !== id) {
-            item.cardEl.removeClass("open");
-            setIcon(item.iconEl, "chevron-down");
-          }
-        }
-        this.activeAccordion = id;
-        card.addClass("open");
-        setIcon(toggleIcon, "chevron-up");
-      }
+      this.openSection = this.openSection === sectionId ? null : sectionId;
+      this.renderModal();
     });
   }
 
