@@ -19,8 +19,8 @@ export class PDFImportModal extends Modal {
   // Reference state
   private ref: ReferenceMetadata;
   private statusLog: string = '';
-  private openSection: 'pub' | 'ids' | 'abs' | null = null;
   private previewEl: HTMLElement | null = null;
+  private accordionCards: Map<string, { cardEl: HTMLElement; iconEl: HTMLElement }> = new Map();
 
   constructor(
     app: App,
@@ -239,7 +239,7 @@ export class PDFImportModal extends Modal {
           }));
 
       // Accordion 1: Publication & Venue
-      this.renderAccordionSection(
+      this.createAnimatedAccordion(
         contentEl,
         'pub',
         "Publication & Venue",
@@ -264,7 +264,7 @@ export class PDFImportModal extends Modal {
       );
 
       // Accordion 2: Identifiers & DOI
-      this.renderAccordionSection(
+      this.createAnimatedAccordion(
         contentEl,
         'ids',
         "Identifiers, DOI & URL",
@@ -290,18 +290,21 @@ export class PDFImportModal extends Modal {
       );
 
       // Accordion 3: Abstract
-      this.renderAccordionSection(
+      this.createAnimatedAccordion(
         contentEl,
         'abs',
         "Abstract & Notes",
         (body) => {
-          new Setting(body)
-            .addTextArea(text => {
-              text.setValue(this.ref.abstract || "")
-                .onChange(val => { this.ref.abstract = val; });
-              text.inputEl.rows = 4;
-              text.inputEl.addClass("setting-full-width-input");
-            });
+          const absWrap = body.createDiv({ cls: "form-stacked-group full-width-group" });
+          const absArea = absWrap.createEl("textarea", { 
+            cls: "stacked-textarea full-width-textarea", 
+            rows: 5, 
+            placeholder: "Paper abstract or notes..." 
+          });
+          absArea.value = this.ref.abstract || "";
+          absArea.addEventListener("input", () => {
+            this.ref.abstract = absArea.value;
+          });
         }
       );
 
@@ -422,28 +425,39 @@ export class PDFImportModal extends Modal {
     });
   }
 
-  private renderAccordionSection(
+  private createAnimatedAccordion(
     parent: HTMLElement,
-    sectionId: 'pub' | 'ids' | 'abs',
+    sectionId: string,
     title: string,
     renderBody: (bodyEl: HTMLElement) => void
   ) {
-    const isOpen = this.openSection === sectionId;
-    const card = parent.createDiv({ cls: `citation-modal-accordion-card ${isOpen ? 'open' : ''}` });
+    const card = parent.createDiv({ cls: "citation-modal-accordion-card" });
 
     const header = card.createDiv({ cls: "accordion-header-row" });
     header.createEl("span", { cls: "accordion-title-text", text: title });
     const toggleIcon = header.createSpan({ cls: "accordion-icon-wrap" });
-    setIcon(toggleIcon, isOpen ? "chevron-up" : "chevron-down");
+    setIcon(toggleIcon, "chevron-down");
 
-    if (isOpen) {
-      const body = card.createDiv({ cls: "accordion-body-content" });
-      renderBody(body);
-    }
+    const collapseBody = card.createDiv({ cls: "accordion-body-collapse" });
+    renderBody(collapseBody);
+
+    this.accordionCards.set(sectionId, { cardEl: card, iconEl: toggleIcon });
 
     header.addEventListener("click", () => {
-      this.openSection = this.openSection === sectionId ? null : sectionId;
-      this.renderModal();
+      const willOpen = !card.hasClass("open");
+      if (willOpen) {
+        for (const [id, other] of this.accordionCards.entries()) {
+          if (id !== sectionId) {
+            other.cardEl.removeClass("open");
+            setIcon(other.iconEl, "chevron-down");
+          }
+        }
+        card.addClass("open");
+        setIcon(toggleIcon, "chevron-up");
+      } else {
+        card.removeClass("open");
+        setIcon(toggleIcon, "chevron-down");
+      }
     });
   }
 

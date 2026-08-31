@@ -102,13 +102,14 @@ export class CitationManagerView extends ItemView {
       this.stats = await this.projectIndexer.indexProject(
         activeProject,
         this.referencesMap,
-        this.settings.referencesFolder
+        this.settings.referencesFolder,
+        this.settings.projects
       );
     } else {
       const virtualAllProject: ProjectRecord = {
         id: ALL_PROJECTS_ID,
         name: "All References",
-        registeredFiles: [],
+        registeredFiles: this.settings.projects.flatMap(p => p.registeredFiles || []),
         referenceIds: Array.from(this.referencesMap.keys()),
         created: "",
         modified: "",
@@ -116,7 +117,8 @@ export class CitationManagerView extends ItemView {
       this.stats = await this.projectIndexer.indexProject(
         virtualAllProject,
         this.referencesMap,
-        this.settings.referencesFolder
+        this.settings.referencesFolder,
+        this.settings.projects
       );
     }
 
@@ -982,6 +984,12 @@ export class CitationManagerView extends ItemView {
       if (project && project.id !== ALL_PROJECTS_ID) {
         const inProject = ref.projects && (ref.projects.includes(project.id) || ref.projects.includes(project.name));
         if (!inProject) return false;
+      } else {
+        if (this.settings.projects.length > 0) {
+          const declaredIds = new Set(this.settings.projects.flatMap(p => [p.id.toLowerCase(), p.name.toLowerCase()]));
+          const belongsToAny = ref.projects && ref.projects.some(p => declaredIds.has(p.toLowerCase()));
+          if (!belongsToAny) return false;
+        }
       }
 
       if (this.selectedTypeFilter !== "all" && ref.type !== this.selectedTypeFilter) {

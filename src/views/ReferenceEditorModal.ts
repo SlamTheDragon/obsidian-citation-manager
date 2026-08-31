@@ -9,9 +9,8 @@ export class ReferenceEditorModal extends Modal {
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
 
-  // Accordion state (only 1 open at a time for clean progressive disclosure)
-  private openSection: 'pub' | 'ids' | 'abs' | null = null;
   private previewEl: HTMLElement | null = null;
+  private accordionCards: Map<string, { cardEl: HTMLElement; iconEl: HTMLElement }> = new Map();
 
   constructor(
     app: App,
@@ -108,7 +107,7 @@ export class ReferenceEditorModal extends Modal {
     const coreCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
     coreCard.createEl("div", { cls: "section-card-title", text: "Core Information" });
 
-    // Title
+    // Title (Setting row with full-width input)
     new Setting(coreCard)
       .setName("Title")
       .addText(text => {
@@ -157,8 +156,8 @@ export class ReferenceEditorModal extends Modal {
           this.updatePreviews();
         }));
 
-    // 3. ACCORDION 1: PUBLICATION & VENUE
-    this.renderAccordionSection(
+    // 3. ACCORDION 1: PUBLICATION & VENUE (Animated transition)
+    this.createAnimatedAccordion(
       contentEl,
       'pub',
       "Publication & Venue",
@@ -192,8 +191,8 @@ export class ReferenceEditorModal extends Modal {
       }
     );
 
-    // 4. ACCORDION 2: IDENTIFIERS, DOI & URL
-    this.renderAccordionSection(
+    // 4. ACCORDION 2: IDENTIFIERS, DOI & URL (Animated transition)
+    this.createAnimatedAccordion(
       contentEl,
       'ids',
       "Identifiers, DOI & URL",
@@ -225,20 +224,22 @@ export class ReferenceEditorModal extends Modal {
       }
     );
 
-    // 5. ACCORDION 3: ABSTRACT & LITERATURE SUMMARY
-    this.renderAccordionSection(
+    // 5. ACCORDION 3: ABSTRACT & LITERATURE SUMMARY (Animated transition & full width)
+    this.createAnimatedAccordion(
       contentEl,
       'abs',
       "Abstract & Literature Summary",
       (body) => {
-        new Setting(body)
-          .addTextArea(text => {
-            text.setValue(this.ref.abstract || "")
-              .setPlaceholder("Paste document abstract or summary notes...")
-              .onChange(val => { this.ref.abstract = val; });
-            text.inputEl.rows = 4;
-            text.inputEl.addClass("setting-full-width-input");
-          });
+        const absWrap = body.createDiv({ cls: "form-stacked-group full-width-group" });
+        const absArea = absWrap.createEl("textarea", { 
+          cls: "stacked-textarea full-width-textarea", 
+          rows: 5, 
+          placeholder: "Paper abstract or literature synthesis notes..." 
+        });
+        absArea.value = this.ref.abstract || "";
+        absArea.addEventListener("input", () => {
+          this.ref.abstract = absArea.value;
+        });
       }
     );
 
@@ -341,28 +342,40 @@ export class ReferenceEditorModal extends Modal {
     });
   }
 
-  private renderAccordionSection(
+  private createAnimatedAccordion(
     parent: HTMLElement,
-    sectionId: 'pub' | 'ids' | 'abs',
+    sectionId: string,
     title: string,
     renderBody: (bodyEl: HTMLElement) => void
   ) {
-    const isOpen = this.openSection === sectionId;
-    const card = parent.createDiv({ cls: `citation-modal-accordion-card ${isOpen ? 'open' : ''}` });
+    const card = parent.createDiv({ cls: "citation-modal-accordion-card" });
 
     const header = card.createDiv({ cls: "accordion-header-row" });
     header.createEl("span", { cls: "accordion-title-text", text: title });
     const toggleIcon = header.createSpan({ cls: "accordion-icon-wrap" });
-    setIcon(toggleIcon, isOpen ? "chevron-up" : "chevron-down");
+    setIcon(toggleIcon, "chevron-down");
 
-    if (isOpen) {
-      const body = card.createDiv({ cls: "accordion-body-content" });
-      renderBody(body);
-    }
+    const collapseBody = card.createDiv({ cls: "accordion-body-collapse" });
+    renderBody(collapseBody);
+
+    this.accordionCards.set(sectionId, { cardEl: card, iconEl: toggleIcon });
 
     header.addEventListener("click", () => {
-      this.openSection = this.openSection === sectionId ? null : sectionId;
-      this.renderModal();
+      const willOpen = !card.hasClass("open");
+      if (willOpen) {
+        // Mutually exclusive: close other accordions with animation
+        for (const [id, other] of this.accordionCards.entries()) {
+          if (id !== sectionId) {
+            other.cardEl.removeClass("open");
+            setIcon(other.iconEl, "chevron-down");
+          }
+        }
+        card.addClass("open");
+        setIcon(toggleIcon, "chevron-up");
+      } else {
+        card.removeClass("open");
+        setIcon(toggleIcon, "chevron-down");
+      }
     });
   }
 

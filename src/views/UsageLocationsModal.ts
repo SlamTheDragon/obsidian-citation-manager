@@ -16,7 +16,7 @@ export class UsageLocationsModal extends Modal {
 
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-modal-content-unified");
+    contentEl.addClass("citation-modal-body");
 
     // Clear instruction signifier
     const hintBox = contentEl.createDiv({ cls: "citation-usage-instruction-box" });
@@ -46,17 +46,36 @@ export class UsageLocationsModal extends Modal {
           const leaf = this.app.workspace.getLeaf(false);
           await leaf.openFile(file);
 
-          const view = this.app.workspace.getActiveViewOfType(MarkdownView);
-          if (view) {
-            view.editor.setCursor({ line: occ.lineNumber - 1, ch: 0 });
-            view.editor.scrollIntoView({ from: { line: occ.lineNumber - 1, ch: 0 }, to: { line: occ.lineNumber - 1, ch: 0 } }, true);
-          }
+          setTimeout(() => {
+            const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+            if (view) {
+              const editor = view.editor;
+              const lineIdx = occ.lineNumber - 1;
+              const lineText = editor.getLine(lineIdx) || "";
+              
+              let chStart = lineText.indexOf(this.citekey);
+              let chEnd = chStart >= 0 ? chStart + this.citekey.length : 0;
+              
+              if (chStart > 0 && lineText[chStart - 1] === '@') chStart--;
+              if (chStart > 0 && lineText[chStart - 1] === '[') chStart--;
+              if (chEnd < lineText.length && lineText[chEnd] === ']') chEnd++;
+
+              if (chStart < 0) {
+                chStart = 0;
+                chEnd = lineText.length;
+              }
+
+              editor.setSelection({ line: lineIdx, ch: chStart }, { line: lineIdx, ch: chEnd });
+              editor.scrollIntoView({ from: { line: lineIdx, ch: chStart }, to: { line: lineIdx, ch: chEnd } }, true);
+              editor.focus();
+            }
+          }, 80);
           this.close();
         }
       });
     }
 
-    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container" });
+    const buttonContainer = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
     const closeBtn = buttonContainer.createEl("button", { text: "Close" });
     closeBtn.addEventListener("click", () => this.close());
   }

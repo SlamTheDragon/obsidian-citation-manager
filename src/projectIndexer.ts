@@ -1,5 +1,5 @@
 import { App, TFile, normalizePath, MarkdownView } from 'obsidian';
-import { ReferenceMetadata, ProjectRecord, ProjectHealthStats, CitationOccurrence, CitationStyle, InBodyFormat, ALL_PROJECTS_ID } from './types';
+import { ProjectRecord, ReferenceMetadata, ProjectHealthStats, CitationOccurrence, CitationStyle, InBodyFormat, ALL_PROJECTS_ID } from './types';
 import { CitationEngine } from './citationEngine';
 import { Logger } from './logger';
 
@@ -11,30 +11,30 @@ export class ProjectIndexer {
   }
 
   /**
-   * Fast DOI & identifier extraction from raw PDF buffer (scans up to 2MB)
+   * Scans up to 2MB of a PDF ArrayBuffer to extract DOI, arXiv ID, or XMP metadata streams.
    */
   static extractDOIFromBuffer(buffer: ArrayBuffer): string | null {
     try {
-      const sliceSize = Math.min(buffer.byteLength, 2097152); // Scan up to 2MB
-      const bytes = new Uint8Array(buffer.slice(0, sliceSize));
-      let text = "";
-      for (let i = 0; i < bytes.length; i++) {
-        const c = bytes[i];
-        if (c >= 32 && c <= 126) text += String.fromCharCode(c);
-        else if (c === 10 || c === 13) text += "\n";
-        else text += " ";
+      const sliceSize = Math.min(buffer.byteLength, 2 * 1024 * 1024);
+      const uint8 = new Uint8Array(buffer, 0, sliceSize);
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(uint8);
+
+      // 1. XMP metadata XML tags
+      const xmpDoiMatch = text.match(/<(?:prism:doi|dc:identifier|pdfx:doi|crossref:doi)[^>]*>([^<]+)<\//i);
+      if (xmpDoiMatch) {
+        const clean = xmpDoiMatch[1].replace(/^doi:\s*/i, "").trim();
+        if (clean.startsWith("10.")) {
+          Logger.debug(`Extracted DOI from XMP stream: ${clean}`);
+          return clean;
+        }
       }
 
-      // 1. Prism / XMP / XML DOI tags
-      const xmpMatch = text.match(/<(?:prism:doi|dc:identifier|pdfx:doi|crossref:doi)[^>]*>\s*(?:doi:)?\s*(10\.\d{4,9}\/[^<>\s]+)\s*<\//i);
-      if (xmpMatch) {
-        return xmpMatch[1].trim().replace(/[,;.)>\]]+$/, "");
-      }
-
-      // 2. Standard DOI URL or prefix
-      const prefixMatch = text.match(/(?:(?:https?:\/\/)?(?:dx\.)?doi\.org\/|doi\s*[:\/=]\s*|\/DOI\s*\(\s*)(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
-      if (prefixMatch) {
-        return prefixMatch[1].trim().replace(/[,;.)>\]]+$/, "");
+      // 2. Standard DOI URL prefixes
+      const urlDoiMatch = text.match(/(?:https?:\/\/(?:dx\.)?doi\.org\/|\/DOI\s*\()(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
+      if (urlDoiMatch) {
+        const clean = urlDoiMatch[1].trim().replace(/[,;.)>\]]+$/, "");
+        Logger.debug(`Extracted DOI from URL prefix: ${clean}`);
+        return clean;
       }
 
       // 3. Raw DOI pattern
@@ -60,8 +60,13 @@ export class ProjectIndexer {
 
   /**
    * Retrieves all TFiles associated with a project (via YAML frontmatter 'citation-manager' OR registry list)
+   * If in "All References", only includes files belonging to declared projects (not the entire vault).
    */
-  getProjectFiles(project: ProjectRecord | null, referencesFolder: string = ".references"): TFile[] {
+  getProjectFiles(
+    project: ProjectRecord | null, 
+    referencesFolder: string = ".references",
+    allKnownProjects?: ProjectRecord[]
+  ): TFile[] {
     const matchedFiles: TFile[] = [];
     const allMarkdownFiles = this.app.vault.getMarkdownFiles();
     const cleanRefFolder = normalizePath(referencesFolder);
@@ -71,15 +76,27 @@ export class ProjectIndexer {
     for (const file of allMarkdownFiles) {
       if (file.path.startsWith(cleanRefFolder)) continue;
 
+      const cache = this.app.metadataCache.getFileCache(file);
+      const fm = cache?.frontmatter;
+
       if (isAll) {
-        matchedFiles.push(file);
+        // "All References" strictly scans only files declared in at least one project
+        let hasAnyProjectFrontmatter = false;
+        if (fm) {
+          const fmProjects = fm['citation-manager'] || fm['citation_manager'] || fm['citation-project'] || fm['citation_project'] || fm['citation_projects'];
+          if (fmProjects && (Array.isArray(fmProjects) ? fmProjects.length > 0 : String(fmProjects).trim().length > 0)) {
+            hasAnyProjectFrontmatter = true;
+          }
+        }
+        const isInAnyProjectRegistry = allKnownProjects?.some(p => p.registeredFiles && p.registeredFiles.includes(file.path));
+
+        if (hasAnyProjectFrontmatter || isInAnyProjectRegistry) {
+          matchedFiles.push(file);
+        }
         continue;
       }
 
-      const cache = this.app.metadataCache.getFileCache(file);
-      const fm = cache?.frontmatter;
       let matchedInFm = false;
-
       if (fm) {
         const fmProjects = fm['citation-manager'] || fm['citation_manager'] || fm['citation-project'] || fm['citation_project'] || fm['citation_projects'];
         if (Array.isArray(fmProjects)) {
@@ -140,474 +157,382 @@ export class ProjectIndexer {
         }
       }
     });
-    Logger.debug(`Added project '${projectName}' to frontmatter of ${file.path}`);
   }
 
   async removeProjectFromFrontmatter(file: TFile, projectName: string): Promise<void> {
     await this.app.fileManager.processFrontMatter(file, (fm) => {
       const current = fm['citation-manager'] || fm['citation_manager'];
       if (Array.isArray(current)) {
-        const updated = current.filter((p: any) => String(p).toLowerCase() !== projectName.toLowerCase());
-        if (updated.length > 0) {
-          fm['citation-manager'] = updated;
+        const filtered = current.filter((p: any) => String(p).toLowerCase() !== projectName.toLowerCase());
+        if (filtered.length > 0) {
+          fm['citation-manager'] = filtered;
         } else {
           delete fm['citation-manager'];
           delete fm['citation_manager'];
         }
-      } else if (typeof current === 'string') {
-        if (current.toLowerCase() === projectName.toLowerCase()) {
-          delete fm['citation-manager'];
-          delete fm['citation_manager'];
-        }
+      } else if (typeof current === 'string' && current.toLowerCase() === projectName.toLowerCase()) {
+        delete fm['citation-manager'];
+        delete fm['citation_manager'];
       }
     });
-    Logger.debug(`Removed project '${projectName}' from frontmatter of ${file.path}`);
   }
 
   async deleteProjectGlobally(projectName: string, referencesFolder: string = ".references"): Promise<number> {
-    let modifiedCount = 0;
-    const cleanRefFolder = normalizePath(referencesFolder);
+    let count = 0;
+    const allMarkdown = this.app.vault.getMarkdownFiles();
+    const cleanRef = normalizePath(referencesFolder);
 
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      if (file.path.startsWith(cleanRefFolder)) continue;
+    for (const file of allMarkdown) {
+      if (file.path.startsWith(cleanRef)) continue;
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = cache?.frontmatter;
-      if (fm && (fm['citation-manager'] || fm['citation_manager'])) {
-        await this.removeProjectFromFrontmatter(file, projectName);
-        modifiedCount++;
-      }
-    }
-    Logger.debug(`Globally deleted project '${projectName}' from ${modifiedCount} file frontmatters`);
-    return modifiedCount;
-  }
-
-  async indexProject(
-    project: ProjectRecord,
-    referencesMap: Map<string, ReferenceMetadata>,
-    referencesFolder: string = ".references"
-  ): Promise<ProjectHealthStats> {
-    const usageMap: Record<string, CitationOccurrence[]> = {};
-    const unresolved: { citekey: string; file: string; line: number; rawCitation: string }[] = [];
-    let totalCitations = 0;
-
-    for (const [key] of referencesMap.entries()) {
-      usageMap[key] = [];
-    }
-
-    const isAll = project.id === ALL_PROJECTS_ID;
-    const filesToIndex = isAll ? [] : this.getProjectFiles(project, referencesFolder);
-
-    if (isAll) {
-      // In ALL scope, use fast indexed link scan
-      for (const file of this.app.vault.getMarkdownFiles()) {
-        if (file.path.startsWith(normalizePath(referencesFolder))) continue;
-        const cache = this.app.metadataCache.getFileCache(file);
-        // Quick check
-        if (!cache) continue;
-
-        try {
-          const content = await this.app.vault.read(file);
-          for (const [key] of referencesMap.entries()) {
-            if (content.includes(key)) {
-              const matches = content.match(new RegExp(`\\[\\^${key}\\]|\\[@${key}\\]|\\[\\[${key}(?:\\|[^\\]]+)?\\]\\]`, 'g'));
-              if (matches) {
-                totalCitations += matches.length;
-                if (!usageMap[key]) usageMap[key] = [];
-                usageMap[key].push({
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: 1,
-                  lineContent: `Cited in ${file.basename}`,
-                  citekey: key,
-                  rawCitation: matches[0],
-                });
-              }
-            }
-          }
-        } catch {}
-      }
-    } else {
-      for (const file of filesToIndex) {
-        try {
-          const content = await this.app.vault.read(file);
-          const lines = content.split(/\r?\n/);
-
-          for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
-            const line = lines[lineIdx];
-            const lineNum = lineIdx + 1;
-
-            // Footnotes [^citekey]
-            const footnoteMatches = line.matchAll(/\[\^([a-zA-Z0-9_-]+)\]/g);
-            for (const match of footnoteMatches) {
-              const citekey = match[1];
-              if (line.trim().startsWith(`[^${citekey}]:`)) continue;
-
-              // Filter out pure numbers unless in .references
-              if (/^\d+$/.test(citekey) && !referencesMap.has(citekey)) {
-                continue;
-              }
-
-              totalCitations++;
-              const occurrence: CitationOccurrence = {
-                filePath: file.path,
-                fileName: file.basename,
-                lineNumber: lineNum,
-                lineContent: line.trim(),
-                citekey,
-                rawCitation: match[0],
-              };
-
-              if (referencesMap.has(citekey)) {
-                if (!usageMap[citekey]) usageMap[citekey] = [];
-                usageMap[citekey].push(occurrence);
-              } else {
-                unresolved.push({
-                  citekey,
-                  file: file.path,
-                  line: lineNum,
-                  rawCitation: match[0],
-                });
-              }
-            }
-
-            // Wikilinks [[citekey]]
-            const wikilinkMatches = line.matchAll(/\[\[([a-zA-Z0-9_-]+)(?:\|[^\]]+)?\]\]/g);
-            for (const match of wikilinkMatches) {
-              const key = match[1];
-              if (referencesMap.has(key)) {
-                totalCitations++;
-                if (!usageMap[key]) usageMap[key] = [];
-                usageMap[key].push({
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: lineNum,
-                  lineContent: line.trim(),
-                  citekey: key,
-                  rawCitation: match[0],
-                });
-              }
-            }
-
-            // Pandoc [@citekey]
-            const pandocMatches = line.matchAll(/\[@([a-zA-Z0-9_-]+)\]/g);
-            for (const match of pandocMatches) {
-              const key = match[1];
-              totalCitations++;
-              if (referencesMap.has(key)) {
-                if (!usageMap[key]) usageMap[key] = [];
-                usageMap[key].push({
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: lineNum,
-                  lineContent: line.trim(),
-                  citekey: key,
-                  rawCitation: match[0],
-                });
-              } else {
-                unresolved.push({
-                  citekey: key,
-                  file: file.path,
-                  line: lineNum,
-                  rawCitation: match[0],
-                });
-              }
-            }
-          }
-        } catch (e) {
-          Logger.error(`Error indexing file ${file.path}:`, e);
+      if (fm) {
+        const current = fm['citation-manager'] || fm['citation_manager'];
+        if (current) {
+          await this.removeProjectFromFrontmatter(file, projectName);
+          count++;
         }
       }
     }
+    return count;
+  }
 
-    const projectRefs = isAll
-      ? Array.from(referencesMap.values())
-      : Array.from(referencesMap.values()).filter(r => 
-          !r.projects || r.projects.length === 0 || 
-          r.projects.some(p => p.toLowerCase() === project.id.toLowerCase() || p.toLowerCase() === project.name.toLowerCase())
-        );
+  /**
+   * Scans project documents and computes ProjectHealthStats
+   */
+  async indexProject(
+    project: ProjectRecord,
+    allReferences: Map<string, ReferenceMetadata>,
+    referencesFolder: string = ".references",
+    allKnownProjects?: ProjectRecord[]
+  ): Promise<ProjectHealthStats> {
+    const files = this.getProjectFiles(project, referencesFolder, allKnownProjects);
+    const referenceUsageMap: Record<string, CitationOccurrence[]> = {};
+    const unresolvedCitations: { rawCitation: string; file: string; line: number }[] = [];
+    let totalCitationsInFiles = 0;
 
-    let usedCount = 0;
-    for (const ref of projectRefs) {
-      if (usageMap[ref.citekey] && usageMap[ref.citekey].length > 0) {
-        usedCount++;
+    const citekeyRegex = /\[@([a-zA-Z0-9_-]+)\]/g;
+    const footnoteRegex = /\[\^([a-zA-Z0-9_-]+)\](?!:)/g;
+    const parentheticalRegex = /\(([A-Z][a-zA-Z\s]+(?:,\s*\d{4}|\s+et\s+al\.,\s*\d{4}))\)/g;
+
+    const authorYearIndex = new Map<string, string>();
+    for (const [key, ref] of allReferences.entries()) {
+      if (ref.authors && ref.authors.length > 0 && ref.year) {
+        const firstAuthor = ref.authors[0].split(',')[0].trim().toLowerCase();
+        const y = String(ref.year).trim();
+        authorYearIndex.set(`${firstAuthor}_${y}`, key);
+      }
+    }
+
+    for (const file of files) {
+      try {
+        const content = await this.app.vault.cachedRead(file);
+        const lines = content.split('\n');
+
+        lines.forEach((lineText, lineIdx) => {
+          let match: RegExpExecArray | null;
+
+          // 1. Citekeys [@citekey]
+          citekeyRegex.lastIndex = 0;
+          while ((match = citekeyRegex.exec(lineText)) !== null) {
+            const key = match[1];
+            totalCitationsInFiles++;
+            if (allReferences.has(key)) {
+              if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
+              referenceUsageMap[key].push({
+                filePath: file.path,
+                fileName: file.basename,
+                lineNumber: lineIdx + 1,
+                lineContent: lineText.trim(),
+              });
+            } else {
+              unresolvedCitations.push({ rawCitation: match[0], file: file.path, line: lineIdx + 1 });
+            }
+          }
+
+          // 2. Footnotes [^citekey]
+          footnoteRegex.lastIndex = 0;
+          while ((match = footnoteRegex.exec(lineText)) !== null) {
+            const key = match[1];
+            totalCitationsInFiles++;
+            if (allReferences.has(key)) {
+              if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
+              referenceUsageMap[key].push({
+                filePath: file.path,
+                fileName: file.basename,
+                lineNumber: lineIdx + 1,
+                lineContent: lineText.trim(),
+              });
+            }
+          }
+
+          // 3. Parenthetical (Author, Year)
+          parentheticalRegex.lastIndex = 0;
+          while ((match = parentheticalRegex.exec(lineText)) !== null) {
+            const raw = match[1];
+            const parts = raw.split(',');
+            if (parts.length >= 2) {
+              const author = parts[0].replace(/\s+et\s+al\./i, "").trim().toLowerCase();
+              const year = parts[parts.length - 1].trim();
+              const matchedKey = authorYearIndex.get(`${author}_${year}`);
+              if (matchedKey && allReferences.has(matchedKey)) {
+                totalCitationsInFiles++;
+                if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
+                referenceUsageMap[matchedKey].push({
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx + 1,
+                  lineContent: lineText.trim(),
+                });
+              }
+            }
+          }
+        });
+      } catch (err) {
+        Logger.warn(`Failed indexing file: ${file.path}`, err);
+      }
+    }
+
+    const relevantReferenceKeys = project.id === ALL_PROJECTS_ID 
+      ? Array.from(allReferences.keys())
+      : (project.referenceIds.length > 0 ? project.referenceIds : Array.from(allReferences.keys()));
+
+    const totalReferences = relevantReferenceKeys.length;
+    let usedReferencesCount = 0;
+    let unusedReferencesCount = 0;
+
+    for (const key of relevantReferenceKeys) {
+      if (referenceUsageMap[key] && referenceUsageMap[key].length > 0) {
+        usedReferencesCount++;
+      } else {
+        unusedReferencesCount++;
       }
     }
 
     return {
-      totalReferences: projectRefs.length,
-      totalCitationsInFiles: totalCitations,
-      usedReferencesCount: usedCount,
-      unusedReferencesCount: Math.max(0, projectRefs.length - usedCount),
-      unresolvedCitations: isAll ? [] : unresolved,
-      referenceUsageMap: usageMap,
+      totalReferences,
+      usedReferencesCount,
+      unusedReferencesCount,
+      totalCitationsInFiles,
+      unresolvedCitations,
+      referenceUsageMap,
     };
   }
 
   canDelete(citekey: string, stats: ProjectHealthStats): { allowed: boolean; occurrences: CitationOccurrence[] } {
-    const occurrences = stats.referenceUsageMap[citekey] || [];
+    const usages = stats.referenceUsageMap[citekey] || [];
     return {
-      allowed: occurrences.length === 0,
-      occurrences,
+      allowed: usages.length === 0,
+      occurrences: usages,
     };
   }
 
   /**
-   * Ultra-fast scoped bi-directional in-text synchronization (ONLY scans project linked files)
+   * Propagates reference updates across linked project documents
    */
   async syncReferenceUpdateAcrossDocuments(
-    oldRef: Partial<ReferenceMetadata>,
-    newRef: ReferenceMetadata,
+    originalRef: ReferenceMetadata,
+    updatedRef: ReferenceMetadata,
     project: ProjectRecord | null,
     style: CitationStyle = 'apa7',
     referencesFolder: string = ".references"
   ): Promise<{ modifiedFiles: number; timeMs: number }> {
-    const startTime = performance.now();
-    const oldCitekey = oldRef.citekey || newRef.citekey;
-    const newCitekey = newRef.citekey;
-    const cleanRefFolder = normalizePath(referencesFolder);
-
-    const oldInBodyParenthetical = oldRef.authors ? CitationEngine.formatInBody(oldRef as ReferenceMetadata, 'parenthetical') : '';
-    const newInBodyParenthetical = CitationEngine.formatInBody(newRef, 'parenthetical');
-
-    const oldInBodyNarrative = oldRef.authors ? CitationEngine.formatInBody(oldRef as ReferenceMetadata, 'narrative') : '';
-    const newInBodyNarrative = CitationEngine.formatInBody(newRef, 'narrative');
-
-    const newFootnoteDef = CitationEngine.formatFootnoteDefinition(newRef, style);
-
+    const t0 = performance.now();
     let modifiedFiles = 0;
 
-    // 1. Fast active open editor buffer replacement
-    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (activeView && !activeView.file?.path.startsWith(cleanRefFolder)) {
-      const editor = activeView.editor;
-      let text = editor.getValue();
-      let changed = false;
+    const files = this.getProjectFiles(project, referencesFolder);
 
-      const fnRegex = new RegExp(`^(\\[\\^${oldCitekey}\\]:).*$`, 'm');
-      if (fnRegex.test(text)) {
-        text = text.replace(fnRegex, newFootnoteDef);
-        changed = true;
-      }
+    const origKey = originalRef.citekey;
+    const newKey = updatedRef.citekey;
 
-      if (oldCitekey !== newCitekey) {
-        text = text.replaceAll(`[^${oldCitekey}]`, `[^${newCitekey}]`);
-        text = text.replaceAll(`[@${oldCitekey}]`, `[@${newCitekey}]`);
-        text = text.replaceAll(`[[${oldCitekey}]]`, `[[${newCitekey}]]`);
-        changed = true;
-      }
+    const origOldFootnote = CitationEngine.formatFootnoteDefinition(originalRef, style);
+    const newFootnote = CitationEngine.formatFootnoteDefinition(updatedRef, style);
 
-      if (oldInBodyParenthetical && oldInBodyParenthetical !== newInBodyParenthetical && text.includes(oldInBodyParenthetical)) {
-        text = text.replaceAll(oldInBodyParenthetical, newInBodyParenthetical);
-        changed = true;
-      }
+    const origParenthetical = CitationEngine.formatInBody(originalRef, 'parenthetical');
+    const newParenthetical = CitationEngine.formatInBody(updatedRef, 'parenthetical');
 
-      if (oldInBodyNarrative && oldInBodyNarrative !== newInBodyNarrative && text.includes(oldInBodyNarrative)) {
-        text = text.replaceAll(oldInBodyNarrative, newInBodyNarrative);
-        changed = true;
-      }
-
-      if (changed) {
-        editor.setValue(text);
-        modifiedFiles++;
-      }
-    }
-
-    // 2. Scoped file iteration (ONLY linked project files)
-    const targetFiles = this.getProjectFiles(project, referencesFolder);
-
-    for (const file of targetFiles) {
-      if (activeView && activeView.file?.path === file.path) continue; // Already updated active buffer
+    for (const file of files) {
       try {
-        const content = await this.app.vault.read(file);
-        // Fast skip check
-        if (!content.includes(oldCitekey) && (!oldInBodyParenthetical || !content.includes(oldInBodyParenthetical))) {
-          continue;
+        let content = await this.app.vault.read(file);
+        let modified = false;
+
+        if (origKey !== newKey) {
+          const citekeyRegex = new RegExp(`\\[@${origKey}\\]`, 'g');
+          if (citekeyRegex.test(content)) {
+            content = content.replace(citekeyRegex, `[@${newKey}]`);
+            modified = true;
+          }
+
+          const footnoteCallRegex = new RegExp(`\\[\\^${origKey}\\](?!:)`, 'g');
+          if (footnoteCallRegex.test(content)) {
+            content = content.replace(footnoteCallRegex, `[^${newKey}]`);
+            modified = true;
+          }
+
+          const footnoteDefRegex = new RegExp(`^\\[\\^${origKey}\\]:.*$`, 'gm');
+          if (footnoteDefRegex.test(content)) {
+            content = content.replace(footnoteDefRegex, newFootnote);
+            modified = true;
+          }
         }
 
-        let updated = content;
-        let fileChanged = false;
-
-        const fnRegex = new RegExp(`^(\\[\\^${oldCitekey}\\]:).*$`, 'm');
-        if (fnRegex.test(updated)) {
-          updated = updated.replace(fnRegex, newFootnoteDef);
-          fileChanged = true;
+        if (origOldFootnote !== newFootnote) {
+          const footnoteDefRegex = new RegExp(`^\\[\\^${newKey}\\]:.*$`, 'gm');
+          if (footnoteDefRegex.test(content)) {
+            content = content.replace(footnoteDefRegex, newFootnote);
+            modified = true;
+          }
         }
 
-        if (oldCitekey !== newCitekey) {
-          updated = updated.replaceAll(`[^${oldCitekey}]`, `[^${newCitekey}]`);
-          updated = updated.replaceAll(`[@${oldCitekey}]`, `[@${newCitekey}]`);
-          updated = updated.replaceAll(`[[${oldCitekey}]]`, `[[${newCitekey}]]`);
-          fileChanged = true;
+        if (origParenthetical !== newParenthetical && content.includes(origParenthetical)) {
+          content = content.split(origParenthetical).join(newParenthetical);
+          modified = true;
         }
 
-        if (oldInBodyParenthetical && oldInBodyParenthetical !== newInBodyParenthetical && updated.includes(oldInBodyParenthetical)) {
-          updated = updated.replaceAll(oldInBodyParenthetical, newInBodyParenthetical);
-          fileChanged = true;
-        }
-
-        if (oldInBodyNarrative && oldInBodyNarrative !== newInBodyNarrative && updated.includes(oldInBodyNarrative)) {
-          updated = updated.replaceAll(oldInBodyNarrative, newInBodyNarrative);
-          fileChanged = true;
-        }
-
-        if (fileChanged) {
-          await this.app.vault.modify(file, updated);
+        if (modified) {
+          await this.app.vault.modify(file, content);
           modifiedFiles++;
         }
       } catch (err) {
-        Logger.error(`Error updating reference across ${file.path}:`, err);
+        Logger.warn(`Failed syncing update to file: ${file.path}`, err);
       }
     }
 
-    const timeMs = Math.round(performance.now() - startTime);
-    Logger.debug(`Scoped reference sync complete in ${timeMs}ms across ${modifiedFiles} files`);
-    return { modifiedFiles, timeMs };
+    const elapsed = Math.round(performance.now() - t0);
+    return { modifiedFiles, timeMs: elapsed };
   }
 
   /**
-   * Propagate In-Body Format Change across project documents
+   * Propagates in-text format change across project documents
    */
   async propagateFormatChange(
     project: ProjectRecord,
-    targetFormat: InBodyFormat,
-    referencesMap: Map<string, ReferenceMetadata>,
+    newFormat: InBodyFormat,
+    allReferences: Map<string, ReferenceMetadata>,
     style: CitationStyle = 'apa7',
     referencesFolder: string = ".references"
   ): Promise<number> {
+    const files = this.getProjectFiles(project, referencesFolder);
     let modifiedFiles = 0;
-    const targetFiles = this.getProjectFiles(project, referencesFolder);
 
-    for (const file of targetFiles) {
+    for (const file of files) {
       try {
-        const content = await this.app.vault.read(file);
-        let updated = content;
-        let fileChanged = false;
+        let content = await this.app.vault.read(file);
+        let modified = false;
 
-        for (const [key, ref] of referencesMap.entries()) {
-          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
-          const footnoteMarker = `[^${key}]`;
-          const footnoteDef = CitationEngine.formatFootnoteDefinition(ref, style);
+        for (const [key, ref] of allReferences.entries()) {
+          const targetInBody = CitationEngine.formatInBody(ref, newFormat);
+          const citekeyPattern = new RegExp(`\\[@${key}\\]`, 'g');
+          if (citekeyPattern.test(content)) {
+            content = content.replace(citekeyPattern, targetInBody);
+            modified = true;
+          }
 
-          if (targetFormat === 'footnote') {
-            if (updated.includes(parenthetical)) {
-              updated = updated.replaceAll(parenthetical, footnoteMarker);
-              if (!updated.includes(`[^${key}]:`)) {
-                updated += `\n\n${footnoteDef}\n`;
-              }
-              fileChanged = true;
-            }
-          } else if (targetFormat === 'parenthetical') {
-            if (updated.includes(footnoteMarker)) {
-              updated = updated.replaceAll(footnoteMarker, parenthetical);
-              fileChanged = true;
+          if (newFormat === 'footnote') {
+            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
+            const fnRegex = new RegExp(`^\\[\\^${key}\\]:`, 'm');
+            if (!fnRegex.test(content)) {
+              content += `\n\n${fnDef}\n`;
+              modified = true;
             }
           }
         }
 
-        if (fileChanged) {
-          await this.app.vault.modify(file, updated);
+        if (modified) {
+          await this.app.vault.modify(file, content);
           modifiedFiles++;
         }
-      } catch {}
+      } catch (err) {
+        Logger.warn(`Failed propagating format change to file: ${file.path}`, err);
+      }
     }
 
     return modifiedFiles;
   }
 
+  /**
+   * Syncs and ensures footnote definitions exist at the bottom of all project files
+   */
   async syncFootnotesInRegisteredFiles(
     project: ProjectRecord,
-    referencesMap: Map<string, ReferenceMetadata>,
+    allReferences: Map<string, ReferenceMetadata>,
     style: CitationStyle = 'apa7',
     referencesFolder: string = ".references"
   ): Promise<{ updatedFilesCount: number; updatedFootnotesCount: number }> {
+    const files = this.getProjectFiles(project, referencesFolder);
     let updatedFilesCount = 0;
     let updatedFootnotesCount = 0;
 
-    const filesToSync = this.getProjectFiles(project, referencesFolder);
+    const footnoteCallRegex = /\[\^([a-zA-Z0-9_-]+)\](?!:)/g;
 
-    for (const file of filesToSync) {
+    for (const file of files) {
       try {
-        const content = await this.app.vault.read(file);
-        let modifiedContent = content;
-        let fileChanged = false;
+        let content = await this.app.vault.read(file);
+        let modified = false;
 
-        for (const [citekey, ref] of referencesMap.entries()) {
-          const regex = new RegExp(`^(\\[\\^${citekey}\\]:).*$`, 'm');
-          if (regex.test(modifiedContent)) {
-            const newDefinition = CitationEngine.formatFootnoteDefinition(ref, style);
-            modifiedContent = modifiedContent.replace(regex, newDefinition);
-            fileChanged = true;
-            updatedFootnotesCount++;
+        const callsInFile = new Set<string>();
+        let match: RegExpExecArray | null;
+        footnoteCallRegex.lastIndex = 0;
+        while ((match = footnoteCallRegex.exec(content)) !== null) {
+          callsInFile.add(match[1]);
+        }
+
+        for (const key of callsInFile) {
+          const ref = allReferences.get(key);
+          if (ref) {
+            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
+            const fnDefRegex = new RegExp(`^\\[\\^${key}\\]:.*$`, 'm');
+
+            if (fnDefRegex.test(content)) {
+              const currentDef = content.match(fnDefRegex)?.[0];
+              if (currentDef !== fnDef) {
+                content = content.replace(fnDefRegex, fnDef);
+                modified = true;
+                updatedFootnotesCount++;
+              }
+            } else {
+              content = content.trimEnd() + `\n\n${fnDef}\n`;
+              modified = true;
+              updatedFootnotesCount++;
+            }
           }
         }
 
-        if (fileChanged) {
-          await this.app.vault.modify(file, modifiedContent);
+        if (modified) {
+          await this.app.vault.modify(file, content);
           updatedFilesCount++;
         }
-      } catch (e) {
-        Logger.error(`Error syncing footnotes in ${file.path}:`, e);
+      } catch (err) {
+        Logger.warn(`Failed syncing footnotes for ${file.path}:`, err);
       }
     }
 
     return { updatedFilesCount, updatedFootnotesCount };
   }
 
+  /**
+   * Generates formatted Bibliography for a project
+   */
   generateBibliography(
     project: ProjectRecord,
-    references: ReferenceMetadata[],
+    allReferences: ReferenceMetadata[],
     style: CitationStyle = 'apa7',
     onlyCited: boolean = false,
     stats?: ProjectHealthStats
   ): string {
-    let filtered = references;
+    let refsToInclude = allReferences;
+
+    if (project.id !== ALL_PROJECTS_ID && project.referenceIds.length > 0) {
+      refsToInclude = allReferences.filter(r => 
+        project.referenceIds.includes(r.citekey) || 
+        (r.projects && (r.projects.includes(project.id) || r.projects.includes(project.name)))
+      );
+    }
+
     if (onlyCited && stats) {
-      filtered = references.filter(r => (stats.referenceUsageMap[r.citekey]?.length || 0) > 0);
+      refsToInclude = refsToInclude.filter(r => stats.referenceUsageMap[r.citekey]?.length > 0);
     }
 
-    if (style === 'ieee' || style === 'vancouver') {
-      filtered.sort((a, b) => (String(a.year)).localeCompare(String(b.year)));
-    } else {
-      filtered.sort((a, b) => {
-        const aAuthor = a.authors?.[0] || "";
-        const bAuthor = b.authors?.[0] || "";
-        return aAuthor.localeCompare(bAuthor);
-      });
-    }
-
-    const lines: string[] = [];
-    lines.push(`# Bibliography: ${project.name}`);
-    lines.push(`*Generated on ${new Date().toLocaleDateString()} | Style: ${style.toUpperCase()}*\n`);
-
-    filtered.forEach((ref, idx) => {
-      let entry = "";
-      switch (style) {
-        case 'apa7':
-          entry = CitationEngine.formatAPA7(ref);
-          lines.push(`- ${entry}`);
-          break;
-        case 'ieee':
-          entry = CitationEngine.formatIEEE(ref, idx + 1);
-          lines.push(entry);
-          break;
-        case 'harvard':
-          entry = CitationEngine.formatHarvard(ref);
-          lines.push(`- ${entry}`);
-          break;
-        case 'chicago':
-          entry = CitationEngine.formatChicago(ref);
-          lines.push(`- ${entry}`);
-          break;
-        case 'vancouver':
-          entry = CitationEngine.formatVancouver(ref, idx + 1);
-          lines.push(entry);
-          break;
-        default:
-          entry = CitationEngine.formatAPA7(ref);
-          lines.push(`- ${entry}`);
-      }
-    });
-
-    return lines.join("\n\n");
+    return CitationEngine.generateBibliography(refsToInclude, style, project.name);
   }
 }

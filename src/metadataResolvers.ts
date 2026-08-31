@@ -41,12 +41,23 @@ export class MetadataResolvers {
   }
 
   /**
-   * Resolves DOI via Crossref, CSL-JSON Content Negotiation, and Semantic Scholar
+   * Resolves DOI via Crossref, Semantic Scholar, OpenAlex, and CSL-JSON
    */
   static async resolveDOI(doi: string): Promise<Partial<ReferenceMetadata>> {
     const cleanDoi = doi.replace(/^https?:\/\/(dx\.)?doi\.org\//i, "").trim();
 
-    // Try Crossref API first
+    let title = "";
+    let authors: string[] = [];
+    let year: number | string = new Date().getFullYear();
+    let publication = "";
+    let volume = "";
+    let issue = "";
+    let pages = "";
+    let publisher = "";
+    let abstract = "";
+    let refType: ReferenceType = "journal";
+
+    // 1. Try Crossref API
     try {
       const crossrefUrl = `https://api.crossref.org/works/${encodeURIComponent(cleanDoi)}`;
       const res = await requestUrl({
@@ -56,28 +67,29 @@ export class MetadataResolvers {
 
       if (res.status === 200 && res.json && res.json.message) {
         const item = res.json.message;
-        const authors = (item.author || []).map((a: any) => {
+        authors = (item.author || []).map((a: any) => {
           if (a.family && a.given) return `${a.family}, ${a.given}`;
           if (a.family) return a.family;
           if (a.name) return a.name;
           return "Unknown";
         });
 
-        let year: number | string = new Date().getFullYear();
         if (item.published && item.published["date-parts"] && item.published["date-parts"][0]) {
           year = item.published["date-parts"][0][0];
         } else if (item["published-print"] && item["published-print"]["date-parts"] && item["published-print"]["date-parts"][0]) {
           year = item["published-print"]["date-parts"][0][0];
         }
 
-        const title = (item.title && item.title[0]) ? item.title[0].replace(/<\/?[^>]+(>|$)/g, "") : "Untitled";
-        const publication = (item["container-title"] && item["container-title"][0]) ? item["container-title"][0] : "";
-        const volume = item.volume || "";
-        const issue = item.issue || "";
-        const pages = item.page || "";
-        const publisher = item.publisher || "";
+        title = (item.title && item.title[0]) ? item.title[0].replace(/<\/?[^>]+(>|$)/g, "") : "Untitled";
+        publication = (item["container-title"] && item["container-title"][0]) ? item["container-title"][0] : "";
+        volume = item.volume || "";
+        issue = item.issue || "";
+        pages = item.page || "";
+        publisher = item.publisher || "";
+        if (item.abstract) {
+          abstract = item.abstract.replace(/<\/?[^>]+(>|$)/g, "").trim();
+        }
 
-        let refType: ReferenceType = "journal";
         if (item.type === "proceedings-article" || item.type === "conference-paper") {
           refType = "conference";
         } else if (item.type === "book" || item.type === "monograph") {
@@ -87,85 +99,106 @@ export class MetadataResolvers {
         } else if (item.type === "report" || item.type === "standard") {
           refType = "report";
         }
-
-        const citekey = CitationEngine.generateCitekey(authors, year, title);
-
-        return CitationEngine.populateStyles({
-          citekey,
-          type: refType,
-          title,
-          authors: authors.length > 0 ? authors : ["Unknown Author"],
-          year,
-          publication,
-          volume,
-          issue,
-          pages,
-          publisher,
-          doi: cleanDoi,
-          url: `https://doi.org/${cleanDoi}`,
-          abstract: item.abstract ? item.abstract.replace(/<\/?[^>]+(>|$)/g, "") : "",
-          projects: [],
-          dateAdded: new Date().toISOString(),
-          dateModified: new Date().toISOString(),
-        });
       }
     } catch (e) {
-      console.warn("[CitationManager] Crossref API lookup failed, falling back to CSL content negotiation...", e);
+      console.warn("[CitationManager] Crossref lookup failed, continuing to fallbacks...", e);
     }
 
-    // Fallback: DOI Content Negotiation
-    try {
-      const res = await requestUrl({
-        url: `https://doi.org/${encodeURIComponent(cleanDoi)}`,
-        headers: { Accept: "application/vnd.citationstyles.csl+json" },
-      });
-
-      if (res.status === 200 && res.json) {
-        const csl = res.json;
-        const authors = (csl.author || []).map((a: any) => {
-          if (a.family && a.given) return `${a.family}, ${a.given}`;
-          if (a.family) return a.family;
-          if (a.literal) return a.literal;
-          return "Unknown";
-        });
-
-        let year: number | string = new Date().getFullYear();
-        if (csl.issued && csl.issued["date-parts"] && csl.issued["date-parts"][0]) {
-          year = csl.issued["date-parts"][0][0];
+    // 2. Fallback / Augment via Semantic Scholar (Especially for Abstract)
+    if (!title || !abstract) {
+      try {
+        const s2Url = `https://api.semanticscholar.org/graph/v1/paper/DOI:${encodeURIComponent(cleanDoi)}?fields=title,authors,year,abstract,venue,publicationVenue,volume,issue,pages`;
+        const s2Res = await requestUrl({ url: s2Url });
+        if (s2Res.status === 200 && s2Res.json) {
+          const s2Data = s2Res.json;
+          if (!title && s2Data.title) title = s2Data.title;
+          if (authors.length === 0 && s2Data.authors) {
+            authors = s2Data.authors.map((a: any) => a.name);
+          }
+          if (s2Data.year && !year) year = s2Data.year;
+          if (!publication && s2Data.venue) publication = s2Data.venue;
+          if (!abstract && s2Data.abstract) abstract = s2Data.abstract.trim();
         }
-
-        const title = csl.title || "Untitled";
-        const citekey = CitationEngine.generateCitekey(authors, year, title);
-
-        let refType: ReferenceType = "journal";
-        if (csl.type === "paper-conference") refType = "conference";
-        else if (csl.type === "book") refType = "book";
-        else if (csl.type === "article") refType = "preprint";
-
-        return CitationEngine.populateStyles({
-          citekey,
-          type: refType,
-          title,
-          authors: authors.length > 0 ? authors : ["Unknown Author"],
-          year,
-          publication: csl["container-title"] || "",
-          volume: csl.volume || "",
-          issue: csl.issue || "",
-          pages: csl.page || "",
-          publisher: csl.publisher || "",
-          doi: cleanDoi,
-          url: csl.URL || `https://doi.org/${cleanDoi}`,
-          abstract: csl.abstract || "",
-          projects: [],
-          dateAdded: new Date().toISOString(),
-          dateModified: new Date().toISOString(),
-        });
-      }
-    } catch (e) {
-      console.warn("[CitationManager] CSL content negotiation failed...", e);
+      } catch {}
     }
 
-    throw new Error(`Could not resolve metadata for DOI: ${cleanDoi}`);
+    // 3. Fallback / Augment via OpenAlex (For Abstract Inverted Index)
+    if (!abstract) {
+      try {
+        const oaUrl = `https://api.openalex.org/works/doi:${encodeURIComponent(cleanDoi)}`;
+        const oaRes = await requestUrl({ url: oaUrl });
+        if (oaRes.status === 200 && oaRes.json) {
+          const oaData = oaRes.json;
+          if (!title && oaData.title) title = oaData.title;
+          if (oaData.abstract_inverted_index) {
+            const index = oaData.abstract_inverted_index;
+            const words: [string, number][] = [];
+            for (const [w, pos] of Object.entries(index)) {
+              for (const p of pos as number[]) words.push([w, p]);
+            }
+            words.sort((a, b) => a[1] - b[1]);
+            abstract = words.map(w => w[0]).join(" ").trim();
+          }
+        }
+      } catch {}
+    }
+
+    // 4. Fallback via CSL-JSON
+    if (!title) {
+      try {
+        const res = await requestUrl({
+          url: `https://doi.org/${encodeURIComponent(cleanDoi)}`,
+          headers: { Accept: "application/vnd.citationstyles.csl+json" },
+        });
+
+        if (res.status === 200 && res.json) {
+          const csl = res.json;
+          if (authors.length === 0) {
+            authors = (csl.author || []).map((a: any) => {
+              if (a.family && a.given) return `${a.family}, ${a.given}`;
+              if (a.family) return a.family;
+              if (a.literal) return a.literal;
+              return "Unknown";
+            });
+          }
+          if (csl.issued && csl.issued["date-parts"] && csl.issued["date-parts"][0]) {
+            year = csl.issued["date-parts"][0][0];
+          }
+          title = csl.title || "Untitled";
+          if (!publication) publication = csl["container-title"] || "";
+          if (!volume) volume = csl.volume || "";
+          if (!issue) issue = csl.issue || "";
+          if (!pages) pages = csl.page || "";
+          if (!publisher) publisher = csl.publisher || "";
+          if (!abstract && csl.abstract) abstract = csl.abstract;
+        }
+      } catch {}
+    }
+
+    if (!title) {
+      throw new Error(`Could not resolve metadata for DOI: ${cleanDoi}`);
+    }
+
+    const citekey = CitationEngine.generateCitekey(authors, year, title);
+
+    return CitationEngine.populateStyles({
+      citekey,
+      type: refType,
+      title,
+      authors: authors.length > 0 ? authors : ["Unknown Author"],
+      year,
+      publication,
+      volume,
+      issue,
+      pages,
+      publisher,
+      doi: cleanDoi,
+      url: `https://doi.org/${cleanDoi}`,
+      abstract,
+      projects: [],
+      dateAdded: new Date().toISOString(),
+      dateModified: new Date().toISOString(),
+    });
   }
 
   /**
@@ -202,7 +235,6 @@ export class MetadataResolvers {
       console.warn("[CitationManager] Semantic scholar arXiv lookup failed...", e);
     }
 
-    // Direct fallback
     const citekey = `Arxiv${cleanId.replace(/[^a-zA-Z0-9]/g, "")}`;
     return CitationEngine.populateStyles({
       citekey,
@@ -269,7 +301,7 @@ export class MetadataResolvers {
    * Resolves Websites, YouTube Videos, and Blogs
    */
   static async resolveURL(url: string): Promise<Partial<ReferenceMetadata>> {
-    // Check for YouTube
+    // YouTube
     if (/youtube\.com\/watch|youtu\.be\//i.test(url)) {
       try {
         const oembedRes = await requestUrl({ url: `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json` });
@@ -296,7 +328,7 @@ export class MetadataResolvers {
       } catch {}
     }
 
-    // Generic HTML Fetch & OpenGraph Parsing
+    // HTML Fetch & OpenGraph Parsing
     try {
       const res = await requestUrl({ url });
       if (res.status === 200 && res.text) {
@@ -316,6 +348,10 @@ export class MetadataResolvers {
         const dateMatch = html.match(/<meta\s+property=["']article:published_time["']\s+content=["'](\d{4})/i)?.[1]
           || new Date().getFullYear();
 
+        const descriptionMatch = html.match(/<meta\s+property=["']og:description["']\s+content=["'](.*?)["']/i)?.[1]
+          || html.match(/<meta\s+name=["']description["']\s+content=["'](.*?)["']/i)?.[1]
+          || "";
+
         const cleanTitle = ogTitle.replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").trim();
         const citekey = CitationEngine.generateCitekey([authorMatch], dateMatch, cleanTitle);
 
@@ -329,6 +365,7 @@ export class MetadataResolvers {
           year: dateMatch,
           publication: ogSite,
           url,
+          abstract: descriptionMatch.replace(/&amp;/g, "&").trim(),
           projects: [],
           dateAdded: new Date().toISOString(),
           dateModified: new Date().toISOString(),
@@ -338,7 +375,6 @@ export class MetadataResolvers {
       console.warn("[CitationManager] Generic URL scrape failed...", e);
     }
 
-    // Fallback
     const domain = new URL(url).hostname.replace(/^www\./, "");
     const citekey = CitationEngine.generateCitekey([domain], new Date().getFullYear(), "Web");
     return CitationEngine.populateStyles({
@@ -383,6 +419,7 @@ export class MetadataResolvers {
     const doi = getField("doi");
     const url = getField("url");
     const isbn = getField("isbn");
+    const abstract = getField("abstract");
 
     let type: ReferenceType = "other";
     if (rawType === "article") type = "journal";
@@ -406,6 +443,7 @@ export class MetadataResolvers {
       doi,
       url,
       isbn,
+      abstract,
       projects: [],
       dateAdded: new Date().toISOString(),
       dateModified: new Date().toISOString(),
