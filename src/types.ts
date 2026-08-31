@@ -53,6 +53,7 @@ export interface ProjectRecord {
   referenceIds: string[];    // Citekeys belonging to this project
   citationStyle?: CitationStyle;
   inBodyFormat?: InBodyFormat;
+  enableFootnoteAutoSync?: boolean;
   created: string;
   modified: string;
 }
@@ -65,6 +66,7 @@ export interface CitationManagerSettings {
   activeProjectId: string; // "ALL" or specific project id
   enableEditorSuggest: boolean;
   blockDeletionIfInUse: boolean;
+  enableFootnoteAutoSync: boolean;
   debugMode: boolean;
 }
 
@@ -78,6 +80,7 @@ export const DEFAULT_SETTINGS: CitationManagerSettings = {
   activeProjectId: ALL_PROJECTS_ID,
   enableEditorSuggest: true,
   blockDeletionIfInUse: true,
+  enableFootnoteAutoSync: false,
   debugMode: false,
 };
 

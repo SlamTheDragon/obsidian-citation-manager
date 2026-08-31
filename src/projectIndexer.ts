@@ -451,15 +451,27 @@ export class ProjectIndexer {
             modified = true;
           }
 
-          // Footnote definition sync
-          if (newFormat === 'footnote') {
+          // Footnote definition sync or cleanup
+          if (newFormat === 'footnote' || project.enableFootnoteAutoSync) {
             const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
-            const fnRegex = new RegExp(`^\\[\\^${key}\\]:`, 'm');
+            const fnRegex = new RegExp(`^\\[\\^${key}\\]:.*$`, 'm');
             if (!fnRegex.test(content) && (content.includes(`[^${key}]`) || modified)) {
               content = content.trimEnd() + `\n\n${fnDef}\n`;
               modified = true;
             }
+          } else {
+            // Non-footnote format: automatically clean up citation footnote definitions unless explicitly enabled
+            const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
+            if (fnCleanRegex.test(content)) {
+              content = content.replace(fnCleanRegex, "");
+              modified = true;
+            }
           }
+        }
+
+        // Clean up any trailing excessive empty lines left behind by footnote removals
+        if (newFormat !== 'footnote' && !project.enableFootnoteAutoSync) {
+          content = content.replace(/\n{3,}$/, "\n\n");
         }
 
         if (modified) {
@@ -482,17 +494,37 @@ export class ProjectIndexer {
     allReferences: Map<string, ReferenceMetadata>,
     style: CitationStyle = 'apa7',
     referencesFolder: string = ".references"
-  ): Promise<{ updatedFilesCount: number; updatedFootnotesCount: number }> {
+  ): Promise<{ updatedFilesCount: number; updatedFootnotesCount: number; removedFootnotesCount: number }> {
     const files = this.getProjectFiles(project, referencesFolder);
     let updatedFilesCount = 0;
     let updatedFootnotesCount = 0;
+    let removedFootnotesCount = 0;
 
+    const shouldKeepFootnotes = project.inBodyFormat === 'footnote' || Boolean(project.enableFootnoteAutoSync);
     const footnoteCallRegex = /\[\^([a-zA-Z0-9_-]+)\](?!:)/g;
 
     for (const file of files) {
       try {
         let content = await this.app.vault.read(file);
         let modified = false;
+
+        if (!shouldKeepFootnotes) {
+          // Clean up any citation footnote definitions
+          for (const [key] of allReferences.entries()) {
+            const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
+            if (fnCleanRegex.test(content)) {
+              content = content.replace(fnCleanRegex, "");
+              modified = true;
+              removedFootnotesCount++;
+            }
+          }
+          if (modified) {
+            content = content.replace(/\n{3,}$/, "\n\n");
+            await this.app.vault.modify(file, content);
+            updatedFilesCount++;
+          }
+          continue;
+        }
 
         const callsInFile = new Set<string>();
         let match: RegExpExecArray | null;
@@ -501,10 +533,11 @@ export class ProjectIndexer {
           callsInFile.add(match[1]);
         }
 
+        let fnIndex = 1;
         for (const key of callsInFile) {
           const ref = allReferences.get(key);
           if (ref) {
-            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
+            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIndex);
             const fnDefRegex = new RegExp(`^\\[\\^${key}\\]:.*$`, 'm');
 
             if (fnDefRegex.test(content)) {
@@ -519,6 +552,7 @@ export class ProjectIndexer {
               modified = true;
               updatedFootnotesCount++;
             }
+            fnIndex++;
           }
         }
 
@@ -531,7 +565,7 @@ export class ProjectIndexer {
       }
     }
 
-    return { updatedFilesCount, updatedFootnotesCount };
+    return { updatedFilesCount, updatedFootnotesCount, removedFootnotesCount };
   }
 
   /**

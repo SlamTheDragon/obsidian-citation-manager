@@ -817,10 +817,23 @@ export class CitationManagerView extends ItemView {
         new Notice(`Citation standard set to ${project.citationStyle.toUpperCase()}`);
       });
 
+      // Footnote Plugin Compatibility Toggle
+      const fnRow = controlsCard.createDiv({ cls: "citation-format-controls-row" });
+      fnRow.style.marginTop = "6px";
+      const fnToggleLabel = fnRow.createEl("label", { cls: "citation-checkbox-label" });
+      const fnCheckbox = fnToggleLabel.createEl("input", { type: "checkbox" });
+      fnCheckbox.checked = Boolean(project.enableFootnoteAutoSync);
+      fnCheckbox.addEventListener("change", async () => {
+        project.enableFootnoteAutoSync = fnCheckbox.checked;
+        await this.onSaveSettings();
+        new Notice(`Footnote auto-sync: ${project.enableFootnoteAutoSync ? 'Enabled' : 'Disabled'}`);
+      });
+      fnToggleLabel.createSpan({ text: "Auto-sync footnote definitions at note bottom" });
+
       // Sync Footnotes Button
       const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary" });
       setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
-      syncBtn.createSpan({ text: " Sync Footnotes across Linked Notes" });
+      syncBtn.createSpan({ text: " Sync & Clean Footnotes in Linked Notes" });
       syncBtn.style.marginTop = "6px";
       syncBtn.addEventListener("click", async () => {
         syncBtn.disabled = true;
@@ -830,8 +843,11 @@ export class CitationManagerView extends ItemView {
           project.citationStyle || this.settings.defaultCitationStyle,
           this.settings.referencesFolder
         );
-        this.statusMessage = `[Synced ${res.updatedFootnotesCount} definitions across ${res.updatedFilesCount} file(s)]`;
-        new Notice(`Synced ${res.updatedFootnotesCount} definitions across ${res.updatedFilesCount} documents.`);
+        if (res.removedFootnotesCount > 0) {
+          new Notice(`Cleaned up ${res.removedFootnotesCount} footnote definition(s) across ${res.updatedFilesCount} file(s).`);
+        } else {
+          new Notice(`Synced ${res.updatedFootnotesCount} definitions across ${res.updatedFilesCount} documents.`);
+        }
         syncBtn.disabled = false;
         await this.refreshData();
       });
@@ -1036,13 +1052,19 @@ export class CitationManagerView extends ItemView {
     const cursor = editor.getCursor();
     editor.replaceRange(inBodyText, cursor);
 
-    if (format === "footnote") {
+    const shouldIncludeFootnote = format === "footnote" || Boolean(project?.enableFootnoteAutoSync || this.settings.enableFootnoteAutoSync);
+
+    if (shouldIncludeFootnote) {
       const docText = editor.getValue();
+      const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
+      const footnoteIndex = existingFnMatches.length + 1;
+
       const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
       if (!fnDefRegex.test(docText)) {
         const fnDefinition = CitationEngine.formatFootnoteDefinition(
           ref,
-          project?.citationStyle || this.settings.defaultCitationStyle
+          project?.citationStyle || this.settings.defaultCitationStyle,
+          footnoteIndex
         );
         const hasTrailingNewline = docText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";
