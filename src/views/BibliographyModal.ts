@@ -30,15 +30,17 @@ export class BibliographyModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-bib-modal");
+    contentEl.addClass("citation-standard-modal-root");
 
     const header = contentEl.createDiv({ cls: "citation-modal-header-row" });
     const iconSpan = header.createSpan({ cls: "modal-header-icon" });
-    setIcon(iconSpan, "book-open");
+    setIcon(iconSpan, "quote-glyph");
     header.createEl("h2", { text: `Bibliography: ${this.project ? this.project.name : "All References"}` });
 
-    // Controls Row
-    const controlsDiv = contentEl.createDiv({ cls: "citation-quick-fetch-box" });
+    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-area" });
+
+    // Controls Card
+    const controlsDiv = scrollBody.createDiv({ cls: "citation-modal-section-card" });
 
     new Setting(controlsDiv)
       .setName("Citation Standard")
@@ -58,7 +60,7 @@ export class BibliographyModal extends Modal {
     if (this.project && this.stats) {
       new Setting(controlsDiv)
         .setName("Scope Filter")
-        .setDesc("Include only references cited in project documents")
+        .setDesc("Include only references cited in linked notes")
         .addToggle(toggle => toggle
           .setValue(this.onlyCited)
           .onChange(val => {
@@ -68,78 +70,66 @@ export class BibliographyModal extends Modal {
     }
 
     // Live Preview Box
-    contentEl.createEl("h4", { text: "Generated Output Preview" });
-    const previewEl = contentEl.createEl("pre", { cls: "citation-live-previews" });
-    previewEl.style.maxHeight = "240px";
-    previewEl.style.overflowY = "auto";
-    previewEl.style.whiteSpace = "pre-wrap";
+    scrollBody.createEl("div", { cls: "preview-section-title", text: "Formatted Output" });
+    const previewEl = scrollBody.createEl("pre", { cls: "citation-bib-preview-box" });
     this.updatePreview(previewEl);
 
-    // Export Options
-    contentEl.createEl("h4", { text: "Export Destination" });
-    const exportDiv = contentEl.createDiv({ cls: "citation-form-container" });
-
-    // 1. Copy to Clipboard
+    // Export Options Card
+    const exportDiv = scrollBody.createDiv({ cls: "citation-modal-section-card" });
     new Setting(exportDiv)
-      .setName("Clipboard")
-      .setDesc("Copy formatted text to system clipboard")
-      .addButton(btn => btn
-        .setButtonText("Copy to Clipboard")
-        .setCta()
-        .onClick(async () => {
-          const bibText = this.getFormattedBib();
-          await navigator.clipboard.writeText(bibText);
-          new Notice("Bibliography copied to clipboard!");
-          this.close();
-        }));
+      .setName("Export Target Note")
+      .setDesc("Create or overwrite a dedicated bibliography note")
+      .addText(text => {
+        text.setPlaceholder("e.g. References.md")
+          .setValue(this.exportPath)
+          .onChange(val => { this.exportPath = val; });
+        text.inputEl.addClass("setting-full-width-input");
+      });
 
-    // 2. Append to Active Note
+    // Pinned Footer Bar
+    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
+
+    const closeBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Close" });
+    closeBtn.addEventListener("click", () => this.close());
+
+    const copyBtn = footerBar.createEl("button", { cls: "citation-small-btn", text: "Copy to Clipboard" });
+    copyBtn.addEventListener("click", async () => {
+      await navigator.clipboard.writeText(previewEl.getText());
+      new Notice("Bibliography copied to clipboard!");
+    });
+
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeView) {
-      new Setting(exportDiv)
-        .setName(`Append to Active Note (${activeView.file?.basename})`)
-        .setDesc("Insert at the end of your open note")
-        .addButton(btn => btn
-          .setButtonText("Append to Note")
-          .onClick(async () => {
-            const bibText = this.getFormattedBib();
-            const editor = activeView.editor;
-            const doc = editor.getValue();
-            const separator = doc.endsWith("\n") ? "\n" : "\n\n";
-            editor.replaceRange(`${separator}${bibText}\n`, { line: editor.lineCount(), ch: 0 });
-            new Notice(`Appended bibliography to ${activeView.file?.basename}`);
-            this.close();
-          }));
+      const appendBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Append to Note" });
+      appendBtn.addEventListener("click", () => {
+        const bibText = previewEl.getText();
+        const editor = activeView.editor;
+        const doc = editor.getValue();
+        const separator = doc.endsWith("\n") ? "\n" : "\n\n";
+        editor.replaceRange(`${separator}${bibText}\n`, { line: editor.lineCount(), ch: 0 });
+        new Notice(`Appended bibliography to ${activeView.file?.basename}`);
+        this.close();
+      });
     }
 
-    // 3. Save to Vault File
-    new Setting(exportDiv)
-      .setName("Save to Vault Note")
-      .setDesc("Specify path in vault to create or overwrite")
-      .addText(text => text
-        .setPlaceholder("e.g. References.md or Literature/Bibliography.md")
-        .setValue(this.exportPath)
-        .onChange(val => { this.exportPath = val; }))
-      .addButton(btn => btn
-        .setButtonText("Export to File")
-        .onClick(async () => {
-          if (!this.exportPath.trim()) {
-            new Notice("Please specify a target file path.");
-            return;
-          }
-          const cleanPath = normalizePath(this.exportPath.endsWith('.md') ? this.exportPath : `${this.exportPath}.md`);
-          const bibText = this.getFormattedBib();
-          try {
-            await this.app.vault.adapter.write(cleanPath, bibText);
-            new Notice(`Saved bibliography to ${cleanPath}`);
-            this.close();
-          } catch (e: any) {
-            new Notice(`Export error: ${e.message}`);
-          }
-        }));
+    const exportBtn = footerBar.createEl("button", { cls: "citation-small-btn", text: "Export File" });
+    exportBtn.addEventListener("click", async () => {
+      if (!this.exportPath.trim()) {
+        new Notice("Please specify a target file path.");
+        return;
+      }
+      const cleanPath = normalizePath(this.exportPath.endsWith('.md') ? this.exportPath : `${this.exportPath}.md`);
+      try {
+        await this.app.vault.adapter.write(cleanPath, previewEl.getText());
+        new Notice(`Saved bibliography to ${cleanPath}`);
+        this.close();
+      } catch (err: any) {
+        new Notice(`Export error: ${err.message}`);
+      }
+    });
   }
 
-  private getFormattedBib(): string {
+  private updatePreview(previewEl: HTMLElement) {
     const virtualProj: ProjectRecord = this.project || {
       id: "__ALL__",
       name: "All References",
@@ -149,17 +139,14 @@ export class BibliographyModal extends Modal {
       modified: "",
     };
 
-    return this.projectIndexer.generateBibliography(
+    const text = this.projectIndexer.generateBibliography(
       virtualProj,
       this.references,
       this.selectedStyle,
       this.onlyCited,
       this.stats || undefined
     );
-  }
-
-  private updatePreview(previewEl: HTMLElement) {
-    previewEl.setText(this.getFormattedBib());
+    previewEl.setText(text);
   }
 
   onClose() {

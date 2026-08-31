@@ -43,6 +43,10 @@ export class Logger {
     }
   }
 
+  static clear() {
+    this.logs = [];
+  }
+
   static getRecentLogs(): string {
     return this.logs.map(l => `[${l.timestamp}] [${l.level}] ${l.message} ${l.data ? JSON.stringify(l.data) : ""}`).join("\n");
   }

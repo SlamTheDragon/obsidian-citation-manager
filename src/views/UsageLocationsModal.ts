@@ -14,19 +14,21 @@ export class UsageLocationsModal extends Modal {
   onOpen() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-usage-modal");
+    contentEl.addClass("citation-standard-modal-root");
 
     const header = contentEl.createDiv({ cls: "citation-modal-header-row" });
     const iconSpan = header.createSpan({ cls: "modal-header-icon danger" });
     setIcon(iconSpan, "alert-triangle");
     header.createEl("h2", { text: `Active Citations for [${this.citekey}]` });
 
+    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-area" });
+
     // Clear instruction signifier
-    const hintBox = contentEl.createDiv({ cls: "citation-usage-instruction-box" });
+    const hintBox = scrollBody.createDiv({ cls: "citation-usage-instruction-box" });
     setIcon(hintBox.createSpan({ cls: "inline-icon" }), "info");
     hintBox.createSpan({ text: " Deletion is protected. Click any line below to jump directly to that note." });
 
-    const list = contentEl.createDiv({ cls: "citation-occurrence-list" });
+    const list = scrollBody.createDiv({ cls: "citation-occurrence-list" });
 
     for (const occ of this.occurrences) {
       const card = list.createDiv({ cls: "citation-occurrence-card" });
@@ -59,8 +61,8 @@ export class UsageLocationsModal extends Modal {
       });
     }
 
-    const btnRow = contentEl.createDiv({ cls: "citation-modal-button-row" });
-    const closeBtn = btnRow.createEl("button", { text: "Close" });
+    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
+    const closeBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Close" });
     closeBtn.addEventListener("click", () => this.close());
   }
 

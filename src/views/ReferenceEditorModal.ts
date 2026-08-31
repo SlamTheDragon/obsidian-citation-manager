@@ -10,13 +10,11 @@ export class ReferenceEditorModal extends Modal {
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
 
-  // Accordion states
-  private isPubOpen: boolean = false;
-  private isIdsOpen: boolean = false;
-  private isAbstractOpen: boolean = false;
+  // Track currently active open accordion (only 1 can be open at a time)
+  private activeAccordion: string | null = null;
 
   private previewEl: HTMLElement | null = null;
-  private authorChipsContainer: HTMLElement | null = null;
+  private accordionCards: Map<string, { cardEl: HTMLElement; iconEl: HTMLElement }> = new Map();
 
   constructor(
     app: App,
@@ -30,7 +28,7 @@ export class ReferenceEditorModal extends Modal {
       citekey: ref.citekey || "",
       type: ref.type || "journal",
       title: ref.title || "",
-      authors: ref.authors && ref.authors.length > 0 ? ref.authors : [],
+      authors: ref.authors && ref.authors.length > 0 ? [...ref.authors] : [],
       year: ref.year || new Date().getFullYear(),
       month: ref.month || "",
       publication: ref.publication || "",
@@ -65,7 +63,7 @@ export class ReferenceEditorModal extends Modal {
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-editor-modal-root");
+    contentEl.addClass("citation-standard-modal-root");
 
     // Modal Header
     const headerRow = contentEl.createDiv({ cls: "citation-modal-header-row" });
@@ -122,7 +120,7 @@ export class ReferenceEditorModal extends Modal {
     const coreCard = scrollBody.createDiv({ cls: "citation-modal-section-card" });
     coreCard.createEl("div", { cls: "section-card-title", text: "Core Information" });
 
-    // Title (Single or two line clean input)
+    // Title
     new Setting(coreCard)
       .setName("Title")
       .addText(text => {
@@ -138,17 +136,16 @@ export class ReferenceEditorModal extends Modal {
     // Interactive Authors Chip Field
     const authorSetting = new Setting(coreCard)
       .setName("Authors")
-      .setDesc("Type an author and press Enter or comma");
+      .setDesc("Type author name and press Enter or comma");
 
     const authorContainer = authorSetting.controlEl.createDiv({ cls: "author-chips-input-container" });
-    this.authorChipsContainer = authorContainer;
     this.renderAuthorChips(authorContainer);
 
-    // Year, Type, Citekey in standard Setting row
+    // Year, Type, Citekey
     const metaRow = new Setting(coreCard)
       .setName("Metadata")
       .addText(text => text
-        .setPlaceholder("Year (e.g. 2026)")
+        .setPlaceholder("Year")
         .setValue(String(this.ref.year || ""))
         .onChange(val => {
           this.ref.year = val;
@@ -164,7 +161,7 @@ export class ReferenceEditorModal extends Modal {
         });
       })
       .addText(text => text
-        .setPlaceholder("Citekey (e.g. Li2026)")
+        .setPlaceholder("Citekey")
         .setValue(this.ref.citekey)
         .onChange(val => {
           this.ref.citekey = val.replace(/[^a-zA-Z0-9_-]/g, "");
@@ -172,11 +169,10 @@ export class ReferenceEditorModal extends Modal {
         }));
 
     // --- ACCORDION 1: PUBLICATION & VENUE ---
-    this.createAccordion(
+    this.createExclusiveAccordion(
       scrollBody,
+      "pub",
       "Publication & Venue",
-      this.isPubOpen,
-      (open) => { this.isPubOpen = open; },
       (body) => {
         new Setting(body)
           .setName("Journal / Conference")
@@ -208,11 +204,10 @@ export class ReferenceEditorModal extends Modal {
     );
 
     // --- ACCORDION 2: IDENTIFIERS, DOI & URL ---
-    this.createAccordion(
+    this.createExclusiveAccordion(
       scrollBody,
+      "ids",
       "Identifiers, DOI & URL",
-      this.isIdsOpen,
-      (open) => { this.isIdsOpen = open; },
       (body) => {
         new Setting(body)
           .setName("DOI")
@@ -242,11 +237,10 @@ export class ReferenceEditorModal extends Modal {
     );
 
     // --- ACCORDION 3: ABSTRACT & LITERATURE SUMMARY ---
-    this.createAccordion(
+    this.createExclusiveAccordion(
       scrollBody,
+      "abstract",
       "Abstract & Literature Summary",
-      this.isAbstractOpen,
-      (open) => { this.isAbstractOpen = open; },
       (body) => {
         new Setting(body)
           .addTextArea(text => {
@@ -259,7 +253,7 @@ export class ReferenceEditorModal extends Modal {
       }
     );
 
-    // Live Monospaced Output Preview Box (Always rendered)
+    // Live Output Preview Box
     scrollBody.createEl("div", { cls: "preview-section-title", text: "Live Output Preview" });
     this.previewEl = scrollBody.createDiv({ cls: "citation-modal-preview-box" });
     this.updatePreviews();
@@ -299,10 +293,8 @@ export class ReferenceEditorModal extends Modal {
 
   private renderAuthorChips(container: HTMLElement) {
     container.empty();
-
     const chipsWrap = container.createDiv({ cls: "author-chips-wrap" });
 
-    // Render active author chips
     for (let i = 0; i < this.ref.authors.length; i++) {
       const author = this.ref.authors[i];
       if (!author) continue;
@@ -319,14 +311,13 @@ export class ReferenceEditorModal extends Modal {
       });
     }
 
-    // Inline input to add author
     const authorInput = chipsWrap.createEl("input", {
       type: "text",
       placeholder: this.ref.authors.length === 0 ? "e.g. Li, Ziheng 'Leo'" : "+ Add author...",
       cls: "author-chip-inline-input"
     });
 
-    const addAuthorFromInput = () => {
+    const addAuthor = () => {
       const val = authorInput.value.trim();
       if (val) {
         const parts = val.split(/[\r\n,]+/).map(p => p.trim()).filter(p => p.length > 0);
@@ -344,7 +335,7 @@ export class ReferenceEditorModal extends Modal {
     authorInput.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
-        addAuthorFromInput();
+        addAuthor();
       } else if (e.key === "Backspace" && !authorInput.value && this.ref.authors.length > 0) {
         this.ref.authors.pop();
         this.renderAuthorChips(container);
@@ -353,42 +344,53 @@ export class ReferenceEditorModal extends Modal {
     });
 
     authorInput.addEventListener("blur", () => {
-      addAuthorFromInput();
+      addAuthor();
     });
 
-    // Clicking container focuses the input
     container.addEventListener("click", () => {
       authorInput.focus();
     });
   }
 
-  private createAccordion(
+  private createExclusiveAccordion(
     parent: HTMLElement,
+    id: string,
     title: string,
-    isOpen: boolean,
-    onToggle: (open: boolean) => void,
     renderBody: (bodyEl: HTMLElement) => void
   ) {
-    const card = parent.createDiv({ cls: `citation-modal-accordion-card ${isOpen ? 'open' : ''}` });
+    const card = parent.createDiv({ cls: "citation-modal-accordion-card" });
+    const isCurrentlyOpen = this.activeAccordion === id;
+    if (isCurrentlyOpen) card.addClass("open");
 
     const header = card.createDiv({ cls: "accordion-header-row" });
     header.createEl("span", { cls: "accordion-title-text", text: title });
     const toggleIcon = header.createSpan({ cls: "accordion-icon-wrap" });
-    setIcon(toggleIcon, isOpen ? "chevron-up" : "chevron-down");
+    setIcon(toggleIcon, isCurrentlyOpen ? "chevron-up" : "chevron-down");
 
     const body = card.createDiv({ cls: "accordion-body-collapse" });
     renderBody(body);
 
+    this.accordionCards.set(id, { cardEl: card, iconEl: toggleIcon });
+
     header.addEventListener("click", () => {
-      const willOpen = !card.hasClass("open");
-      if (willOpen) {
-        card.addClass("open");
-        setIcon(toggleIcon, "chevron-up");
-      } else {
+      if (this.activeAccordion === id) {
+        // Close current
+        this.activeAccordion = null;
         card.removeClass("open");
         setIcon(toggleIcon, "chevron-down");
+      } else {
+        // Close all other accordions (mutual exclusivity)
+        for (const [otherId, item] of this.accordionCards.entries()) {
+          if (otherId !== id) {
+            item.cardEl.removeClass("open");
+            setIcon(item.iconEl, "chevron-down");
+          }
+        }
+        // Open this one
+        this.activeAccordion = id;
+        card.addClass("open");
+        setIcon(toggleIcon, "chevron-up");
       }
-      onToggle(willOpen);
     });
   }
 

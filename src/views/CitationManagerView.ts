@@ -34,6 +34,7 @@ export class CitationManagerView extends ItemView {
 
   private lastActiveMarkdownView: MarkdownView | null = null;
   private statusMessage: string = "Ready";
+  private refreshDebounceTimer: any = null;
 
   constructor(
     leaf: WorkspaceLeaf,
@@ -75,12 +76,19 @@ export class CitationManagerView extends ItemView {
 
     this.registerEvent(
       this.app.metadataCache.on('changed', () => {
-        this.refreshData();
+        this.refreshDataDebounced(60);
       })
     );
 
     this.lastActiveMarkdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
     await this.refreshData();
+  }
+
+  refreshDataDebounced(delayMs: number = 40) {
+    if (this.refreshDebounceTimer) clearTimeout(this.refreshDebounceTimer);
+    this.refreshDebounceTimer = setTimeout(() => {
+      this.refreshData();
+    }, delayMs);
   }
 
   async refreshData() {
@@ -652,7 +660,7 @@ export class CitationManagerView extends ItemView {
       citedLabel.createSpan({ text: "Only cited in notes" });
     }
 
-    // Live Output Box (Fills available space)
+    // Live Output Box
     const previewBox = wrapper.createEl("pre", { cls: "citation-bib-preview-box" });
     previewBox.setText(this.getFormattedBib(project));
 
@@ -863,10 +871,11 @@ export class CitationManagerView extends ItemView {
           setIcon(unlinkBtn, "x");
           unlinkBtn.addEventListener("click", async () => {
             project.registeredFiles = project.registeredFiles.filter(p => p !== file.path);
+            this.updateActiveDocBanner();
             await this.projectIndexer.removeProjectFromFrontmatter(file, project.name);
             await this.onSaveSettings();
             new Notice(`Unlinked "${file.basename}" from ${project.name}`);
-            await this.refreshData();
+            this.refreshDataDebounced(50);
           });
         }
       }
@@ -916,10 +925,11 @@ export class CitationManagerView extends ItemView {
           setIcon(unlinkBtn, "unlink");
           unlinkBtn.addEventListener("click", async () => {
             project.registeredFiles = project.registeredFiles.filter(p => p !== activeFile.path);
+            this.updateActiveDocBanner();
             await this.projectIndexer.removeProjectFromFrontmatter(activeFile, project.name);
             await this.onSaveSettings();
             new Notice(`Unlinked "${activeFile.basename}" from ${project.name}`);
-            await this.refreshData();
+            this.refreshDataDebounced(50);
           });
         } else {
           const linkBtn = leftGroup.createEl("button", { cls: "status-link-btn-pill", text: `+ Link to ${project.name}` });
@@ -927,10 +937,11 @@ export class CitationManagerView extends ItemView {
             if (!project.registeredFiles.includes(activeFile.path)) {
               project.registeredFiles.push(activeFile.path);
             }
+            this.updateActiveDocBanner();
             await this.projectIndexer.addProjectToFrontmatter(activeFile, project.name);
             await this.onSaveSettings();
             new Notice(`Linked "${activeFile.basename}" to ${project.name}`);
-            await this.refreshData();
+            this.refreshDataDebounced(50);
           });
         }
       } else {
