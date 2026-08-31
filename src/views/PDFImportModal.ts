@@ -210,33 +210,46 @@ export class PDFImportModal extends Modal {
           text.inputEl.addClass("setting-full-width-input");
         });
 
-      // Authors Chips
-      const authorSetting = new Setting(coreCard)
-        .setName("Authors")
-        .setDesc("Type author name and press Enter or comma");
-
-      const authorContainer = authorSetting.controlEl.createDiv({ cls: "author-chips-input-container" });
+      // Authors (Header on top, full-width chip box on new line)
+      const authorSection = coreCard.createDiv({ cls: "form-stacked-group" });
+      const authorHeader = authorSection.createDiv({ cls: "stacked-label-with-desc" });
+      authorHeader.createEl("label", { cls: "stacked-label", text: "Authors" });
+      authorHeader.createSpan({ cls: "stacked-desc", text: "(Type name and press Enter or comma)" });
+      
+      const authorContainer = authorSection.createDiv({ cls: "author-chips-input-container" });
       this.renderAuthorChips(authorContainer);
 
-      // Year & Type
-      new Setting(coreCard)
-        .setName("Metadata")
-        .addText(text => text
-          .setPlaceholder("Year")
-          .setValue(String(this.ref.year || ""))
-          .onChange(val => {
-            this.ref.year = val;
-            this.updatePreviews();
-          }))
-        .addDropdown(drop => {
-          const types = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
-          types.forEach(t => drop.addOption(t, t.toUpperCase()));
-          drop.setValue(this.ref.type);
-          drop.onChange(val => {
-            this.ref.type = val as any;
-            this.updatePreviews();
-          });
-        });
+      // 3. Year, Type, Citekey in a spacious 3-column stacked grid
+      const metaGrid = coreCard.createDiv({ cls: "form-grid-3" });
+
+      const yearCol = metaGrid.createDiv({ cls: "form-grid-col" });
+      yearCol.createEl("label", { cls: "stacked-label", text: "Year" });
+      const yearInput = yearCol.createEl("input", { type: "text", cls: "grid-input", placeholder: "e.g. 2026", value: String(this.ref.year || "") });
+      yearInput.addEventListener("input", () => {
+        this.ref.year = yearInput.value;
+        this.updatePreviews();
+      });
+
+      const typeCol = metaGrid.createDiv({ cls: "form-grid-col" });
+      typeCol.createEl("label", { cls: "stacked-label", text: "Type" });
+      const typeSelect = typeCol.createEl("select", { cls: "dropdown grid-input" });
+      const types = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
+      types.forEach(t => {
+        const opt = typeSelect.createEl("option", { value: t, text: t.toUpperCase() });
+        if (t === this.ref.type) opt.selected = true;
+      });
+      typeSelect.addEventListener("change", () => {
+        this.ref.type = typeSelect.value as any;
+        this.updatePreviews();
+      });
+
+      const keyCol = metaGrid.createDiv({ cls: "form-grid-col" });
+      keyCol.createEl("label", { cls: "stacked-label", text: "Citekey" });
+      const keyInput = keyCol.createEl("input", { type: "text", cls: "grid-input", placeholder: "Auto-generated", value: this.ref.citekey });
+      keyInput.addEventListener("input", () => {
+        this.ref.citekey = keyInput.value.replace(/[^a-zA-Z0-9_-]/g, "");
+        this.updatePreviews();
+      });
 
       // --- ACCORDION 1: PUBLICATION & VENUE ---
       this.createExclusiveAccordion(
@@ -244,22 +257,30 @@ export class PDFImportModal extends Modal {
         "pub",
         "Publication & Venue",
         (body) => {
-          new Setting(body)
-            .setName("Journal / Conference")
-            .addText(text => {
-              text.setValue(this.ref.publication || "")
-                .onChange(val => {
-                  this.ref.publication = val;
-                  this.updatePreviews();
-                });
-              text.inputEl.addClass("setting-full-width-input");
-            });
+          const pubGroup = body.createDiv({ cls: "form-stacked-group" });
+          pubGroup.createEl("label", { cls: "stacked-label", text: "Journal / Conference / Publication" });
+          const pubInput = pubGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "Publication venue", value: this.ref.publication || "" });
+          pubInput.addEventListener("input", () => {
+            this.ref.publication = pubInput.value;
+            this.updatePreviews();
+          });
 
-          new Setting(body)
-            .setName("Vol / Issue / Pages")
-            .addText(t => t.setPlaceholder("Vol").setValue(this.ref.volume || "").onChange(v => { this.ref.volume = v; this.updatePreviews(); }))
-            .addText(t => t.setPlaceholder("Issue").setValue(this.ref.issue || "").onChange(v => { this.ref.issue = v; this.updatePreviews(); }))
-            .addText(t => t.setPlaceholder("Pages").setValue(this.ref.pages || "").onChange(v => { this.ref.pages = v; this.updatePreviews(); }));
+          const volGrid = body.createDiv({ cls: "form-grid-3" });
+          
+          const volItem = volGrid.createDiv({ cls: "form-grid-col" });
+          volItem.createEl("label", { cls: "stacked-label", text: "Volume" });
+          const volIn = volItem.createEl("input", { type: "text", cls: "grid-input", placeholder: "Vol", value: this.ref.volume || "" });
+          volIn.addEventListener("input", () => { this.ref.volume = volIn.value; this.updatePreviews(); });
+
+          const issItem = volGrid.createDiv({ cls: "form-grid-col" });
+          issItem.createEl("label", { cls: "stacked-label", text: "Issue" });
+          const issIn = issItem.createEl("input", { type: "text", cls: "grid-input", placeholder: "Issue", value: this.ref.issue || "" });
+          issIn.addEventListener("input", () => { this.ref.issue = issIn.value; this.updatePreviews(); });
+
+          const pageItem = volGrid.createDiv({ cls: "form-grid-col" });
+          pageItem.createEl("label", { cls: "stacked-label", text: "Pages" });
+          const pageIn = pageItem.createEl("input", { type: "text", cls: "grid-input", placeholder: "Pages", value: this.ref.pages || "" });
+          pageIn.addEventListener("input", () => { this.ref.pages = pageIn.value; this.updatePreviews(); });
         }
       );
 
@@ -269,23 +290,23 @@ export class PDFImportModal extends Modal {
         "ids",
         "Identifiers, DOI & URL",
         (body) => {
-          new Setting(body)
-            .setName("DOI")
-            .addText(text => text
-              .setValue(this.ref.doi || "")
-              .onChange(val => {
-                this.ref.doi = val;
-                this.updatePreviews();
-              }));
+          const idGrid = body.createDiv({ cls: "form-grid-2" });
 
-          new Setting(body)
-            .setName("URL")
-            .addText(text => text
-              .setValue(this.ref.url || "")
-              .onChange(val => {
-                this.ref.url = val;
-                this.updatePreviews();
-              }));
+          const doiGroup = idGrid.createDiv({ cls: "form-grid-col" });
+          doiGroup.createEl("label", { cls: "stacked-label", text: "DOI" });
+          const doiInput = doiGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "10.xxxx/yyyy", value: this.ref.doi || "" });
+          doiInput.addEventListener("input", () => {
+            this.ref.doi = doiInput.value;
+            this.updatePreviews();
+          });
+
+          const urlGroup = idGrid.createDiv({ cls: "form-grid-col" });
+          urlGroup.createEl("label", { cls: "stacked-label", text: "URL" });
+          const urlInput = urlGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "https://...", value: this.ref.url || "" });
+          urlInput.addEventListener("input", () => {
+            this.ref.url = urlInput.value;
+            this.updatePreviews();
+          });
         }
       );
 
@@ -295,13 +316,10 @@ export class PDFImportModal extends Modal {
         "abstract",
         "Abstract & Notes",
         (body) => {
-          new Setting(body)
-            .addTextArea(text => {
-              text.setValue(this.ref.abstract || "")
-                .onChange(val => { this.ref.abstract = val; });
-              text.inputEl.rows = 3;
-              text.inputEl.addClass("setting-full-width-input");
-            });
+          const absGroup = body.createDiv({ cls: "form-stacked-group" });
+          const absArea = absGroup.createEl("textarea", { cls: "stacked-textarea", rows: 4, placeholder: "Paste document abstract or notes..." });
+          absArea.value = this.ref.abstract || "";
+          absArea.addEventListener("input", () => { this.ref.abstract = absArea.value; });
         }
       );
 
@@ -340,14 +358,15 @@ export class PDFImportModal extends Modal {
           if (this.ref.authors.length === 0) {
             this.ref.authors = ["Unknown Author"];
           }
-          const citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
-          this.ref.citekey = citekey;
+          if (!this.ref.citekey.trim()) {
+            this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
+          }
 
-          const pdfPath = await this.storageManager.savePDFAttachment(citekey, buffer);
+          const pdfPath = await this.storageManager.savePDFAttachment(this.ref.citekey, buffer);
           this.ref.pdfAttachment = pdfPath;
 
           await this.storageManager.saveReference(this.ref);
-          new Notice(`Created citation with PDF: [${citekey}]`);
+          new Notice(`Created citation with PDF: [${this.ref.citekey}]`);
         }
 
         await this.onComplete();
