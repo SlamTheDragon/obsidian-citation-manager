@@ -10,6 +10,8 @@ export class ReferenceEditorModal extends Modal {
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
 
+  private authorsList: string[] = [];
+
   constructor(app: App, ref: Partial<ReferenceMetadata>, onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>, isNew: boolean = false) {
     super(app);
     this.originalCitekey = ref.citekey || "";
@@ -17,7 +19,7 @@ export class ReferenceEditorModal extends Modal {
       citekey: ref.citekey || "",
       type: ref.type || "journal",
       title: ref.title || "",
-      authors: ref.authors || [""],
+      authors: ref.authors || [],
       year: ref.year || new Date().getFullYear(),
       month: ref.month || "",
       publication: ref.publication || "",
@@ -41,6 +43,10 @@ export class ReferenceEditorModal extends Modal {
       dateAdded: ref.dateAdded || new Date().toISOString(),
       dateModified: new Date().toISOString(),
     };
+    this.authorsList = (this.ref.authors || []).filter(a => a && a.trim().length > 0);
+    if (this.authorsList.length === 0 && ref.authors && ref.authors.length > 0) {
+      this.authorsList = [...ref.authors];
+    }
     this.onSave = onSave;
     this.isNew = isNew;
   }
@@ -52,18 +58,18 @@ export class ReferenceEditorModal extends Modal {
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-editor-modal");
+    contentEl.addClass("citation-editor-modal-container");
 
-    // Modal Header
+    // 1. Header Row
     const headerRow = contentEl.createDiv({ cls: "citation-modal-header-row" });
     const iconSpan = headerRow.createSpan({ cls: "modal-header-icon" });
     setIcon(iconSpan, this.isNew ? "plus-circle" : "edit-3");
     headerRow.createEl("h2", { text: this.isNew ? "New Citation" : `Edit Citation: ${this.ref.citekey}` });
 
-    // Scrollable Form Body
-    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-body" });
+    // 2. Scrollable Body Container (Flex: 1 to ensure footer is always visible)
+    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-area" });
 
-    // Quick Auto-Fetch Box
+    // Quick Auto-Fetch Bar
     const fetchBox = scrollBody.createDiv({ cls: "citation-quick-fetch-card" });
     fetchBox.createEl("div", { cls: "fetch-title", text: "Auto-Fetch Metadata" });
     fetchBox.createEl("div", { cls: "fetch-subtitle", text: "Paste DOI, arXiv ID, ISBN, URL, or BibTeX snippet to fill fields automatically" });
@@ -87,6 +93,7 @@ export class ReferenceEditorModal extends Modal {
       try {
         const fetched = await MetadataResolvers.detectAndResolve(val);
         this.ref = { ...this.ref, ...fetched } as ReferenceMetadata;
+        this.authorsList = (this.ref.authors || []).filter(a => a && a.trim().length > 0);
         new Notice("Metadata successfully fetched!");
         this.renderModal();
       } catch (e: any) {
@@ -107,46 +114,53 @@ export class ReferenceEditorModal extends Modal {
     // Form Container
     const formContainer = scrollBody.createDiv({ cls: "citation-form-vertical" });
 
-    // --- SECTION 1: CORE METADATA ---
+    // --- CORE INFORMATION CARD ---
     const coreCard = formContainer.createDiv({ cls: "citation-form-card" });
     coreCard.createEl("div", { cls: "form-section-title", text: "Core Information" });
 
-    // Title (Stacked full-width)
+    // Title Field (Compact text input)
     const titleGroup = coreCard.createDiv({ cls: "form-stacked-group" });
     titleGroup.createEl("label", { cls: "stacked-label", text: "Title" });
-    const titleArea = titleGroup.createEl("textarea", { cls: "stacked-textarea", rows: 2 });
-    titleArea.value = this.ref.title;
-    titleArea.addEventListener("input", () => {
-      this.ref.title = titleArea.value;
+    const titleInput = titleGroup.createEl("input", {
+      type: "text",
+      cls: "grid-input",
+      placeholder: "e.g. SwEYEpinch and Beyond...",
+      value: this.ref.title
+    });
+    titleInput.addEventListener("input", () => {
+      this.ref.title = titleInput.value;
       this.updatePreviews(previewEl);
     });
 
-    // Authors (Stacked full-width)
+    // Authors Interactive Chip Field
     const authorGroup = coreCard.createDiv({ cls: "form-stacked-group" });
     const authorLabelRow = authorGroup.createDiv({ cls: "label-with-desc" });
     authorLabelRow.createEl("label", { cls: "stacked-label", text: "Authors" });
-    authorLabelRow.createSpan({ cls: "label-desc", text: "(One per line or comma-separated)" });
-    const authorArea = authorGroup.createEl("textarea", { cls: "stacked-textarea", rows: 2 });
-    authorArea.value = this.ref.authors.join("\n");
-    authorArea.addEventListener("input", () => {
-      this.ref.authors = authorArea.value.split(/[\r\n]+/).map(a => a.trim()).filter(a => a.length > 0);
-      this.updatePreviews(previewEl);
-    });
+    authorLabelRow.createSpan({ cls: "label-desc", text: "(Press Enter or comma to add author chip)" });
 
-    // Year, Type, Citekey in a clean grid
+    const authorChipsContainer = authorGroup.createDiv({ cls: "author-chips-box" });
+    this.renderAuthorChips(authorChipsContainer, previewEl);
+
+    // Year, Type, Citekey in 3-column Grid
     const metaGrid = coreCard.createDiv({ cls: "form-grid-3" });
 
+    // Year
     const yearGroup = metaGrid.createDiv({ cls: "form-grid-item" });
     yearGroup.createEl("label", { cls: "stacked-label", text: "Year" });
-    const yearInput = yearGroup.createEl("input", { type: "text", cls: "grid-input", value: String(this.ref.year || "") });
+    const yearInput = yearGroup.createEl("input", { 
+      type: "text", 
+      cls: "grid-input", 
+      value: String(this.ref.year || "") 
+    });
     yearInput.addEventListener("input", () => {
       this.ref.year = yearInput.value;
       this.updatePreviews(previewEl);
     });
 
+    // Type
     const typeGroup = metaGrid.createDiv({ cls: "form-grid-item" });
     typeGroup.createEl("label", { cls: "stacked-label", text: "Type" });
-    const typeSelect = typeGroup.createEl("select", { cls: "dropdown grid-input" });
+    const typeSelect = typeGroup.createEl("select", { cls: "dropdown grid-input-select" });
     const types: ReferenceType[] = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
     types.forEach(t => {
       const opt = typeSelect.createEl("option", { value: t, text: t.toUpperCase() });
@@ -157,9 +171,14 @@ export class ReferenceEditorModal extends Modal {
       this.updatePreviews(previewEl);
     });
 
+    // Citekey
     const keyGroup = metaGrid.createDiv({ cls: "form-grid-item" });
     keyGroup.createEl("label", { cls: "stacked-label", text: "Citekey" });
-    const keyInput = keyGroup.createEl("input", { type: "text", cls: "grid-input", value: this.ref.citekey });
+    const keyInput = keyGroup.createEl("input", { 
+      type: "text", 
+      cls: "grid-input", 
+      value: this.ref.citekey 
+    });
     keyInput.addEventListener("input", () => {
       this.ref.citekey = keyInput.value.replace(/[^a-zA-Z0-9_-]/g, "");
       this.updatePreviews(previewEl);
@@ -169,6 +188,7 @@ export class ReferenceEditorModal extends Modal {
     this.createAccordion(
       formContainer,
       "Publication & Venue",
+      false,
       (body) => {
         const pubGroup = body.createDiv({ cls: "form-stacked-group" });
         pubGroup.createEl("label", { cls: "stacked-label", text: "Journal / Conference / Publication" });
@@ -206,6 +226,7 @@ export class ReferenceEditorModal extends Modal {
     this.createAccordion(
       formContainer,
       "Identifiers, DOI & URL",
+      false,
       (body) => {
         const idGrid = body.createDiv({ cls: "form-grid-2" });
 
@@ -242,9 +263,10 @@ export class ReferenceEditorModal extends Modal {
     this.createAccordion(
       formContainer,
       "Abstract & Literature Summary",
+      false,
       (body) => {
         const absGroup = body.createDiv({ cls: "form-stacked-group" });
-        const absArea = absGroup.createEl("textarea", { cls: "stacked-textarea", rows: 4, placeholder: "Paste document abstract or personal study notes..." });
+        const absArea = absGroup.createEl("textarea", { cls: "stacked-textarea", rows: 3, placeholder: "Paste document abstract or personal study notes..." });
         absArea.value = this.ref.abstract || "";
         absArea.addEventListener("input", () => { this.ref.abstract = absArea.value; });
       }
@@ -255,7 +277,7 @@ export class ReferenceEditorModal extends Modal {
     const previewEl = scrollBody.createDiv({ cls: "citation-modal-preview-box" });
     this.updatePreviews(previewEl);
 
-    // Modal Footer Button Bar (Fixed at bottom)
+    // 3. Fixed Footer Button Bar
     const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
     
     const cancelBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Cancel" });
@@ -266,6 +288,7 @@ export class ReferenceEditorModal extends Modal {
       text: this.isNew ? "Create Citation" : "Save Citation" 
     });
     saveBtn.addEventListener("click", async () => {
+      this.ref.authors = this.authorsList;
       if (!this.ref.title.trim()) {
         new Notice("Title is required.");
         return;
@@ -288,13 +311,71 @@ export class ReferenceEditorModal extends Modal {
     });
   }
 
-  private createAccordion(parent: HTMLElement, title: string, renderBody: (bodyEl: HTMLElement) => void) {
-    const card = parent.createDiv({ cls: "citation-accordion-card" });
+  private renderAuthorChips(container: HTMLElement, previewEl: HTMLElement) {
+    container.empty();
+
+    // Render each author as an interactive chip
+    this.authorsList.forEach((author, index) => {
+      const chip = container.createSpan({ cls: "author-chip" });
+      chip.createSpan({ cls: "chip-text", text: author });
+      const removeBtn = chip.createSpan({ cls: "chip-remove-btn", text: "×" });
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.authorsList.splice(index, 1);
+        this.ref.authors = this.authorsList;
+        this.renderAuthorChips(container, previewEl);
+        this.updatePreviews(previewEl);
+      });
+    });
+
+    // Inline input inside chips container
+    const input = container.createEl("input", {
+      type: "text",
+      placeholder: this.authorsList.length === 0 ? "Type author name (e.g. Smith, John) and press Enter..." : "Add author...",
+      cls: "author-chip-input"
+    });
+
+    const addCurrentValue = () => {
+      const val = input.value.trim().replace(/^,+|,+$/g, "");
+      if (val) {
+        this.authorsList.push(val);
+        this.ref.authors = this.authorsList;
+        input.value = "";
+        this.renderAuthorChips(container, previewEl);
+        this.updatePreviews(previewEl);
+      }
+    };
+
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === ",") {
+        e.preventDefault();
+        addCurrentValue();
+      } else if (e.key === "Backspace" && !input.value && this.authorsList.length > 0) {
+        this.authorsList.pop();
+        this.ref.authors = this.authorsList;
+        this.renderAuthorChips(container, previewEl);
+        this.updatePreviews(previewEl);
+      }
+    });
+
+    input.addEventListener("blur", () => {
+      if (input.value.trim()) {
+        addCurrentValue();
+      }
+    });
+
+    container.addEventListener("click", () => {
+      input.focus();
+    });
+  }
+
+  private createAccordion(parent: HTMLElement, title: string, startOpen: boolean, renderBody: (bodyEl: HTMLElement) => void) {
+    const card = parent.createDiv({ cls: `citation-accordion-card ${startOpen ? 'open' : ''}` });
 
     const header = card.createDiv({ cls: "accordion-header-row" });
     header.createEl("span", { cls: "accordion-title-text", text: title });
     const toggleIcon = header.createSpan({ cls: "accordion-icon-wrap" });
-    setIcon(toggleIcon, "chevron-down");
+    setIcon(toggleIcon, startOpen ? "chevron-up" : "chevron-down");
 
     const body = card.createDiv({ cls: "accordion-body-collapse" });
     renderBody(body);
@@ -313,6 +394,7 @@ export class ReferenceEditorModal extends Modal {
 
   private updatePreviews(container: HTMLElement) {
     container.empty();
+    this.ref.authors = this.authorsList;
     
     const apaPill = container.createDiv({ cls: "preview-row" });
     apaPill.createEl("code", { cls: "preview-label", text: "APA 7:" });
