@@ -11,11 +11,11 @@ export class ProjectIndexer {
   }
 
   /**
-   * Fast DOI extraction from raw PDF buffer
+   * Fast DOI & identifier extraction from raw PDF buffer (scans up to 2MB)
    */
   static extractDOIFromBuffer(buffer: ArrayBuffer): string | null {
     try {
-      const sliceSize = Math.min(buffer.byteLength, 524288); // Scan up to 512KB
+      const sliceSize = Math.min(buffer.byteLength, 2097152); // Scan up to 2MB
       const bytes = new Uint8Array(buffer.slice(0, sliceSize));
       let text = "";
       for (let i = 0; i < bytes.length; i++) {
@@ -26,13 +26,13 @@ export class ProjectIndexer {
       }
 
       // 1. Prism / XMP / XML DOI tags
-      const xmpMatch = text.match(/<[^>]*doi[^>]*>\s*(10\.\d{4,9}\/[^<>\s]+)\s*<\/[^>]*>/i);
+      const xmpMatch = text.match(/<(?:prism:doi|dc:identifier|pdfx:doi|crossref:doi)[^>]*>\s*(?:doi:)?\s*(10\.\d{4,9}\/[^<>\s]+)\s*<\//i);
       if (xmpMatch) {
         return xmpMatch[1].trim().replace(/[,;.)>\]]+$/, "");
       }
 
-      // 2. URL or standard prefix DOI
-      const prefixMatch = text.match(/(?:doi(?:\.org\/|\/|:|\s+)|https?:\/\/(?:dx\.)?doi\.org\/)(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
+      // 2. Standard DOI URL or prefix
+      const prefixMatch = text.match(/(?:(?:https?:\/\/)?(?:dx\.)?doi\.org\/|doi\s*[:\/=]\s*|\/DOI\s*\(\s*)(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
       if (prefixMatch) {
         return prefixMatch[1].trim().replace(/[,;.)>\]]+$/, "");
       }
@@ -45,6 +45,12 @@ export class ProjectIndexer {
           Logger.debug(`Extracted DOI from PDF binary: ${clean}`);
           return clean;
         }
+      }
+
+      // 4. arXiv ID fallback
+      const arxivMatch = text.match(/arxiv\s*[:\/]\s*(\d{4}\.\d{4,5}(?:v\d+)?)/i);
+      if (arxivMatch) {
+        return arxivMatch[1].trim();
       }
     } catch (e) {
       Logger.warn("Failed extracting DOI from PDF buffer:", e);

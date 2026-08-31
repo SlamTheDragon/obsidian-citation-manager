@@ -10,11 +10,6 @@ export class ReferenceEditorModal extends Modal {
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
 
-  // Accordion section states
-  private isPubOpen: boolean = false;
-  private isIdsOpen: boolean = false;
-  private isAbstractOpen: boolean = false;
-
   constructor(app: App, ref: Partial<ReferenceMetadata>, onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>, isNew: boolean = false) {
     super(app);
     this.originalCitekey = ref.citekey || "";
@@ -59,236 +54,261 @@ export class ReferenceEditorModal extends Modal {
     contentEl.empty();
     contentEl.addClass("citation-editor-modal");
 
+    // Modal Header
     const headerRow = contentEl.createDiv({ cls: "citation-modal-header-row" });
     const iconSpan = headerRow.createSpan({ cls: "modal-header-icon" });
     setIcon(iconSpan, this.isNew ? "plus-circle" : "edit-3");
     headerRow.createEl("h2", { text: this.isNew ? "New Citation" : `Edit Citation: ${this.ref.citekey}` });
 
-    // Quick Auto-Fetch Bar
-    const fetchDiv = contentEl.createDiv({ cls: "citation-quick-fetch-box" });
-    let fetchInput = "";
-    new Setting(fetchDiv)
-      .setName("Auto-Fetch Metadata")
-      .setDesc("Paste DOI, arXiv ID, ISBN, URL, or BibTeX snippet")
-      .addText(text => {
-        text.setPlaceholder("e.g. 10.1145/3313831.3376722")
-          .onChange(val => { fetchInput = val; });
-        text.inputEl.style.width = "220px";
-      })
-      .addButton(btn => {
-        btn.setButtonText("Fetch & Fill")
-          .setCta()
-          .onClick(async () => {
-            if (!fetchInput.trim()) {
-              new Notice("Please enter a DOI, URL, or identifier first.");
-              return;
-            }
-            btn.setDisabled(true);
-            btn.setButtonText("Fetching...");
-            try {
-              const fetched = await MetadataResolvers.detectAndResolve(fetchInput.trim());
-              this.ref = { ...this.ref, ...fetched } as ReferenceMetadata;
-              new Notice("Metadata successfully fetched!");
-              this.renderModal();
-            } catch (e: any) {
-              new Notice(`Fetch failed: ${e.message}`);
-              btn.setDisabled(false);
-              btn.setButtonText("Fetch & Fill");
-            }
-          });
-      });
+    // Scrollable Form Body
+    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-body" });
+
+    // Quick Auto-Fetch Box
+    const fetchBox = scrollBody.createDiv({ cls: "citation-quick-fetch-card" });
+    fetchBox.createEl("div", { cls: "fetch-title", text: "Auto-Fetch Metadata" });
+    fetchBox.createEl("div", { cls: "fetch-subtitle", text: "Paste DOI, arXiv ID, ISBN, URL, or BibTeX snippet to fill fields automatically" });
+
+    const fetchInputRow = fetchBox.createDiv({ cls: "fetch-input-row" });
+    const fetchInput = fetchInputRow.createEl("input", {
+      type: "text",
+      placeholder: "e.g. 10.1145/3313831.3376722 or https://...",
+      cls: "fetch-text-input"
+    });
+    const fetchBtn = fetchInputRow.createEl("button", { cls: "citation-small-btn", text: "Fetch & Fill" });
+
+    const doFetch = async () => {
+      const val = fetchInput.value.trim();
+      if (!val) {
+        new Notice("Please enter a DOI, URL, or identifier first.");
+        return;
+      }
+      fetchBtn.disabled = true;
+      fetchBtn.setText("Fetching...");
+      try {
+        const fetched = await MetadataResolvers.detectAndResolve(val);
+        this.ref = { ...this.ref, ...fetched } as ReferenceMetadata;
+        new Notice("Metadata successfully fetched!");
+        this.renderModal();
+      } catch (e: any) {
+        new Notice(`Fetch failed: ${e.message}`);
+        fetchBtn.disabled = false;
+        fetchBtn.setText("Fetch & Fill");
+      }
+    };
+
+    fetchBtn.addEventListener("click", doFetch);
+    fetchInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        doFetch();
+      }
+    });
 
     // Form Container
-    const formContainer = contentEl.createDiv({ cls: "citation-form-container" });
+    const formContainer = scrollBody.createDiv({ cls: "citation-form-vertical" });
 
-    // --- SECTION 1: CORE METADATA (Always visible) ---
-    const coreSection = formContainer.createDiv({ cls: "citation-accordion-section active" });
-    coreSection.createEl("h4", { cls: "accordion-title", text: "Core Information" });
+    // --- SECTION 1: CORE METADATA ---
+    const coreCard = formContainer.createDiv({ cls: "citation-form-card" });
+    coreCard.createEl("div", { cls: "form-section-title", text: "Core Information" });
 
-    // Title
-    new Setting(coreSection)
-      .setName("Title")
-      .addTextArea(text => {
-        text.setValue(this.ref.title)
-          .onChange(val => {
-            this.ref.title = val;
-            this.updatePreviews(previewEl);
-          });
-        text.inputEl.rows = 2;
-        text.inputEl.style.width = "100%";
-      });
-
-    // Authors
-    new Setting(coreSection)
-      .setName("Authors")
-      .setDesc("One author per line or comma-separated (e.g. Smith, J.)")
-      .addTextArea(text => {
-        text.setValue(this.ref.authors.join("\n"))
-          .onChange(val => {
-            this.ref.authors = val.split(/[\r\n]+/).map(a => a.trim()).filter(a => a.length > 0);
-            this.updatePreviews(previewEl);
-          });
-        text.inputEl.rows = 2;
-        text.inputEl.style.width = "100%";
-      });
-
-    // Year & Month & Type
-    const metaRow = new Setting(coreSection)
-      .setName("Year & Type")
-      .addText(text => text
-        .setPlaceholder("Year (e.g. 2024)")
-        .setValue(String(this.ref.year || ""))
-        .onChange(val => {
-          this.ref.year = val;
-          this.updatePreviews(previewEl);
-        }))
-      .addDropdown(drop => {
-        const types: ReferenceType[] = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
-        types.forEach(t => drop.addOption(t, t.toUpperCase()));
-        drop.setValue(this.ref.type);
-        drop.onChange(val => {
-          this.ref.type = val as ReferenceType;
-          this.updatePreviews(previewEl);
-        });
-      });
-
-    // Citekey
-    new Setting(coreSection)
-      .setName("Citekey")
-      .setDesc("Unique identifier (e.g. Baltar2012)")
-      .addText(text => text
-        .setValue(this.ref.citekey)
-        .onChange(val => {
-          this.ref.citekey = val.replace(/[^a-zA-Z0-9_-]/g, "");
-          this.updatePreviews(previewEl);
-        }));
-
-    // --- SECTION 2: PUBLICATION DETAILS (Collapsible) ---
-    const pubSection = formContainer.createDiv({ cls: `citation-accordion-section ${this.isPubOpen ? 'active' : ''}` });
-    const pubHeader = pubSection.createDiv({ cls: "accordion-header-row" });
-    pubHeader.createEl("h4", { cls: "accordion-title", text: "Publication & Venue" });
-    const pubToggle = pubHeader.createSpan({ cls: "accordion-toggle-icon" });
-    setIcon(pubToggle, this.isPubOpen ? "chevron-up" : "chevron-down");
-    pubHeader.addEventListener("click", () => {
-      this.isPubOpen = !this.isPubOpen;
-      this.renderModal();
+    // Title (Stacked full-width)
+    const titleGroup = coreCard.createDiv({ cls: "form-stacked-group" });
+    titleGroup.createEl("label", { cls: "stacked-label", text: "Title" });
+    const titleArea = titleGroup.createEl("textarea", { cls: "stacked-textarea", rows: 2 });
+    titleArea.value = this.ref.title;
+    titleArea.addEventListener("input", () => {
+      this.ref.title = titleArea.value;
+      this.updatePreviews(previewEl);
     });
 
-    if (this.isPubOpen) {
-      new Setting(pubSection)
-        .setName("Journal / Conference / Publication")
-        .addText(text => {
-          text.setValue(this.ref.publication || "")
-            .onChange(val => {
-              this.ref.publication = val;
-              this.updatePreviews(previewEl);
-            });
-          text.inputEl.style.width = "100%";
-        });
-
-      new Setting(pubSection)
-        .setName("Vol / Issue / Pages")
-        .addText(t => t.setPlaceholder("Vol").setValue(this.ref.volume || "").onChange(v => { this.ref.volume = v; this.updatePreviews(previewEl); }))
-        .addText(t => t.setPlaceholder("Issue").setValue(this.ref.issue || "").onChange(v => { this.ref.issue = v; this.updatePreviews(previewEl); }))
-        .addText(t => t.setPlaceholder("Pages").setValue(this.ref.pages || "").onChange(v => { this.ref.pages = v; this.updatePreviews(previewEl); }));
-
-      new Setting(pubSection)
-        .setName("Publisher")
-        .addText(text => text
-          .setValue(this.ref.publisher || "")
-          .onChange(val => { this.ref.publisher = val; }));
-    }
-
-    // --- SECTION 3: IDENTIFIERS & LINKS (Collapsible) ---
-    const idsSection = formContainer.createDiv({ cls: `citation-accordion-section ${this.isIdsOpen ? 'active' : ''}` });
-    const idsHeader = idsSection.createDiv({ cls: "accordion-header-row" });
-    idsHeader.createEl("h4", { cls: "accordion-title", text: "Identifiers, DOI & URL" });
-    const idsToggle = idsHeader.createSpan({ cls: "accordion-toggle-icon" });
-    setIcon(idsToggle, this.isIdsOpen ? "chevron-up" : "chevron-down");
-    idsHeader.addEventListener("click", () => {
-      this.isIdsOpen = !this.isIdsOpen;
-      this.renderModal();
+    // Authors (Stacked full-width)
+    const authorGroup = coreCard.createDiv({ cls: "form-stacked-group" });
+    const authorLabelRow = authorGroup.createDiv({ cls: "label-with-desc" });
+    authorLabelRow.createEl("label", { cls: "stacked-label", text: "Authors" });
+    authorLabelRow.createSpan({ cls: "label-desc", text: "(One per line or comma-separated)" });
+    const authorArea = authorGroup.createEl("textarea", { cls: "stacked-textarea", rows: 2 });
+    authorArea.value = this.ref.authors.join("\n");
+    authorArea.addEventListener("input", () => {
+      this.ref.authors = authorArea.value.split(/[\r\n]+/).map(a => a.trim()).filter(a => a.length > 0);
+      this.updatePreviews(previewEl);
     });
 
-    if (this.isIdsOpen) {
-      new Setting(idsSection)
-        .setName("DOI")
-        .addText(text => text
-          .setPlaceholder("10.xxxx/yyyy")
-          .setValue(this.ref.doi || "")
-          .onChange(val => {
-            this.ref.doi = val;
-            this.updatePreviews(previewEl);
-          }));
+    // Year, Type, Citekey in a clean grid
+    const metaGrid = coreCard.createDiv({ cls: "form-grid-3" });
 
-      new Setting(idsSection)
-        .setName("URL")
-        .addText(text => text
-          .setPlaceholder("https://...")
-          .setValue(this.ref.url || "")
-          .onChange(val => {
-            this.ref.url = val;
-            this.updatePreviews(previewEl);
-          }));
-
-      new Setting(idsSection)
-        .setName("ISBN / ISSN")
-        .addText(t => t.setPlaceholder("ISBN").setValue(this.ref.isbn || "").onChange(v => { this.ref.isbn = v; }))
-        .addText(t => t.setPlaceholder("ISSN").setValue(this.ref.issn || "").onChange(v => { this.ref.issn = v; }));
-    }
-
-    // --- SECTION 4: ABSTRACT & NOTES (Collapsible) ---
-    const absSection = formContainer.createDiv({ cls: `citation-accordion-section ${this.isAbstractOpen ? 'active' : ''}` });
-    const absHeader = absSection.createDiv({ cls: "accordion-header-row" });
-    absHeader.createEl("h4", { cls: "accordion-title", text: "Abstract & Literature Summary" });
-    const absToggle = absHeader.createSpan({ cls: "accordion-toggle-icon" });
-    setIcon(absToggle, this.isAbstractOpen ? "chevron-up" : "chevron-down");
-    absHeader.addEventListener("click", () => {
-      this.isAbstractOpen = !this.isAbstractOpen;
-      this.renderModal();
+    const yearGroup = metaGrid.createDiv({ cls: "form-grid-item" });
+    yearGroup.createEl("label", { cls: "stacked-label", text: "Year" });
+    const yearInput = yearGroup.createEl("input", { type: "text", cls: "grid-input", value: String(this.ref.year || "") });
+    yearInput.addEventListener("input", () => {
+      this.ref.year = yearInput.value;
+      this.updatePreviews(previewEl);
     });
 
-    if (this.isAbstractOpen) {
-      new Setting(absSection)
-        .addTextArea(text => {
-          text.setValue(this.ref.abstract || "")
-            .onChange(val => { this.ref.abstract = val; });
-          text.inputEl.rows = 4;
-          text.inputEl.style.width = "100%";
-        });
-    }
+    const typeGroup = metaGrid.createDiv({ cls: "form-grid-item" });
+    typeGroup.createEl("label", { cls: "stacked-label", text: "Type" });
+    const typeSelect = typeGroup.createEl("select", { cls: "dropdown grid-input" });
+    const types: ReferenceType[] = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
+    types.forEach(t => {
+      const opt = typeSelect.createEl("option", { value: t, text: t.toUpperCase() });
+      if (t === this.ref.type) opt.selected = true;
+    });
+    typeSelect.addEventListener("change", () => {
+      this.ref.type = typeSelect.value as ReferenceType;
+      this.updatePreviews(previewEl);
+    });
 
-    // Live Monospaced Formatted Preview Box
-    contentEl.createEl("h4", { text: "Live Output Preview" });
-    const previewEl = contentEl.createDiv({ cls: "citation-modal-preview-box" });
+    const keyGroup = metaGrid.createDiv({ cls: "form-grid-item" });
+    keyGroup.createEl("label", { cls: "stacked-label", text: "Citekey" });
+    const keyInput = keyGroup.createEl("input", { type: "text", cls: "grid-input", value: this.ref.citekey });
+    keyInput.addEventListener("input", () => {
+      this.ref.citekey = keyInput.value.replace(/[^a-zA-Z0-9_-]/g, "");
+      this.updatePreviews(previewEl);
+    });
+
+    // --- ACCORDION 1: PUBLICATION & VENUE ---
+    this.createAccordion(
+      formContainer,
+      "Publication & Venue",
+      (body) => {
+        const pubGroup = body.createDiv({ cls: "form-stacked-group" });
+        pubGroup.createEl("label", { cls: "stacked-label", text: "Journal / Conference / Publication" });
+        const pubInput = pubGroup.createEl("input", { type: "text", cls: "grid-input", value: this.ref.publication || "" });
+        pubInput.addEventListener("input", () => {
+          this.ref.publication = pubInput.value;
+          this.updatePreviews(previewEl);
+        });
+
+        const volGrid = body.createDiv({ cls: "form-grid-3" });
+        
+        const volItem = volGrid.createDiv({ cls: "form-grid-item" });
+        volItem.createEl("label", { cls: "stacked-label", text: "Volume" });
+        const volIn = volItem.createEl("input", { type: "text", cls: "grid-input", value: this.ref.volume || "" });
+        volIn.addEventListener("input", () => { this.ref.volume = volIn.value; this.updatePreviews(previewEl); });
+
+        const issItem = volGrid.createDiv({ cls: "form-grid-item" });
+        issItem.createEl("label", { cls: "stacked-label", text: "Issue" });
+        const issIn = issItem.createEl("input", { type: "text", cls: "grid-input", value: this.ref.issue || "" });
+        issIn.addEventListener("input", () => { this.ref.issue = issIn.value; this.updatePreviews(previewEl); });
+
+        const pageItem = volGrid.createDiv({ cls: "form-grid-item" });
+        pageItem.createEl("label", { cls: "stacked-label", text: "Pages" });
+        const pageIn = pageItem.createEl("input", { type: "text", cls: "grid-input", value: this.ref.pages || "" });
+        pageIn.addEventListener("input", () => { this.ref.pages = pageIn.value; this.updatePreviews(previewEl); });
+
+        const publGroup = body.createDiv({ cls: "form-stacked-group" });
+        publGroup.createEl("label", { cls: "stacked-label", text: "Publisher" });
+        const publInput = publGroup.createEl("input", { type: "text", cls: "grid-input", value: this.ref.publisher || "" });
+        publInput.addEventListener("input", () => { this.ref.publisher = publInput.value; });
+      }
+    );
+
+    // --- ACCORDION 2: IDENTIFIERS, DOI & URL ---
+    this.createAccordion(
+      formContainer,
+      "Identifiers, DOI & URL",
+      (body) => {
+        const idGrid = body.createDiv({ cls: "form-grid-2" });
+
+        const doiGroup = idGrid.createDiv({ cls: "form-grid-item" });
+        doiGroup.createEl("label", { cls: "stacked-label", text: "DOI" });
+        const doiInput = doiGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "10.xxxx/yyyy", value: this.ref.doi || "" });
+        doiInput.addEventListener("input", () => {
+          this.ref.doi = doiInput.value;
+          this.updatePreviews(previewEl);
+        });
+
+        const urlGroup = idGrid.createDiv({ cls: "form-grid-item" });
+        urlGroup.createEl("label", { cls: "stacked-label", text: "URL" });
+        const urlInput = urlGroup.createEl("input", { type: "text", cls: "grid-input", placeholder: "https://...", value: this.ref.url || "" });
+        urlInput.addEventListener("input", () => {
+          this.ref.url = urlInput.value;
+          this.updatePreviews(previewEl);
+        });
+
+        const isbnGrid = body.createDiv({ cls: "form-grid-2" });
+        const isbnGroup = isbnGrid.createDiv({ cls: "form-grid-item" });
+        isbnGroup.createEl("label", { cls: "stacked-label", text: "ISBN" });
+        const isbnInput = isbnGroup.createEl("input", { type: "text", cls: "grid-input", value: this.ref.isbn || "" });
+        isbnInput.addEventListener("input", () => { this.ref.isbn = isbnInput.value; });
+
+        const issnGroup = isbnGrid.createDiv({ cls: "form-grid-item" });
+        issGroup.createEl("label", { cls: "stacked-label", text: "ISSN" });
+        const issnInput = issnGroup.createEl("input", { type: "text", cls: "grid-input", value: this.ref.issn || "" });
+        issnInput.addEventListener("input", () => { this.ref.issn = issnInput.value; });
+      }
+    );
+
+    // --- ACCORDION 3: ABSTRACT & LITERATURE SUMMARY ---
+    this.createAccordion(
+      formContainer,
+      "Abstract & Literature Summary",
+      (body) => {
+        const absGroup = body.createDiv({ cls: "form-stacked-group" });
+        const absArea = absGroup.createEl("textarea", { cls: "stacked-textarea", rows: 4, placeholder: "Paste document abstract or personal study notes..." });
+        absArea.value = this.ref.abstract || "";
+        absArea.addEventListener("input", () => { this.ref.abstract = absArea.value; });
+      }
+    );
+
+    // Live Monospaced Output Preview Box
+    scrollBody.createEl("div", { cls: "preview-section-title", text: "Live Output Preview" });
+    const previewEl = scrollBody.createDiv({ cls: "citation-modal-preview-box" });
     this.updatePreviews(previewEl);
 
-    // Save / Cancel Button Row
-    const buttonRow = contentEl.createDiv({ cls: "citation-modal-button-row" });
-    new Setting(buttonRow)
-      .addButton(btn => btn
-        .setButtonText("Cancel")
-        .onClick(() => this.close()))
-      .addButton(btn => btn
-        .setButtonText(this.isNew ? "Create Citation" : "Save Citation")
-        .setCta()
-        .onClick(async () => {
-          if (!this.ref.title.trim()) {
-            new Notice("Title is required.");
-            return;
-          }
-          if (!this.ref.citekey.trim()) {
-            this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
-          }
+    // Modal Footer Button Bar (Fixed at bottom)
+    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
+    
+    const cancelBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Cancel" });
+    cancelBtn.addEventListener("click", () => this.close());
 
-          try {
-            await this.onSave(this.ref, this.isNew ? undefined : this.originalCitekey);
-            new Notice(`Citation [${this.ref.citekey}] saved!`);
-            this.close();
-          } catch (e: any) {
-            new Notice(`Save error: ${e.message}`);
-          }
-        }));
+    const saveBtn = footerBar.createEl("button", { 
+      cls: "citation-small-btn", 
+      text: this.isNew ? "Create Citation" : "Save Citation" 
+    });
+    saveBtn.addEventListener("click", async () => {
+      if (!this.ref.title.trim()) {
+        new Notice("Title is required.");
+        return;
+      }
+      if (!this.ref.citekey.trim()) {
+        this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
+      }
+
+      saveBtn.disabled = true;
+      saveBtn.setText("Saving...");
+      try {
+        await this.onSave(this.ref, this.isNew ? undefined : this.originalCitekey);
+        new Notice(`Citation [${this.ref.citekey}] saved!`);
+        this.close();
+      } catch (e: any) {
+        new Notice(`Save error: ${e.message}`);
+        saveBtn.disabled = false;
+        saveBtn.setText(this.isNew ? "Create Citation" : "Save Citation");
+      }
+    });
+  }
+
+  private createAccordion(parent: HTMLElement, title: string, renderBody: (bodyEl: HTMLElement) => void) {
+    const card = parent.createDiv({ cls: "citation-accordion-card" });
+
+    const header = card.createDiv({ cls: "accordion-header-row" });
+    header.createEl("span", { cls: "accordion-title-text", text: title });
+    const toggleIcon = header.createSpan({ cls: "accordion-icon-wrap" });
+    setIcon(toggleIcon, "chevron-down");
+
+    const body = card.createDiv({ cls: "accordion-body-collapse" });
+    renderBody(body);
+
+    header.addEventListener("click", () => {
+      const isOpen = card.hasClass("open");
+      if (isOpen) {
+        card.removeClass("open");
+        setIcon(toggleIcon, "chevron-down");
+      } else {
+        card.addClass("open");
+        setIcon(toggleIcon, "chevron-up");
+      }
+    });
   }
 
   private updatePreviews(container: HTMLElement) {

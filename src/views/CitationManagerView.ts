@@ -185,7 +185,7 @@ export class CitationManagerView extends ItemView {
         break;
     }
 
-    // 4. DISTINCT & VISIBLE STATUS BAR (Active File + Link Affordance + Settings / Stats Button)
+    // 4. DISTINCT & VISIBLE STATUS BAR
     this.renderVisibleStatusBar(container, project);
   }
 
@@ -328,7 +328,6 @@ export class CitationManagerView extends ItemView {
       this.renderUI();
     });
 
-    // Restore focus and cursor if user was actively typing
     if (restoreSearchCursor !== undefined) {
       setTimeout(() => {
         searchBox.focus();
@@ -458,26 +457,13 @@ export class CitationManagerView extends ItemView {
       ).open();
     });
 
-    // Open Reference Note
-    const noteBtn = actionsRow.createEl("button", { cls: "citation-card-btn", title: `Open Reference Markdown Note (.references/${ref.citekey}.md)` });
-    setIcon(noteBtn.createSpan({ cls: "btn-icon" }), "file-text");
-    noteBtn.createSpan({ text: " Note" });
-    noteBtn.addEventListener("click", async () => {
-      await this.openReferenceNote(ref);
-    });
-
-    // PDF Button
+    // PDF Button (Opens attached PDF reliably)
     if (ref.pdfAttachment) {
       const pdfBtn = actionsRow.createEl("button", { cls: "citation-card-btn", title: "Open Attached PDF" });
       setIcon(pdfBtn.createSpan({ cls: "btn-icon" }), "paperclip");
       pdfBtn.createSpan({ text: " PDF" });
       pdfBtn.addEventListener("click", async () => {
-        const file = this.app.vault.getAbstractFileByPath(normalizePath(ref.pdfAttachment!));
-        if (file instanceof TFile) {
-          await this.app.workspace.getLeaf(false).openFile(file);
-        } else {
-          new Notice(`PDF attachment not found at ${ref.pdfAttachment}`);
-        }
+        await this.openAttachedPDF(ref);
       });
     }
 
@@ -497,7 +483,7 @@ export class CitationManagerView extends ItemView {
       new ConfirmModal(
         this.app,
         `Delete Reference: ${ref.citekey}`,
-        `Delete '${ref.title}'? Permanently removes its note and attached PDF.`,
+        `Delete '${ref.title}'? Permanently removes its entry.`,
         "Delete",
         true,
         async () => {
@@ -507,6 +493,31 @@ export class CitationManagerView extends ItemView {
         }
       ).open();
     });
+  }
+
+  private async openAttachedPDF(ref: ReferenceMetadata) {
+    if (!ref.pdfAttachment) return;
+    const pathsToTry = [
+      normalizePath(ref.pdfAttachment),
+      normalizePath(`${this.settings.referencesFolder}/attachments/${ref.citekey}.pdf`),
+      normalizePath(`${this.settings.referencesFolder}/${ref.citekey}.pdf`),
+    ];
+
+    for (const p of pathsToTry) {
+      if (await this.app.vault.adapter.exists(p)) {
+        try {
+          await this.app.workspace.openLinkText(p, "", false);
+          return;
+        } catch {
+          if ((this.app as any).openWithDefaultApp) {
+            (this.app as any).openWithDefaultApp(p);
+            return;
+          }
+        }
+      }
+    }
+
+    new Notice(`PDF attachment not found for [${ref.citekey}]`);
   }
 
   // --- SUBPANEL 2: ADD SOURCE SUBPANEL ---
@@ -656,7 +667,7 @@ export class CitationManagerView extends ItemView {
       new Notice("Bibliography copied to clipboard!");
     });
 
-    // Append to Note (Targeting active markdown editor dynamically)
+    // Append to Note
     const appendBtn = btnRow.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Append to Note" });
     appendBtn.addEventListener("click", () => {
       let activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
@@ -786,7 +797,9 @@ export class CitationManagerView extends ItemView {
       });
 
       // Sync Footnotes Button
-      const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "🔄 Sync Footnotes across Linked Notes" });
+      const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary" });
+      setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
+      syncBtn.createSpan({ text: " Sync Footnotes across Linked Notes" });
       syncBtn.style.marginTop = "6px";
       syncBtn.addEventListener("click", async () => {
         syncBtn.disabled = true;
@@ -899,7 +912,8 @@ export class CitationManagerView extends ItemView {
         const isRegistered = this.projectIndexer.isFileInProject(activeFile, project);
         if (isRegistered) {
           leftGroup.createSpan({ cls: "status-badge-pill registered", text: `In ${project.name}` });
-          const unlinkBtn = leftGroup.createSpan({ cls: "status-link-action-btn", text: "Unlink" });
+          const unlinkBtn = leftGroup.createEl("button", { cls: "status-unlink-icon-btn", title: `Unlink from ${project.name}` });
+          setIcon(unlinkBtn, "unlink");
           unlinkBtn.addEventListener("click", async () => {
             project.registeredFiles = project.registeredFiles.filter(p => p !== activeFile.path);
             await this.projectIndexer.removeProjectFromFrontmatter(activeFile, project.name);
@@ -948,20 +962,6 @@ export class CitationManagerView extends ItemView {
       newBanner.className = "citation-visible-status-island";
       this.renderVisibleStatusBar(newBanner, project);
       parent.replaceChild(newBanner.firstChild as HTMLElement, existing);
-    }
-  }
-
-  private async openReferenceNote(ref: ReferenceMetadata) {
-    const notePath = normalizePath(`${this.settings.referencesFolder}/${ref.citekey}.md`);
-    if (!(await this.app.vault.adapter.exists(notePath))) {
-      await this.storageManager.saveReference(ref);
-    }
-
-    const file = this.app.vault.getAbstractFileByPath(notePath);
-    if (file instanceof TFile) {
-      await this.app.workspace.getLeaf(false).openFile(file);
-    } else {
-      await this.app.workspace.openLinkText(notePath, "", false);
     }
   }
 

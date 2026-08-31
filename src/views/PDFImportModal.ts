@@ -1,4 +1,4 @@
-import { App, Modal, Setting, Notice, setIcon } from 'obsidian';
+import { App, Modal, Setting, Notice, setIcon, normalizePath } from 'obsidian';
 import { ReferenceMetadata, ProjectRecord } from '../types';
 import { StorageManager } from '../storageManager';
 import { MetadataResolvers } from '../metadataResolvers';
@@ -44,7 +44,6 @@ export class PDFImportModal extends Modal {
   }
 
   async onOpen() {
-    // Attempt automatic DOI detection from PDF binary
     try {
       const buffer = await this.pdfFile.arrayBuffer();
       const detectedDOI = ProjectIndexer.extractDOIFromBuffer(buffer);
@@ -73,156 +72,183 @@ export class PDFImportModal extends Modal {
     contentEl.empty();
     contentEl.addClass("citation-pdf-import-modal");
 
+    // Modal Header
     const header = contentEl.createDiv({ cls: "citation-modal-header-row" });
     const iconSpan = header.createSpan({ cls: "modal-header-icon" });
     setIcon(iconSpan, "paperclip");
     header.createEl("h2", { text: "Import PDF Document" });
 
-    const infoBox = contentEl.createDiv({ cls: "citation-quick-fetch-box" });
-    infoBox.createEl("strong", { text: `File: ${this.pdfFile.name} ` });
+    // Scrollable Body
+    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-body" });
+
+    // File Summary Box
+    const infoBox = scrollBody.createDiv({ cls: "citation-quick-fetch-card" });
+    const fileRow = infoBox.createDiv({ cls: "fetch-title" });
+    setIcon(fileRow.createSpan({ cls: "inline-icon" }), "file-text");
+    fileRow.createSpan({ text: ` ${this.pdfFile.name} ` });
     if (this.pdfFile.size) {
-      infoBox.createSpan({ text: `(${(this.pdfFile.size / 1024 / 1024).toFixed(2)} MB)` });
+      fileRow.createSpan({ cls: "file-size-tag", text: `(${(this.pdfFile.size / 1024 / 1024).toFixed(2)} MB)` });
     }
 
     if (this.statusLog) {
-      const statusPill = infoBox.createDiv({ cls: "status-log-line", text: this.statusLog });
+      infoBox.createDiv({ cls: "status-log-line", text: this.statusLog });
     }
 
-    new Setting(contentEl)
-      .setName("Import Action")
-      .addDropdown(drop => {
-        drop.addOption("new", "Create New Citation from PDF");
-        if (this.existingRefs.length > 0) {
-          drop.addOption("existing", "Attach PDF to an Existing Citation");
-        }
-        drop.setValue(this.mode);
-        drop.onChange(val => {
-          this.mode = val as 'new' | 'existing';
-          this.renderModalContent();
-        });
-      });
-
-    const formArea = contentEl.createDiv({ cls: "citation-form-container" });
+    // Import Mode Selector Card
+    const modeCard = scrollBody.createDiv({ cls: "citation-form-card" });
+    const modeGroup = modeCard.createDiv({ cls: "form-stacked-group" });
+    modeGroup.createEl("label", { cls: "stacked-label", text: "Import Action" });
+    const modeSelect = modeGroup.createEl("select", { cls: "dropdown grid-input" });
+    modeSelect.createEl("option", { value: "new", text: "Create New Citation from PDF" });
+    if (this.existingRefs.length > 0) {
+      const opt = modeSelect.createEl("option", { value: "existing", text: "Attach PDF to an Existing Citation" });
+      if (this.mode === "existing") opt.selected = true;
+    }
+    modeSelect.addEventListener("change", () => {
+      this.mode = modeSelect.value as 'new' | 'existing';
+      this.renderModalContent();
+    });
 
     if (this.mode === 'existing') {
-      new Setting(formArea)
-        .setName("Target Citation")
-        .setDesc("Choose which citation in your library should hold this PDF attachment")
-        .addDropdown(drop => {
-          for (const ref of this.existingRefs) {
-            drop.addOption(ref.citekey, `[${ref.citekey}] ${ref.title.slice(0, 45)}...`);
-          }
-          drop.setValue(this.selectedExistingCitekey);
-          drop.onChange(val => { this.selectedExistingCitekey = val; });
+      const attachCard = scrollBody.createDiv({ cls: "citation-form-card" });
+      const targetGroup = attachCard.createDiv({ cls: "form-stacked-group" });
+      targetGroup.createEl("label", { cls: "stacked-label", text: "Target Citation" });
+      const targetSelect = targetGroup.createEl("select", { cls: "dropdown grid-input" });
+      for (const ref of this.existingRefs) {
+        const opt = targetSelect.createEl("option", { 
+          value: ref.citekey, 
+          text: `[${ref.citekey}] ${ref.title.slice(0, 50)}...` 
         });
+        if (ref.citekey === this.selectedExistingCitekey) opt.selected = true;
+      }
+      targetSelect.addEventListener("change", () => { this.selectedExistingCitekey = targetSelect.value; });
     } else {
-      new Setting(formArea)
-        .setName("DOI / Online Identifier")
-        .setDesc("Paste DOI or URL to pull publication details automatically")
-        .addText(text => text
-          .setPlaceholder("e.g. 10.1145/3313831.3376722")
-          .setValue(this.doiOrIdentifier)
-          .onChange(val => { this.doiOrIdentifier = val; }))
-        .addButton(btn => btn
-          .setButtonText("Fetch")
-          .onClick(async () => {
-            if (!this.doiOrIdentifier.trim()) {
-              new Notice("Please enter a DOI or URL first.");
-              return;
-            }
-            btn.setDisabled(true);
-            btn.setButtonText("Fetching...");
-            try {
-              const res = await MetadataResolvers.detectAndResolve(this.doiOrIdentifier.trim());
-              if (res.title) this.title = res.title;
-              if (res.authors && res.authors.length > 0) this.author = res.authors.join(", ");
-              if (res.year) this.year = String(res.year);
-              this.statusLog = "Metadata successfully populated.";
-              new Notice("Metadata populated!");
-              this.renderModalContent();
-            } catch (e: any) {
-              new Notice(`Fetch error: ${e.message}`);
-              btn.setDisabled(false);
-              btn.setButtonText("Fetch");
-            }
-          }));
+      const metaCard = scrollBody.createDiv({ cls: "citation-form-card" });
+      metaCard.createEl("div", { cls: "form-section-title", text: "Metadata & Online Resolution" });
 
-      new Setting(formArea)
-        .setName("Title")
-        .addText(text => text
-          .setValue(this.title)
-          .onChange(val => { this.title = val; }));
+      // DOI / Online Identifier input
+      const doiGroup = metaCard.createDiv({ cls: "form-stacked-group" });
+      doiGroup.createEl("label", { cls: "stacked-label", text: "DOI / Online Identifier" });
+      
+      const doiInputRow = doiGroup.createDiv({ cls: "fetch-input-row" });
+      const doiInput = doiInputRow.createEl("input", {
+        type: "text",
+        placeholder: "e.g. 10.1145/3313831.3376722",
+        cls: "fetch-text-input",
+        value: this.doiOrIdentifier
+      });
+      const fetchBtn = doiInputRow.createEl("button", { cls: "citation-small-btn", text: "Fetch" });
 
-      new Setting(formArea)
-        .setName("Authors")
-        .setDesc("e.g. Smith, John or Smith, J. & Doe, A.")
-        .addText(text => text
-          .setPlaceholder("Authors")
-          .setValue(this.author)
-          .onChange(val => { this.author = val; }));
+      const doFetch = async () => {
+        const val = doiInput.value.trim();
+        if (!val) {
+          new Notice("Please enter a DOI or URL first.");
+          return;
+        }
+        fetchBtn.disabled = true;
+        fetchBtn.setText("Fetching...");
+        try {
+          const res = await MetadataResolvers.detectAndResolve(val);
+          if (res.title) this.title = res.title;
+          if (res.authors && res.authors.length > 0) this.author = res.authors.join(", ");
+          if (res.year) this.year = String(res.year);
+          this.doiOrIdentifier = val;
+          this.statusLog = "Metadata successfully populated.";
+          new Notice("Metadata populated!");
+          this.renderModalContent();
+        } catch (e: any) {
+          new Notice(`Fetch error: ${e.message}`);
+          fetchBtn.disabled = false;
+          fetchBtn.setText("Fetch");
+        }
+      };
 
-      new Setting(formArea)
-        .setName("Year")
-        .addText(text => text
-          .setValue(this.year)
-          .onChange(val => { this.year = val; }));
+      fetchBtn.addEventListener("click", doFetch);
+      doiInput.addEventListener("keydown", (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          doFetch();
+        }
+      });
+      doiInput.addEventListener("input", () => { this.doiOrIdentifier = doiInput.value; });
+
+      // Title (Stacked full-width)
+      const titleGroup = metaCard.createDiv({ cls: "form-stacked-group" });
+      titleGroup.createEl("label", { cls: "stacked-label", text: "Title" });
+      const titleArea = titleGroup.createEl("textarea", { cls: "stacked-textarea", rows: 2 });
+      titleArea.value = this.title;
+      titleArea.addEventListener("input", () => { this.title = titleArea.value; });
+
+      // Authors (Stacked full-width)
+      const authorGroup = metaCard.createDiv({ cls: "form-stacked-group" });
+      const authorLabelRow = authorGroup.createDiv({ cls: "label-with-desc" });
+      authorLabelRow.createEl("label", { cls: "stacked-label", text: "Authors" });
+      authorLabelRow.createSpan({ cls: "label-desc", text: "(e.g. Smith, John or Smith, J. & Doe, A.)" });
+      const authorArea = authorGroup.createEl("textarea", { cls: "stacked-textarea", rows: 2 });
+      authorArea.value = this.author;
+      authorArea.addEventListener("input", () => { this.author = authorArea.value; });
+
+      // Year
+      const yearGroup = metaCard.createDiv({ cls: "form-stacked-group" });
+      yearGroup.createEl("label", { cls: "stacked-label", text: "Year" });
+      const yearInput = yearGroup.createEl("input", { type: "text", cls: "grid-input", value: this.year });
+      yearInput.addEventListener("input", () => { this.year = yearInput.value; });
     }
 
-    const btnRow = contentEl.createDiv({ cls: "citation-modal-button-row" });
-    new Setting(btnRow)
-      .addButton(btn => btn
-        .setButtonText("Cancel")
-        .onClick(() => this.close()))
-      .addButton(btn => btn
-        .setButtonText("Import & Save")
-        .setCta()
-        .onClick(async () => {
-          btn.setDisabled(true);
-          btn.setButtonText("Importing...");
+    // Modal Footer Bar (Fixed at bottom)
+    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
+    
+    const cancelBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Cancel" });
+    cancelBtn.addEventListener("click", () => this.close());
 
-          try {
-            const buffer = await this.pdfFile.arrayBuffer();
+    const importBtn = footerBar.createEl("button", { cls: "citation-small-btn", text: "Import & Save" });
+    importBtn.addEventListener("click", async () => {
+      importBtn.disabled = true;
+      importBtn.setText("Importing...");
 
-            if (this.mode === 'existing') {
-              const targetRef = this.existingRefs.find(r => r.citekey === this.selectedExistingCitekey);
-              if (!targetRef) throw new Error("Target reference not found");
+      try {
+        const buffer = await this.pdfFile.arrayBuffer();
 
-              const pdfPath = await this.storageManager.savePDFAttachment(targetRef.citekey, buffer);
-              targetRef.pdfAttachment = pdfPath;
-              await this.storageManager.saveReference(targetRef);
-              new Notice(`Attached PDF to [${targetRef.citekey}]!`);
-            } else {
-              const authors = this.author ? this.author.split(/,|&/).map(a => a.trim()).filter(a => a.length > 0) : ["Unknown Author"];
-              const cleanTitle = this.title || this.pdfFile.name.replace(/\.pdf$/i, "");
-              const citekey = CitationEngine.generateCitekey(authors, this.year, cleanTitle);
+        if (this.mode === 'existing') {
+          const targetRef = this.existingRefs.find(r => r.citekey === this.selectedExistingCitekey);
+          if (!targetRef) throw new Error("Target reference not found");
 
-              const pdfPath = await this.storageManager.savePDFAttachment(citekey, buffer);
+          const pdfPath = await this.storageManager.savePDFAttachment(targetRef.citekey, buffer);
+          targetRef.pdfAttachment = pdfPath;
+          await this.storageManager.saveReference(targetRef);
+          new Notice(`Attached PDF to [${targetRef.citekey}]!`);
+        } else {
+          const authors = this.author ? this.author.split(/,|&|\n/).map(a => a.trim()).filter(a => a.length > 0) : ["Unknown Author"];
+          const cleanTitle = this.title || this.pdfFile.name.replace(/\.pdf$/i, "");
+          const citekey = CitationEngine.generateCitekey(authors, this.year, cleanTitle);
 
-              const newRef: ReferenceMetadata = {
-                citekey,
-                type: "journal",
-                title: cleanTitle,
-                authors: authors.length > 0 ? authors : ["Unknown Author"],
-                year: this.year || new Date().getFullYear(),
-                doi: this.doiOrIdentifier || undefined,
-                pdfAttachment: pdfPath,
-                projects: this.project ? [this.project.id] : [],
-                dateAdded: new Date().toISOString(),
-                dateModified: new Date().toISOString(),
-              };
+          const pdfPath = await this.storageManager.savePDFAttachment(citekey, buffer);
 
-              await this.storageManager.saveReference(newRef);
-              new Notice(`Created citation with PDF: [${citekey}]`);
-            }
+          const newRef: ReferenceMetadata = {
+            citekey,
+            type: "journal",
+            title: cleanTitle,
+            authors: authors.length > 0 ? authors : ["Unknown Author"],
+            year: this.year || new Date().getFullYear(),
+            doi: this.doiOrIdentifier || undefined,
+            pdfAttachment: pdfPath,
+            projects: this.project ? [this.project.id] : [],
+            dateAdded: new Date().toISOString(),
+            dateModified: new Date().toISOString(),
+          };
 
-            await this.onComplete();
-            this.close();
-          } catch (err: any) {
-            new Notice(`Import failed: ${err.message}`);
-            btn.setDisabled(false);
-            btn.setButtonText("Import & Save");
-          }
-        }));
+          await this.storageManager.saveReference(newRef);
+          new Notice(`Created citation with PDF: [${citekey}]`);
+        }
+
+        await this.onComplete();
+        this.close();
+      } catch (err: any) {
+        new Notice(`Import failed: ${err.message}`);
+        importBtn.disabled = false;
+        importBtn.setText("Import & Save");
+      }
+    });
   }
 
   onClose() {
