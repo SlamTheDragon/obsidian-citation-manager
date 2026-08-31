@@ -125,7 +125,7 @@ export default class CitationManagerPlugin extends Plugin {
       })
     );
 
-    // Live Automated Footnote Sync on Document Edits
+    // Live Automated Sync on Document Edits (Always active in background)
     let liveSyncDebounce: any = null;
     this.registerEvent(
       this.app.vault.on('modify', async (file) => {
@@ -133,9 +133,7 @@ export default class CitationManagerPlugin extends Plugin {
         if (file.path.startsWith(this.settings.referencesFolder)) return;
 
         const project = this.getActiveProject();
-        const shouldSync = Boolean(project?.enableFootnoteAutoSync || this.settings.enableFootnoteAutoSync || project?.inBodyFormat === 'footnote');
-
-        if (shouldSync && project) {
+        if (project) {
           if (liveSyncDebounce) clearTimeout(liveSyncDebounce);
           liveSyncDebounce = setTimeout(async () => {
             const isFileInProj = this.projectIndexer.isFileInProject(file, project);
@@ -269,7 +267,7 @@ export default class CitationManagerPlugin extends Plugin {
 
     this.addCommand({
       id: 'export-for-publication',
-      name: 'Export for Publication (Compile / PDF)',
+      name: 'Export for Publication', // user updated line
       callback: async () => {
         const refsMap = await this.storageManager.loadAllReferences();
         new ExportPublicationModal(

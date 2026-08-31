@@ -30,18 +30,6 @@ export class CitationManagerSettingTab extends PluginSettingTab {
           this.plugin.storageManager.updateSettings(this.plugin.settings);
         }));
 
-    // Publication Directory
-    new Setting(containerEl)
-      .setName('Publication Folder')
-      .setDesc('Folder where exported publication copies and master bibliographies are saved.')
-      .addText(text => text
-        .setPlaceholder('publication')
-        .setValue(this.plugin.settings.publicationFolder || 'publication')
-        .onChange(async (value) => {
-          this.plugin.settings.publicationFolder = normalizePath(value.trim() || 'publication');
-          await this.plugin.saveSettings();
-        }));
-
     // Default Citation Style
     new Setting(containerEl)
       .setName('Default Citation Style')

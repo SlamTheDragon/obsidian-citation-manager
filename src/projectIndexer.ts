@@ -751,6 +751,9 @@ export class ProjectIndexer {
 
       content = content.replace(/\n{3,}$/, "\n\n");
 
+      // Strip citation manager frontmatter from exported publication note
+      content = ProjectIndexer.cleanExportFrontmatter(content);
+
       // Write compiled file to publication folder
       const targetOutPath = normalizePath(`${pubDir}/${file.name}`);
       await this.app.vault.adapter.write(targetOutPath, content);
@@ -768,5 +771,25 @@ export class ProjectIndexer {
       totalCitationsCount: globalCitekeyOrder.length,
       bibliographyPath: bibFilePath
     };
+  }
+
+  /**
+   * Cleans citation-manager tags from frontmatter so exported files in publication/
+   * are not indexed back into the citation project as source notes.
+   */
+  static cleanExportFrontmatter(content: string): string {
+    const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!fmMatch) return content;
+
+    let fmBody = fmMatch[1];
+    // Remove citation-manager, citation_manager, citation-project lines (including multiline arrays)
+    fmBody = fmBody.replace(/^(?:citation-manager|citation_manager|citation-project|citation_project):\s*(?:\[[^\]]*\]|[^\r\n]*(\r?\n\s+-[^\r\n]*)*)\r?\n?/gm, "");
+    
+    // If frontmatter is now empty, remove the whole frontmatter block
+    if (!fmBody.trim()) {
+      return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
+    }
+    
+    return content.replace(/^---\r?\n[\s\S]*?\r?\n---/, `---\n${fmBody.trim()}\n---`);
   }
 }

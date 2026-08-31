@@ -807,37 +807,12 @@ export class CitationManagerView extends ItemView {
         ).open();
       });
 
-      // Footnote Plugin Compatibility Toggle
-      const fnRow = controlsCard.createDiv({ cls: "citation-format-controls-row" });
-      fnRow.style.marginTop = "6px";
-      const fnToggleLabel = fnRow.createEl("label", { cls: "citation-checkbox-label" });
-      const fnCheckbox = fnToggleLabel.createEl("input", { type: "checkbox" });
-      fnCheckbox.checked = Boolean(project.enableFootnoteAutoSync);
-      fnCheckbox.addEventListener("change", async () => {
-        project.enableFootnoteAutoSync = fnCheckbox.checked;
-        await this.onSaveSettings();
-        if (!project.enableFootnoteAutoSync && project.inBodyFormat !== 'footnote') {
-          const res = await this.projectIndexer.syncFootnotesInRegisteredFiles(
-            project,
-            this.referencesMap,
-            project.citationStyle || this.settings.defaultCitationStyle,
-            this.settings.referencesFolder
-          );
-          if (res.removedFootnotesCount > 0) {
-            new Notice(`Cleaned up ${res.removedFootnotesCount} footnote definition(s).`);
-          }
-        } else {
-          new Notice(`Footnote auto-sync: ${project.enableFootnoteAutoSync ? 'Enabled' : 'Disabled'}`);
-        }
-        await this.refreshData();
-      });
-      fnToggleLabel.createSpan({ text: "Auto-sync footnote definitions at note bottom" });
-
-      // Sync Footnotes Button
-      const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary" });
+      // Resync / Catch-Up Button (Offline redundancy & recovery)
+      const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
       setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
-      syncBtn.createSpan({ text: " Sync & Clean Footnotes in Linked Notes" });
-      syncBtn.style.marginTop = "6px";
+      syncBtn.createSpan({ text: " Resync & Catch Up Project Notes" });
+      syncBtn.style.marginTop = "8px";
+      syncBtn.title = "Manual catch-up tool if files were modified offline or external changes occurred";
       syncBtn.addEventListener("click", async () => {
         syncBtn.disabled = true;
         const res = await this.projectIndexer.syncFootnotesInRegisteredFiles(
@@ -849,7 +824,7 @@ export class CitationManagerView extends ItemView {
         if (res.removedFootnotesCount > 0) {
           new Notice(`Cleaned up ${res.removedFootnotesCount} footnote definition(s) across ${res.updatedFilesCount} file(s).`);
         } else {
-          new Notice(`Synced ${res.updatedFootnotesCount} definitions across ${res.updatedFilesCount} documents.`);
+          new Notice(`Resynced ${res.updatedFootnotesCount} definition(s) across ${res.updatedFilesCount} document(s).`);
         }
         syncBtn.disabled = false;
         await this.refreshData();

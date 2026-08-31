@@ -15,6 +15,7 @@ export class ExportPublicationModal extends Modal {
   private bibScope: 'local' | 'global' = 'local';
   private appendBib: boolean = true;
   private cleanFootnotes: boolean = true;
+  private outputFolder: string = 'publication';
 
   constructor(
     app: App,
@@ -31,6 +32,7 @@ export class ExportPublicationModal extends Modal {
     this.settings = settings;
     this.targetFile = targetFile || app.workspace.getActiveFile();
     this.selectedStyle = project?.citationStyle || settings.defaultCitationStyle || 'apa7';
+    this.outputFolder = project?.publicationFolder || 'publication';
   }
 
   onOpen() {
@@ -55,6 +57,21 @@ export class ExportPublicationModal extends Modal {
         drop.addOption("vancouver", "Vancouver (1)");
         drop.setValue(this.selectedStyle);
         drop.onChange(val => { this.selectedStyle = val as CitationStyle; });
+      });
+
+    new Setting(optCard)
+      .setName("Export Output Folder")
+      .setDesc("Destination vault folder where published copies and bibliographies will be saved (overwrites on export).")
+      .addText(text => {
+        text.setPlaceholder("publication");
+        text.setValue(this.outputFolder);
+        text.onChange(val => {
+          this.outputFolder = normalizePath(val.trim() || 'publication');
+          if (this.project) {
+            this.project.publicationFolder = this.outputFolder;
+          }
+          this.renderActions(actionsContainer);
+        });
       });
 
     new Setting(optCard)
@@ -93,7 +110,7 @@ export class ExportPublicationModal extends Modal {
   private renderActions(container: HTMLElement) {
     container.empty();
 
-    const pubFolder = this.settings.publicationFolder || 'publication';
+    const pubFolder = this.outputFolder || 'publication';
 
     if (this.bibScope === 'global' && this.project) {
       // GLOBAL SCOPE ACTIONS
@@ -101,7 +118,7 @@ export class ExportPublicationModal extends Modal {
       globalCard.createEl("div", { cls: "section-card-title", text: `Global Corpus Batch Export: ${this.project.name}` });
       globalCard.createEl("div", {
         cls: "section-card-desc",
-        text: `Compiles all linked documents in '${this.project.name}' with synchronized sequential numbering, writes them to '${pubFolder}/', and creates 'References - ${this.project.name}.md'. Source files remain unmodified.`
+        text: `Compiles all linked documents in '${this.project.name}' with synchronized sequential numbering, writes them to '${pubFolder}/', and creates 'References - ${this.project.name}.md'. Strips citation-manager frontmatter tags so published copies are clean. Source files remain unmodified.`
       });
 
       new Setting(globalCard)
@@ -117,7 +134,7 @@ export class ExportPublicationModal extends Modal {
                 this.project!,
                 this.allReferences,
                 this.selectedStyle,
-                this.settings.publicationFolder,
+                this.outputFolder,
                 this.settings.referencesFolder
               );
               new Notice(`Exported ${res.compiledFilesCount} document(s) and master bibliography to ${pubFolder}/`);
@@ -152,8 +169,8 @@ export class ExportPublicationModal extends Modal {
 
       // 1. Export Clean Copy (Safe)
       new Setting(localCard)
-        .setName("Export Copy to Publication Folder")
-        .setDesc(`Writes compiled document to /${pubFolder}/${this.targetFile.name}. Source note remains unmodified.`)
+        .setName("Export Copy to Destination Folder")
+        .setDesc(`Writes compiled document to /${pubFolder}/${this.targetFile.name}. Strips citation frontmatter. Source note remains unmodified.`)
         .addButton(btn => btn
           .setButtonText(`Export to ${pubFolder}/`)
           .setCta()
@@ -165,7 +182,9 @@ export class ExportPublicationModal extends Modal {
                 await this.app.vault.createFolder(pubDir);
               }
               const outPath = normalizePath(`${pubDir}/${this.targetFile!.name}`);
-              const compiled = await this.generateLocalCompiledText(this.targetFile!);
+              let compiled = await this.generateLocalCompiledText(this.targetFile!);
+              compiled = ProjectIndexer.cleanExportFrontmatter(compiled);
+
               await this.app.vault.adapter.write(outPath, compiled);
               new Notice(`Exported copy to ${outPath}`);
               this.close();
@@ -309,7 +328,7 @@ export class ExportPublicationModal extends Modal {
 
     content = content.replace(/\n{3,}$/, "\n\n");
 
-    // 3. Append Bibliography
+    // 4. Append Bibliography
     if (this.appendBib && usedCitekeys.length > 0) {
       const targetRefs = usedCitekeys.map(k => this.allReferences.get(k)!).filter(Boolean);
       const bibText = CitationEngine.generateBibliography(targetRefs, this.selectedStyle, "References");

@@ -53,21 +53,19 @@ export interface ProjectRecord {
   referenceIds: string[];    // Citekeys belonging to this project
   citationStyle?: CitationStyle;
   inBodyFormat?: InBodyFormat;
-  enableFootnoteAutoSync?: boolean;
+  publicationFolder?: string; // Dedicated per-project export destination
   created: string;
   modified: string;
 }
 
 export interface CitationManagerSettings {
   referencesFolder: string;
-  publicationFolder: string;
   defaultCitationStyle: CitationStyle;
   defaultInBodyFormat: InBodyFormat;
   projects: ProjectRecord[];
   activeProjectId: string; // "ALL" or specific project id
   enableEditorSuggest: boolean;
   blockDeletionIfInUse: boolean;
-  enableFootnoteAutoSync: boolean;
   debugMode: boolean;
 }
 
@@ -75,14 +73,12 @@ export const ALL_PROJECTS_ID = "__ALL_REFERENCES__";
 
 export const DEFAULT_SETTINGS: CitationManagerSettings = {
   referencesFolder: ".references",
-  publicationFolder: "publication",
   defaultCitationStyle: "apa7",
   defaultInBodyFormat: "parenthetical",
   projects: [],
   activeProjectId: ALL_PROJECTS_ID,
   enableEditorSuggest: true,
   blockDeletionIfInUse: true,
-  enableFootnoteAutoSync: false,
   debugMode: false,
 };
 
