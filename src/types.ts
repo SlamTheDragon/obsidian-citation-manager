@@ -60,6 +60,7 @@ export interface ProjectRecord {
 
 export interface CitationManagerSettings {
   referencesFolder: string;
+  publicationFolder: string;
   defaultCitationStyle: CitationStyle;
   defaultInBodyFormat: InBodyFormat;
   projects: ProjectRecord[];
@@ -74,6 +75,7 @@ export const ALL_PROJECTS_ID = "__ALL_REFERENCES__";
 
 export const DEFAULT_SETTINGS: CitationManagerSettings = {
   referencesFolder: ".references",
+  publicationFolder: "publication",
   defaultCitationStyle: "apa7",
   defaultInBodyFormat: "parenthetical",
   projects: [],

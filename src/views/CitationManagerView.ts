@@ -735,19 +735,20 @@ export class CitationManagerView extends ItemView {
       }
     });
 
-    // Publication / Export Studio Button
+    // Export for Publication Button
     const pubStudioBtn = exportCard.createEl("button", { 
       cls: "citation-small-btn citation-btn-secondary full-width-btn"
     });
     setIcon(pubStudioBtn.createSpan({ cls: "btn-icon" }), "printer");
-    pubStudioBtn.createSpan({ text: " Publication Studio (Prepare for PDF/Print)" });
+    pubStudioBtn.createSpan({ text: " Export for Publication / PDF" });
     pubStudioBtn.style.marginTop = "6px";
     pubStudioBtn.addEventListener("click", () => {
       new ExportPublicationModal(
         this.app,
         project,
         this.referencesMap,
-        this.projectIndexer
+        this.projectIndexer,
+        this.settings
       ).open();
     });
   }

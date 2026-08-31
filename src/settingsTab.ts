@@ -15,12 +15,12 @@ export class CitationManagerSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
 
-    containerEl.createEl('h2', { text: 'Citation Manager & Reference Studio Settings' });
+    containerEl.createEl('h2', { text: 'Citation Manager Settings' });
 
     // References Directory
     new Setting(containerEl)
-      .setName('References Storage Directory')
-      .setDesc('Folder at vault root where reference notes and PDF attachments are stored.')
+      .setName('References Folder')
+      .setDesc('Folder where reference notes and PDF attachments are stored.')
       .addText(text => text
         .setPlaceholder('.references')
         .setValue(this.plugin.settings.referencesFolder)
@@ -28,6 +28,18 @@ export class CitationManagerSettingTab extends PluginSettingTab {
           this.plugin.settings.referencesFolder = normalizePath(value.trim() || '.references');
           await this.plugin.saveSettings();
           this.plugin.storageManager.updateSettings(this.plugin.settings);
+        }));
+
+    // Publication Directory
+    new Setting(containerEl)
+      .setName('Publication Folder')
+      .setDesc('Folder where exported publication copies and master bibliographies are saved.')
+      .addText(text => text
+        .setPlaceholder('publication')
+        .setValue(this.plugin.settings.publicationFolder || 'publication')
+        .onChange(async (value) => {
+          this.plugin.settings.publicationFolder = normalizePath(value.trim() || 'publication');
+          await this.plugin.saveSettings();
         }));
 
     // Default Citation Style

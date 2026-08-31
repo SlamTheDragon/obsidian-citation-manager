@@ -69,6 +69,23 @@ export default class CitationManagerPlugin extends Plugin {
             });
         });
 
+        menu.addItem(item => {
+          item.setTitle("Export for Publication...")
+            .setIcon("printer")
+            .setSection("insert")
+            .onClick(async () => {
+              const refsMap = await this.storageManager.loadAllReferences();
+              new ExportPublicationModal(
+                this.app,
+                this.getActiveProject(),
+                refsMap,
+                this.projectIndexer,
+                this.settings,
+                view.file
+              ).open();
+            });
+        });
+
         const activeFile = view.file;
         const project = this.getActiveProject();
         if (activeFile && project && project.id !== ALL_PROJECTS_ID) {
@@ -251,15 +268,16 @@ export default class CitationManagerPlugin extends Plugin {
     });
 
     this.addCommand({
-      id: 'export-publication-studio',
-      name: 'Publication Studio (Prepare for PDF/Print)',
+      id: 'export-for-publication',
+      name: 'Export for Publication (Compile / PDF)',
       callback: async () => {
         const refsMap = await this.storageManager.loadAllReferences();
         new ExportPublicationModal(
           this.app,
           this.getActiveProject(),
           refsMap,
-          this.projectIndexer
+          this.projectIndexer,
+          this.settings
         ).open();
       },
     });

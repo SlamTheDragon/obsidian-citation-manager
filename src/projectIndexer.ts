@@ -593,4 +593,121 @@ export class ProjectIndexer {
 
     return CitationEngine.generateBibliography(refsToInclude, style, project.name);
   }
+
+  /**
+   * Batch compiles all files in a project for Global Scope publication.
+   * Unifies sequential indexing (e.g. IEEE [1..N], Vancouver (1..N)) across all documents
+   * and exports both compiled notes and a master bibliography to the configured publication folder.
+   */
+  async compileProjectCorpus(
+    project: ProjectRecord,
+    allReferences: Map<string, ReferenceMetadata>,
+    style: CitationStyle = 'apa7',
+    publicationFolder: string = 'publication',
+    referencesFolder: string = '.references'
+  ): Promise<{ compiledFilesCount: number; totalCitationsCount: number; bibliographyPath: string }> {
+    const files = this.getProjectFiles(project, referencesFolder);
+    const pubDir = normalizePath(publicationFolder || 'publication');
+
+    // Ensure publication output folder exists
+    if (!(await this.app.vault.adapter.exists(pubDir))) {
+      await this.app.vault.createFolder(pubDir);
+    }
+
+    // 1. Build Global Reference Order across all project files
+    const globalCitekeyOrder: string[] = [];
+    const fileContents: Map<string, string> = new Map();
+
+    for (const file of files) {
+      try {
+        const content = await this.app.vault.read(file);
+        fileContents.set(file.path, content);
+
+        for (const [key, ref] of allReferences.entries()) {
+          const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
+          const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
+
+          if (citekeyRegex.test(content) || footnoteCallRegex.test(content) || (parenthetical && content.includes(parenthetical))) {
+            if (!globalCitekeyOrder.includes(key)) {
+              globalCitekeyOrder.push(key);
+            }
+          }
+        }
+      } catch (err) {
+        Logger.warn(`Failed reading file during corpus compilation: ${file.path}`, err);
+      }
+    }
+
+    // Sort global citekeys alphabetically if Author-Date (APA, Harvard, Chicago)
+    if (style === 'apa7' || style === 'harvard' || style === 'chicago') {
+      globalCitekeyOrder.sort((a, b) => {
+        const refA = allReferences.get(a);
+        const refB = allReferences.get(b);
+        const nameA = refA?.authors?.[0] || a;
+        const nameB = refB?.authors?.[0] || b;
+        return nameA.localeCompare(nameB);
+      });
+    }
+
+    // Create Global Index Map
+    const globalIndexMap = new Map<string, number>();
+    globalCitekeyOrder.forEach((key, idx) => {
+      globalIndexMap.set(key, idx + 1);
+    });
+
+    let compiledFilesCount = 0;
+
+    // 2. Batch Compile and write every file into publication folder
+    for (const file of files) {
+      let content = fileContents.get(file.path);
+      if (content === undefined) continue;
+
+      for (const [key, globalIdx] of globalIndexMap.entries()) {
+        const ref = allReferences.get(key);
+        if (!ref) continue;
+
+        let inBodyFormatted = "";
+        if (style === 'ieee') {
+          inBodyFormatted = `[${globalIdx}]`;
+        } else if (style === 'vancouver') {
+          inBodyFormatted = `(${globalIdx})`;
+        } else if (style === 'harvard') {
+          inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
+        } else if (style === 'chicago') {
+          inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
+        } else {
+          inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
+        }
+
+        const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
+        const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+        content = content.replace(citekeyRegex, inBodyFormatted);
+        content = content.replace(footnoteCallRegex, inBodyFormatted);
+
+        // Strip local footnote definition
+        const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
+        content = content.replace(fnCleanRegex, "");
+      }
+
+      content = content.replace(/\n{3,}$/, "\n\n");
+
+      // Write compiled file to publication folder
+      const targetOutPath = normalizePath(`${pubDir}/${file.name}`);
+      await this.app.vault.adapter.write(targetOutPath, content);
+      compiledFilesCount++;
+    }
+
+    // 3. Generate Master Global Bibliography file
+    const targetRefs = globalCitekeyOrder.map(k => allReferences.get(k)!).filter(Boolean);
+    const bibText = CitationEngine.generateBibliography(targetRefs, style, `References - ${project.name}`);
+    const bibFilePath = normalizePath(`${pubDir}/References - ${project.name}.md`);
+    await this.app.vault.adapter.write(bibFilePath, bibText);
+
+    return {
+      compiledFilesCount,
+      totalCitationsCount: globalCitekeyOrder.length,
+      bibliographyPath: bibFilePath
+    };
+  }
 }
