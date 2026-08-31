@@ -952,12 +952,12 @@ export class CitationManagerView extends ItemView {
 
     const rightGroup = footer.createDiv({ cls: "status-island-right" });
 
-    // Settings / Stats Toggle Button (Sliders icon)
+    // Settings / Stats Toggle Button (Cog icon)
     const settingsBtn = rightGroup.createEl("button", { 
       cls: `status-stats-icon-btn ${this.currentSubpanel === 'stats' ? 'active' : ''}`, 
       title: "Project Settings, Format & Stats" 
     });
-    setIcon(settingsBtn, "sliders");
+    setIcon(settingsBtn, "cog");
     settingsBtn.addEventListener("click", () => {
       this.currentSubpanel = this.currentSubpanel === 'stats' ? 'citations' : 'stats';
       this.renderUI();

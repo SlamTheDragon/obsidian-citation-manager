@@ -98,7 +98,7 @@ export class PDFImportModal extends Modal {
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-standard-modal-root");
+    contentEl.addClass("citation-native-modal-content");
 
     // Modal Header
     const header = contentEl.createDiv({ cls: "citation-modal-header-row" });
@@ -106,11 +106,8 @@ export class PDFImportModal extends Modal {
     setIcon(iconSpan, "paperclip");
     header.createEl("h2", { text: "Import PDF Document" });
 
-    // Scrollable Center Body
-    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-area" });
-
     // File Info Card
-    const fileCard = scrollBody.createDiv({ cls: "citation-modal-section-card" });
+    const fileCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
     const fileRow = fileCard.createDiv({ cls: "fetch-title" });
     setIcon(fileRow.createSpan({ cls: "inline-icon" }), "file-text");
     fileRow.createSpan({ text: ` ${this.pdfFile.name} ` });
@@ -137,7 +134,7 @@ export class PDFImportModal extends Modal {
       });
 
     if (this.mode === 'existing') {
-      const attachCard = scrollBody.createDiv({ cls: "citation-modal-section-card" });
+      const attachCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
       new Setting(attachCard)
         .setName("Target Citation")
         .setDesc("Choose which citation should hold this PDF attachment")
@@ -150,7 +147,7 @@ export class PDFImportModal extends Modal {
         });
     } else {
       // Auto-Fetch Card
-      const fetchBox = scrollBody.createDiv({ cls: "citation-modal-section-card" });
+      const fetchBox = contentEl.createDiv({ cls: "citation-modal-section-card" });
       const fetchTitleRow = fetchBox.createDiv({ cls: "section-card-header" });
       fetchTitleRow.createEl("div", { cls: "section-card-title", text: "Auto-Fetch Metadata" });
       fetchTitleRow.createEl("div", { cls: "section-card-desc", text: "Paste DOI or URL to pull publication details automatically" });
@@ -194,7 +191,7 @@ export class PDFImportModal extends Modal {
       });
 
       // --- SECTION 1: CORE INFORMATION ---
-      const coreCard = scrollBody.createDiv({ cls: "citation-modal-section-card" });
+      const coreCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
       coreCard.createEl("div", { cls: "section-card-title", text: "Core Information" });
 
       // Title
@@ -232,7 +229,7 @@ export class PDFImportModal extends Modal {
 
       const typeCol = metaGrid.createDiv({ cls: "form-grid-col" });
       typeCol.createEl("label", { cls: "stacked-label", text: "Type" });
-      const typeSelect = typeCol.createEl("select", { cls: "dropdown grid-input" });
+      const typeSelect = typeCol.createEl("select", { cls: "dropdown grid-input-dropdown" });
       const types = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
       types.forEach(t => {
         const opt = typeSelect.createEl("option", { value: t, text: t.toUpperCase() });
@@ -253,7 +250,7 @@ export class PDFImportModal extends Modal {
 
       // --- ACCORDION 1: PUBLICATION & VENUE ---
       this.createExclusiveAccordion(
-        scrollBody,
+        contentEl,
         "pub",
         "Publication & Venue",
         (body) => {
@@ -286,7 +283,7 @@ export class PDFImportModal extends Modal {
 
       // --- ACCORDION 2: IDENTIFIERS & DOI ---
       this.createExclusiveAccordion(
-        scrollBody,
+        contentEl,
         "ids",
         "Identifiers, DOI & URL",
         (body) => {
@@ -312,7 +309,7 @@ export class PDFImportModal extends Modal {
 
       // --- ACCORDION 3: ABSTRACT ---
       this.createExclusiveAccordion(
-        scrollBody,
+        contentEl,
         "abstract",
         "Abstract & Notes",
         (body) => {
@@ -324,13 +321,13 @@ export class PDFImportModal extends Modal {
       );
 
       // Live Output Preview Box
-      scrollBody.createEl("div", { cls: "preview-section-title", text: "Live Output Preview" });
-      this.previewEl = scrollBody.createDiv({ cls: "citation-modal-preview-box" });
+      contentEl.createEl("div", { cls: "preview-section-title", text: "Live Output Preview" });
+      this.previewEl = contentEl.createDiv({ cls: "citation-modal-preview-box" });
       this.updatePreviews();
     }
 
-    // Fixed Bottom Modal Footer Bar
-    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
+    // Sticky Bottom Footer Bar
+    const footerBar = contentEl.createDiv({ cls: "citation-modal-sticky-footer" });
     
     const cancelBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());

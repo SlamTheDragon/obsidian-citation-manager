@@ -10,9 +10,7 @@ export class ReferenceEditorModal extends Modal {
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
 
-  // Track currently active open accordion (only 1 can be open at a time)
   private activeAccordion: string | null = null;
-
   private previewEl: HTMLElement | null = null;
   private accordionCards: Map<string, { cardEl: HTMLElement; iconEl: HTMLElement }> = new Map();
 
@@ -63,22 +61,18 @@ export class ReferenceEditorModal extends Modal {
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-standard-modal-root");
+    contentEl.addClass("citation-native-modal-content");
 
-    // Modal Header
+    // Modal Title Header
     const headerRow = contentEl.createDiv({ cls: "citation-modal-header-row" });
     const iconSpan = headerRow.createSpan({ cls: "modal-header-icon" });
     setIcon(iconSpan, this.isNew ? "plus-circle" : "edit-3");
     headerRow.createEl("h2", { text: this.isNew ? "New Citation" : `Edit Citation: ${this.ref.citekey}` });
 
-    // Scrollable Center Body
-    const scrollBody = contentEl.createDiv({ cls: "citation-modal-scroll-area" });
-
-    // Auto-Fetch Card
-    const fetchBox = scrollBody.createDiv({ cls: "citation-modal-section-card" });
-    const fetchTitleRow = fetchBox.createDiv({ cls: "section-card-header" });
-    fetchTitleRow.createEl("div", { cls: "section-card-title", text: "Auto-Fetch Metadata" });
-    fetchTitleRow.createEl("div", { cls: "section-card-desc", text: "Paste DOI, arXiv ID, ISBN, URL, or BibTeX snippet to fill fields automatically" });
+    // 1. Auto-Fetch Card
+    const fetchBox = contentEl.createDiv({ cls: "citation-modal-section-card" });
+    fetchBox.createEl("div", { cls: "section-card-title", text: "Auto-Fetch Metadata" });
+    fetchBox.createEl("div", { cls: "section-card-desc", text: "Paste DOI, arXiv ID, ISBN, URL, or BibTeX snippet to auto-fill" });
 
     const fetchInputRow = fetchBox.createDiv({ cls: "fetch-input-row" });
     const fetchInput = fetchInputRow.createEl("input", {
@@ -116,11 +110,11 @@ export class ReferenceEditorModal extends Modal {
       }
     });
 
-    // --- SECTION 1: CORE INFORMATION ---
-    const coreCard = scrollBody.createDiv({ cls: "citation-modal-section-card" });
+    // 2. Core Information Card
+    const coreCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
     coreCard.createEl("div", { cls: "section-card-title", text: "Core Information" });
 
-    // 1. Title (Side label with full-width input)
+    // Title (Setting row with full-width input)
     new Setting(coreCard)
       .setName("Title")
       .addText(text => {
@@ -133,16 +127,16 @@ export class ReferenceEditorModal extends Modal {
         text.inputEl.addClass("setting-full-width-input");
       });
 
-    // 2. Authors (Header on top, full-width chip box on new line)
+    // Authors (Stacked header on top, interactive chips on new line)
     const authorSection = coreCard.createDiv({ cls: "form-stacked-group" });
     const authorHeader = authorSection.createDiv({ cls: "stacked-label-with-desc" });
     authorHeader.createEl("label", { cls: "stacked-label", text: "Authors" });
-    authorHeader.createSpan({ cls: "stacked-desc", text: "(Type name and press Enter or comma)" });
+    authorHeader.createSpan({ cls: "stacked-desc", text: "(Type author name and press Enter or comma)" });
     
     const authorContainer = authorSection.createDiv({ cls: "author-chips-input-container" });
     this.renderAuthorChips(authorContainer);
 
-    // 3. Year, Type, Citekey in a spacious 3-column stacked grid
+    // Metadata 3-Column Grid (Year, Type, Citekey)
     const metaGrid = coreCard.createDiv({ cls: "form-grid-3" });
 
     const yearCol = metaGrid.createDiv({ cls: "form-grid-col" });
@@ -155,7 +149,7 @@ export class ReferenceEditorModal extends Modal {
 
     const typeCol = metaGrid.createDiv({ cls: "form-grid-col" });
     typeCol.createEl("label", { cls: "stacked-label", text: "Type" });
-    const typeSelect = typeCol.createEl("select", { cls: "dropdown grid-input" });
+    const typeSelect = typeCol.createEl("select", { cls: "dropdown grid-input-dropdown" });
     const types: ReferenceType[] = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
     types.forEach(t => {
       const opt = typeSelect.createEl("option", { value: t, text: t.toUpperCase() });
@@ -174,9 +168,9 @@ export class ReferenceEditorModal extends Modal {
       this.updatePreviews();
     });
 
-    // --- ACCORDION 1: PUBLICATION & VENUE ---
+    // 3. Accordion 1: Publication & Venue
     this.createExclusiveAccordion(
-      scrollBody,
+      contentEl,
       "pub",
       "Publication & Venue",
       (body) => {
@@ -212,9 +206,9 @@ export class ReferenceEditorModal extends Modal {
       }
     );
 
-    // --- ACCORDION 2: IDENTIFIERS, DOI & URL ---
+    // 4. Accordion 2: Identifiers, DOI & URL
     this.createExclusiveAccordion(
-      scrollBody,
+      contentEl,
       "ids",
       "Identifiers, DOI & URL",
       (body) => {
@@ -249,9 +243,9 @@ export class ReferenceEditorModal extends Modal {
       }
     );
 
-    // --- ACCORDION 3: ABSTRACT & LITERATURE SUMMARY ---
+    // 5. Accordion 3: Abstract & Literature Summary
     this.createExclusiveAccordion(
-      scrollBody,
+      contentEl,
       "abstract",
       "Abstract & Literature Summary",
       (body) => {
@@ -262,13 +256,13 @@ export class ReferenceEditorModal extends Modal {
       }
     );
 
-    // Live Output Preview Box
-    scrollBody.createEl("div", { cls: "preview-section-title", text: "Live Output Preview" });
-    this.previewEl = scrollBody.createDiv({ cls: "citation-modal-preview-box" });
+    // 6. Live Output Preview Box
+    contentEl.createEl("div", { cls: "preview-section-title", text: "Live Output Preview" });
+    this.previewEl = contentEl.createDiv({ cls: "citation-modal-preview-box" });
     this.updatePreviews();
 
-    // Fixed Bottom Modal Footer Bar
-    const footerBar = contentEl.createDiv({ cls: "citation-modal-footer-bar" });
+    // 7. Sticky Bottom Footer Bar
+    const footerBar = contentEl.createDiv({ cls: "citation-modal-sticky-footer" });
     
     const cancelBtn = footerBar.createEl("button", { cls: "citation-small-btn citation-btn-secondary", text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());
