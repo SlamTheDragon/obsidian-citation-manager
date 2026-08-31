@@ -10,6 +10,7 @@ import { PDFImportModal } from './PDFImportModal';
 import { PromptModal } from './PromptModal';
 import { ConfirmModal } from './ConfirmModal';
 import { FilePickerModal } from './FilePickerModal';
+import { ExportPublicationModal } from './ExportPublicationModal';
 import { Logger } from '../logger';
 
 export const VIEW_TYPE_CITATION_MANAGER = "citation-manager-view";
@@ -732,6 +733,21 @@ export class CitationManagerView extends ItemView {
       } catch (err: any) {
         new Notice(`Export error: ${err.message}`);
       }
+    });
+
+    // Publication / Export Studio Button
+    const pubStudioBtn = exportCard.createEl("button", { 
+      cls: "citation-small-btn citation-btn-secondary full-width-btn", 
+      text: "✨ Publication Studio (Prepare for PDF/Print)" 
+    });
+    pubStudioBtn.style.marginTop = "6px";
+    pubStudioBtn.addEventListener("click", () => {
+      new ExportPublicationModal(
+        this.app,
+        project,
+        this.referencesMap,
+        this.projectIndexer
+      ).open();
     });
   }
 

@@ -5,6 +5,7 @@ import { ProjectIndexer } from './projectIndexer';
 import { CitationManagerView, VIEW_TYPE_CITATION_MANAGER } from './views/CitationManagerView';
 import { InsertCitationModal } from './views/InsertCitationModal';
 import { BibliographyModal } from './views/BibliographyModal';
+import { ExportPublicationModal } from './views/ExportPublicationModal';
 import { CitationManagerSettingTab } from './settingsTab';
 import { CitationEditorSuggest } from './editorSuggest';
 import { MetadataResolvers } from './metadataResolvers';
@@ -103,6 +104,34 @@ export default class CitationManagerPlugin extends Plugin {
       this.app.vault.on('delete', (file) => {
         if (file.path.startsWith(this.settings.referencesFolder)) {
           this.refreshOpenViews();
+        }
+      })
+    );
+
+    // Live Automated Footnote Sync on Document Edits
+    let liveSyncDebounce: any = null;
+    this.registerEvent(
+      this.app.vault.on('modify', async (file) => {
+        if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
+        if (file.path.startsWith(this.settings.referencesFolder)) return;
+
+        const project = this.getActiveProject();
+        const shouldSync = Boolean(project?.enableFootnoteAutoSync || this.settings.enableFootnoteAutoSync || project?.inBodyFormat === 'footnote');
+
+        if (shouldSync && project) {
+          if (liveSyncDebounce) clearTimeout(liveSyncDebounce);
+          liveSyncDebounce = setTimeout(async () => {
+            const isFileInProj = this.projectIndexer.isFileInProject(file, project);
+            if (isFileInProj) {
+              const refsMap = await this.storageManager.loadAllReferences();
+              await this.projectIndexer.syncFootnotesInRegisteredFiles(
+                project,
+                refsMap,
+                project.citationStyle || this.settings.defaultCitationStyle,
+                this.settings.referencesFolder
+              );
+            }
+          }, 800);
         }
       })
     );
@@ -218,6 +247,20 @@ export default class CitationManagerPlugin extends Plugin {
           this.settings.referencesFolder
         );
         new Notice(`Synced ${res.updatedFootnotesCount} definitions across ${res.updatedFilesCount} documents.`);
+      },
+    });
+
+    this.addCommand({
+      id: 'export-publication-studio',
+      name: 'Publication Studio (Prepare for PDF/Print)',
+      callback: async () => {
+        const refsMap = await this.storageManager.loadAllReferences();
+        new ExportPublicationModal(
+          this.app,
+          this.getActiveProject(),
+          refsMap,
+          this.projectIndexer
+        ).open();
       },
     });
 
