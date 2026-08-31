@@ -53,7 +53,7 @@ export interface ProjectRecord {
   referenceIds: string[];    // Citekeys belonging to this project
   citationStyle?: CitationStyle;
   inBodyFormat?: InBodyFormat;
-  publicationFolder?: string; // Dedicated per-project export destination
+  publicationFolder?: string;
   created: string;
   modified: string;
 }

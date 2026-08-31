@@ -118,14 +118,14 @@ export class ExportPublicationModal extends Modal {
       globalCard.createEl("div", { cls: "section-card-title", text: `Global Corpus Batch Export: ${this.project.name}` });
       globalCard.createEl("div", {
         cls: "section-card-desc",
-        text: `Compiles all linked documents in '${this.project.name}' with synchronized sequential numbering, writes them to '${pubFolder}/', and creates 'References - ${this.project.name}.md'. Strips citation-manager frontmatter tags so published copies are clean. Source files remain unmodified.`
+        text: `Compiles all linked documents in '${this.project.name}', writes them to '${pubFolder}/', and creates 'References - ${this.project.name}.md'. Strips citation-manager frontmatter tags so published copies are clean. Source files remain unmodified.`
       });
 
       new Setting(globalCard)
         .setName("Batch Export Project Corpus")
         .setDesc(`Output all compiled project files to /${pubFolder}/`)
         .addButton(btn => btn
-          .setButtonText(`Export Corpus to ${pubFolder}/`)
+          .setButtonText(`Export Corpus`)
           .setCta()
           .onClick(async () => {
             btn.setDisabled(true);
@@ -328,7 +328,7 @@ export class ExportPublicationModal extends Modal {
 
     content = content.replace(/\n{3,}$/, "\n\n");
 
-    // 4. Append Bibliography
+    // 3. Append Bibliography
     if (this.appendBib && usedCitekeys.length > 0) {
       const targetRefs = usedCitekeys.map(k => this.allReferences.get(k)!).filter(Boolean);
       const bibText = CitationEngine.generateBibliography(targetRefs, this.selectedStyle, "References");

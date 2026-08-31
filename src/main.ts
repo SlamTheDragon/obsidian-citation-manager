@@ -125,7 +125,7 @@ export default class CitationManagerPlugin extends Plugin {
       })
     );
 
-    // Live Automated Sync on Document Edits (Always active in background)
+    // Live Automated Footnote Sync on Document Edits
     let liveSyncDebounce: any = null;
     this.registerEvent(
       this.app.vault.on('modify', async (file) => {
@@ -133,7 +133,9 @@ export default class CitationManagerPlugin extends Plugin {
         if (file.path.startsWith(this.settings.referencesFolder)) return;
 
         const project = this.getActiveProject();
-        if (project) {
+        const shouldSync = project?.inBodyFormat === 'footnote';
+
+        if (shouldSync && project) {
           if (liveSyncDebounce) clearTimeout(liveSyncDebounce);
           liveSyncDebounce = setTimeout(async () => {
             const isFileInProj = this.projectIndexer.isFileInProject(file, project);

@@ -260,7 +260,7 @@ export class CitationEngine {
 
     switch (format) {
       case 'citekey':
-        return `[${refs.map(r => `@${r.citekey}`).join('; ')}]`;
+        return refs.map(r => `[@${r.citekey}]`).join(' ');
       case 'parenthetical': {
         const sorted = [...refs].sort((a, b) => {
           const authorA = a.authors?.[0] || a.citekey;
@@ -281,7 +281,7 @@ export class CitationEngine {
       case 'footnote':
         return refs.map(r => `[^${r.citekey}]`).join('');
       default:
-        return `[${refs.map(r => `@${r.citekey}`).join('; ')}]`;
+        return refs.map(r => `[@${r.citekey}]`).join(' ');
     }
   }
 
