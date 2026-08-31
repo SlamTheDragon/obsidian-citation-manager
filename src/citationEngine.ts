@@ -336,6 +336,31 @@ export class CitationEngine {
     };
   }
 
+  /**
+   * Generates formatted Bibliography markdown
+   */
+  static generateBibliography(refs: ReferenceMetadata[], style: CitationStyle = 'apa7', title: string = "Bibliography"): string {
+    if (!refs || refs.length === 0) {
+      return `## ${title}\n\n*No citations found in this project.*`;
+    }
+
+    const lines: string[] = [`## ${title}\n`];
+    refs.forEach((ref, index) => {
+      let text = "";
+      switch (style) {
+        case 'apa7': text = this.formatAPA7(ref); break;
+        case 'ieee': text = this.formatIEEE(ref, index + 1); break;
+        case 'harvard': text = this.formatHarvard(ref); break;
+        case 'chicago': text = this.formatChicago(ref); break;
+        case 'vancouver': text = this.formatVancouver(ref, index + 1); break;
+        default: text = this.formatAPA7(ref);
+      }
+      lines.push(text);
+    });
+
+    return lines.join("\n\n");
+  }
+
   private static getLastName(authorStr: string): string {
     const clean = authorStr.trim();
     if (clean.includes(",")) return clean.split(",")[0].trim();

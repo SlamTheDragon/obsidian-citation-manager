@@ -725,11 +725,11 @@ export class CitationManagerView extends ItemView {
   }
 
   private getFormattedBib(project: ProjectRecord | null): string {
-    const virtualProj: ProjectRecord = project || {
-      id: "__ALL__",
+    const virtualProj: ProjectRecord = (project && project.id !== ALL_PROJECTS_ID) ? project : {
+      id: ALL_PROJECTS_ID,
       name: "All References",
       registeredFiles: [],
-      referenceIds: [],
+      referenceIds: Array.from(this.referencesMap.keys()),
       created: "",
       modified: "",
     };
@@ -984,12 +984,6 @@ export class CitationManagerView extends ItemView {
       if (project && project.id !== ALL_PROJECTS_ID) {
         const inProject = ref.projects && (ref.projects.includes(project.id) || ref.projects.includes(project.name));
         if (!inProject) return false;
-      } else {
-        if (this.settings.projects.length > 0) {
-          const declaredIds = new Set(this.settings.projects.flatMap(p => [p.id.toLowerCase(), p.name.toLowerCase()]));
-          const belongsToAny = ref.projects && ref.projects.some(p => declaredIds.has(p.toLowerCase()));
-          if (!belongsToAny) return false;
-        }
       }
 
       if (this.selectedTypeFilter !== "all" && ref.type !== this.selectedTypeFilter) {

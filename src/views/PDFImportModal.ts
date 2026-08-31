@@ -1,5 +1,5 @@
 import { App, Modal, Setting, Notice, setIcon } from 'obsidian';
-import { ReferenceMetadata, ProjectRecord } from '../types';
+import { ReferenceMetadata, ProjectRecord, ReferenceType } from '../types';
 import { StorageManager } from '../storageManager';
 import { MetadataResolvers } from '../metadataResolvers';
 import { CitationEngine } from '../citationEngine';
@@ -189,54 +189,69 @@ export class PDFImportModal extends Modal {
       coreCard.createEl("div", { cls: "section-card-title", text: "Core Information" });
 
       // Title
-      new Setting(coreCard)
-        .setName("Title")
-        .addText(text => {
-          text.setValue(this.ref.title)
-            .setPlaceholder("Title...")
-            .onChange(val => {
-              this.ref.title = val;
-              this.updatePreviews();
-            });
-          text.inputEl.addClass("setting-full-width-input");
-        });
+      const titleGroup = coreCard.createDiv({ cls: "citation-form-group" });
+      titleGroup.createEl("label", { cls: "citation-form-label", text: "Title" });
+      const titleInput = titleGroup.createEl("input", {
+        type: "text",
+        cls: "citation-form-input",
+        placeholder: "Title...",
+        value: this.ref.title
+      });
+      titleInput.addEventListener("input", () => {
+        this.ref.title = titleInput.value;
+        this.updatePreviews();
+      });
 
       // Authors
-      const authorSection = coreCard.createDiv({ cls: "form-stacked-group" });
-      const authorHeader = authorSection.createDiv({ cls: "stacked-label-with-desc" });
-      authorHeader.createEl("label", { cls: "stacked-label", text: "Authors" });
-      authorHeader.createSpan({ cls: "stacked-desc", text: "(Type author name and press Enter or comma)" });
+      const authorGroup = coreCard.createDiv({ cls: "citation-form-group" });
+      const authorLabelRow = authorGroup.createDiv({ cls: "citation-label-row" });
+      authorLabelRow.createEl("label", { cls: "citation-form-label", text: "Authors" });
+      authorLabelRow.createSpan({ cls: "citation-form-hint", text: "(Press Enter or comma to add author)" });
       
-      const authorContainer = authorSection.createDiv({ cls: "author-chips-input-container" });
+      const authorContainer = authorGroup.createDiv({ cls: "author-chips-input-container" });
       this.renderAuthorChips(authorContainer);
 
       // Metadata (Year, Type, Citekey)
-      new Setting(coreCard)
-        .setName("Metadata")
-        .addText(text => text
-          .setPlaceholder("Year (e.g. 2026)")
-          .setValue(String(this.ref.year || ""))
-          .onChange(val => {
-            this.ref.year = val;
-            this.updatePreviews();
-          }))
-        .addDropdown(drop => {
-          const types: ('journal' | 'conference' | 'book' | 'webpage' | 'blog' | 'video' | 'preprint' | 'report' | 'standard' | 'thesis' | 'other')[] = 
-            ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
-          types.forEach(t => drop.addOption(t, t.toUpperCase()));
-          drop.setValue(this.ref.type);
-          drop.onChange(val => {
-            this.ref.type = val as any;
-            this.updatePreviews();
-          });
-        })
-        .addText(text => text
-          .setPlaceholder("Citekey (Auto-generated)")
-          .setValue(this.ref.citekey)
-          .onChange(val => {
-            this.ref.citekey = val.replace(/[^a-zA-Z0-9_-]/g, "");
-            this.updatePreviews();
-          }));
+      const metaGrid = coreCard.createDiv({ cls: "citation-form-grid-3" });
+      
+      const yearGroup = metaGrid.createDiv({ cls: "citation-form-group" });
+      yearGroup.createEl("label", { cls: "citation-form-label", text: "Year" });
+      const yearInput = yearGroup.createEl("input", {
+        type: "text",
+        cls: "citation-form-input",
+        placeholder: "e.g. 2026",
+        value: String(this.ref.year || "")
+      });
+      yearInput.addEventListener("input", () => {
+        this.ref.year = yearInput.value;
+        this.updatePreviews();
+      });
+
+      const typeGroup = metaGrid.createDiv({ cls: "citation-form-group" });
+      typeGroup.createEl("label", { cls: "citation-form-label", text: "Type" });
+      const typeSelect = typeGroup.createEl("select", { cls: "citation-form-select" });
+      const types: ReferenceType[] = ['journal', 'conference', 'book', 'webpage', 'blog', 'video', 'preprint', 'report', 'standard', 'thesis', 'other'];
+      types.forEach(t => {
+        const opt = typeSelect.createEl("option", { value: t, text: t.toUpperCase() });
+        if (t === this.ref.type) opt.selected = true;
+      });
+      typeSelect.addEventListener("change", () => {
+        this.ref.type = typeSelect.value as ReferenceType;
+        this.updatePreviews();
+      });
+
+      const keyGroup = metaGrid.createDiv({ cls: "citation-form-group" });
+      keyGroup.createEl("label", { cls: "citation-form-label", text: "Citekey" });
+      const keyInput = keyGroup.createEl("input", {
+        type: "text",
+        cls: "citation-form-input",
+        placeholder: "Citekey (Auto-generated)",
+        value: this.ref.citekey
+      });
+      keyInput.addEventListener("input", () => {
+        this.ref.citekey = keyInput.value.replace(/[^a-zA-Z0-9_-]/g, "");
+        this.updatePreviews();
+      });
 
       // Accordion 1: Publication & Venue
       this.createAnimatedAccordion(
@@ -244,22 +259,60 @@ export class PDFImportModal extends Modal {
         'pub',
         "Publication & Venue",
         (body) => {
-          new Setting(body)
-            .setName("Journal / Conference")
-            .addText(text => {
-              text.setValue(this.ref.publication || "")
-                .onChange(val => {
-                  this.ref.publication = val;
-                  this.updatePreviews();
-                });
-              text.inputEl.addClass("setting-full-width-input");
-            });
+          const pubGroup = body.createDiv({ cls: "citation-form-group" });
+          pubGroup.createEl("label", { cls: "citation-form-label", text: "Journal / Conference / Publication" });
+          const pubInput = pubGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "e.g. ACM CHI Conference",
+            value: this.ref.publication || ""
+          });
+          pubInput.addEventListener("input", () => {
+            this.ref.publication = pubInput.value;
+            this.updatePreviews();
+          });
 
-          new Setting(body)
-            .setName("Vol / Issue / Pages")
-            .addText(t => t.setPlaceholder("Vol").setValue(this.ref.volume || "").onChange(v => { this.ref.volume = v; this.updatePreviews(); }))
-            .addText(t => t.setPlaceholder("Issue").setValue(this.ref.issue || "").onChange(v => { this.ref.issue = v; this.updatePreviews(); }))
-            .addText(t => t.setPlaceholder("Pages").setValue(this.ref.pages || "").onChange(v => { this.ref.pages = v; this.updatePreviews(); }));
+          const vipGrid = body.createDiv({ cls: "citation-form-grid-3" });
+          
+          const volGroup = vipGrid.createDiv({ cls: "citation-form-group" });
+          volGroup.createEl("label", { cls: "citation-form-label", text: "Volume" });
+          const volInput = volGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "Vol",
+            value: this.ref.volume || ""
+          });
+          volInput.addEventListener("input", () => { this.ref.volume = volInput.value; this.updatePreviews(); });
+
+          const issueGroup = vipGrid.createDiv({ cls: "citation-form-group" });
+          issueGroup.createEl("label", { cls: "citation-form-label", text: "Issue" });
+          const issueInput = issueGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "Issue",
+            value: this.ref.issue || ""
+          });
+          issueInput.addEventListener("input", () => { this.ref.issue = issueInput.value; this.updatePreviews(); });
+
+          const pagesGroup = vipGrid.createDiv({ cls: "citation-form-group" });
+          pagesGroup.createEl("label", { cls: "citation-form-label", text: "Pages" });
+          const pagesInput = pagesGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "Pages",
+            value: this.ref.pages || ""
+          });
+          pagesInput.addEventListener("input", () => { this.ref.pages = pagesInput.value; this.updatePreviews(); });
+
+          const publisherGroup = body.createDiv({ cls: "citation-form-group" });
+          publisherGroup.createEl("label", { cls: "citation-form-label", text: "Publisher" });
+          const publisherInput = publisherGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "e.g. ACM, IEEE",
+            value: this.ref.publisher || ""
+          });
+          publisherInput.addEventListener("input", () => { this.ref.publisher = publisherInput.value; });
         }
       );
 
@@ -269,23 +322,47 @@ export class PDFImportModal extends Modal {
         'ids',
         "Identifiers, DOI & URL",
         (body) => {
-          new Setting(body)
-            .setName("DOI")
-            .addText(text => text
-              .setValue(this.ref.doi || "")
-              .onChange(val => {
-                this.ref.doi = val;
-                this.updatePreviews();
-              }));
+          const doiGroup = body.createDiv({ cls: "citation-form-group" });
+          doiGroup.createEl("label", { cls: "citation-form-label", text: "DOI" });
+          const doiInput = doiGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "10.xxxx/yyyy",
+            value: this.ref.doi || ""
+          });
+          doiInput.addEventListener("input", () => { this.ref.doi = doiInput.value; this.updatePreviews(); });
 
-          new Setting(body)
-            .setName("URL")
-            .addText(text => text
-              .setValue(this.ref.url || "")
-              .onChange(val => {
-                this.ref.url = val;
-                this.updatePreviews();
-              }));
+          const urlGroup = body.createDiv({ cls: "citation-form-group" });
+          urlGroup.createEl("label", { cls: "citation-form-label", text: "URL" });
+          const urlInput = urlGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "https://...",
+            value: this.ref.url || ""
+          });
+          urlInput.addEventListener("input", () => { this.ref.url = urlInput.value; this.updatePreviews(); });
+
+          const numGrid = body.createDiv({ cls: "citation-form-grid-2" });
+          
+          const isbnGroup = numGrid.createDiv({ cls: "citation-form-group" });
+          isbnGroup.createEl("label", { cls: "citation-form-label", text: "ISBN" });
+          const isbnInput = isbnGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "ISBN",
+            value: this.ref.isbn || ""
+          });
+          isbnInput.addEventListener("input", () => { this.ref.isbn = isbnInput.value; });
+
+          const issnGroup = numGrid.createDiv({ cls: "citation-form-group" });
+          issnGroup.createEl("label", { cls: "citation-form-label", text: "ISSN" });
+          const issnInput = issnGroup.createEl("input", {
+            type: "text",
+            cls: "citation-form-input",
+            placeholder: "ISSN",
+            value: this.ref.issn || ""
+          });
+          issnInput.addEventListener("input", () => { this.ref.issn = issnInput.value; });
         }
       );
 
@@ -295,9 +372,10 @@ export class PDFImportModal extends Modal {
         'abs',
         "Abstract & Notes",
         (body) => {
-          const absWrap = body.createDiv({ cls: "form-stacked-group full-width-group" });
-          const absArea = absWrap.createEl("textarea", { 
-            cls: "stacked-textarea full-width-textarea", 
+          const absGroup = body.createDiv({ cls: "citation-form-group" });
+          absGroup.createEl("label", { cls: "citation-form-label", text: "Abstract or Synthesis Notes" });
+          const absArea = absGroup.createEl("textarea", { 
+            cls: "citation-form-textarea", 
             rows: 5, 
             placeholder: "Paper abstract or notes..." 
           });
@@ -345,6 +423,10 @@ export class PDFImportModal extends Modal {
           }
           if (!this.ref.citekey.trim()) {
             this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
+          }
+
+          if (this.project) {
+            this.ref.projects = [this.project.id];
           }
 
           const pdfPath = await this.storageManager.savePDFAttachment(this.ref.citekey, buffer);
