@@ -6,6 +6,7 @@ import { CitationManagerView, VIEW_TYPE_CITATION_MANAGER } from './views/Citatio
 import { InsertCitationModal } from './views/InsertCitationModal';
 import { BibliographyModal } from './views/BibliographyModal';
 import { ExportPublicationModal } from './views/ExportPublicationModal';
+import { ReferenceEditorModal } from './views/ReferenceEditorModal';
 import { CitationManagerSettingTab } from './settingsTab';
 import { CitationEditorSuggest } from './editorSuggest';
 import { MetadataResolvers } from './metadataResolvers';
@@ -184,29 +185,26 @@ export default class CitationManagerPlugin extends Plugin {
 
     this.addCommand({
       id: 'quick-add-reference-prompt',
-      name: 'Quick Add (DOI / URL)',
+      name: 'Quick Add Citation (DOI / arXiv / URL / Manual)',
       callback: async () => {
-        const input = prompt("Paste DOI, arXiv ID, URL, ISBN, or BibTeX snippet:");
-        if (!input || !input.trim()) return;
-
-        try {
-          const resolved = await MetadataResolvers.detectAndResolve(input.trim());
-          const project = this.getActiveProject();
-          if (project && project.id !== ALL_PROJECTS_ID) {
-            resolved.projects = [project.id];
-          }
-          await this.storageManager.saveReference(resolved as any);
-          new Notice(`Added citation [${resolved.citekey}]!`);
-          this.refreshOpenViews();
-        } catch (e: any) {
-          new Notice(`Quick Add error: ${e.message}`);
-        }
+        const project = this.getActiveProject();
+        new ReferenceEditorModal(
+          this.app,
+          { projects: project ? [project.id] : [] },
+          async (newRef) => {
+            if (project && !newRef.projects.includes(project.id)) newRef.projects.push(project.id);
+            await this.storageManager.saveReference(newRef);
+            new Notice(`Added citation [${newRef.citekey}]!`);
+            this.refreshOpenViews();
+          },
+          true
+        ).open();
       },
     });
 
     this.addCommand({
       id: 'register-active-file-to-project',
-      name: 'Link File to Project',
+      name: 'Link File to Bucket',
       callback: async () => {
         const activeFile = this.app.workspace.getActiveFile();
         if (!activeFile) {
@@ -215,7 +213,7 @@ export default class CitationManagerPlugin extends Plugin {
         }
         const project = this.getActiveProject();
         if (!project || project.id === ALL_PROJECTS_ID) {
-          new Notice("Please select a specific project first.");
+          new Notice("Please select a specific bucket first.");
           return;
         }
         await this.projectIndexer.addProjectToFrontmatter(activeFile, project.name);
@@ -249,11 +247,11 @@ export default class CitationManagerPlugin extends Plugin {
 
     this.addCommand({
       id: 'sync-footnotes-in-project',
-      name: 'Sync Footnotes',
+      name: 'Resync Notes in Bucket',
       callback: async () => {
         const project = this.getActiveProject();
         if (!project || project.id === ALL_PROJECTS_ID) {
-          new Notice("Please select a specific project to sync its linked notes.");
+          new Notice("Please select a specific bucket to sync its linked notes.");
           return;
         }
         const refsMap = await this.storageManager.loadAllReferences();

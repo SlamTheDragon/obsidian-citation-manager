@@ -45,6 +45,14 @@ export interface ReferenceMetadata {
   dateModified: string;
 }
 
+export interface ProjectExportSettings {
+  style?: CitationStyle;
+  scope?: 'local' | 'global';
+  cleanFootnotes?: boolean;
+  appendBib?: boolean;
+  outputFolder?: string;
+}
+
 export interface ProjectRecord {
   id: string;
   name: string;
@@ -54,6 +62,7 @@ export interface ProjectRecord {
   citationStyle?: CitationStyle;
   inBodyFormat?: InBodyFormat;
   publicationFolder?: string;
+  exportSettings?: ProjectExportSettings;
   created: string;
   modified: string;
 }

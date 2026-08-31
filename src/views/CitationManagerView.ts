@@ -208,7 +208,7 @@ export class CitationManagerView extends ItemView {
     const select = topBar.createEl("select", { cls: "dropdown citation-project-dropdown" });
     const allOpt = select.createEl("option", { 
       value: ALL_PROJECTS_ID, 
-      text: `All References (${this.referencesMap.size})` 
+      text: `All Citations (${this.referencesMap.size})` 
     });
     if (!project || this.settings.activeProjectId === ALL_PROJECTS_ID) {
       allOpt.selected = true;
@@ -228,13 +228,13 @@ export class CitationManagerView extends ItemView {
     // Merged Project Action Pill
     const projActions = topBar.createDiv({ cls: "citation-merged-action-pill" });
 
-    // New Project Button
-    const newProjBtn = projActions.createEl("button", { cls: "merged-btn-left", title: "Create Citation Project" });
+    // New Bucket Button
+    const newProjBtn = projActions.createEl("button", { cls: "merged-btn-left", title: "Create Citation Bucket" });
     setIcon(newProjBtn, "folder-plus");
     newProjBtn.addEventListener("click", () => {
       new PromptModal(
         this.app,
-        "Create Citation Project",
+        "Create Citation Bucket",
         "e.g. Spatial HCI",
         "",
         async (name) => {
@@ -253,28 +253,28 @@ export class CitationManagerView extends ItemView {
           this.settings.activeProjectId = id;
           await this.onSaveSettings();
           await this.refreshData();
-          new Notice(`Created project: ${name}`);
+          new Notice(`Created bucket: ${name}`);
         }
       ).open();
     });
 
-    // Delete Project Button
+    // Delete Bucket Button
     if (project) {
       const deleteProjBtn = projActions.createEl("button", { cls: "merged-btn-right btn-danger", title: `Delete '${project.name}'` });
       setIcon(deleteProjBtn, "trash-2");
       deleteProjBtn.addEventListener("click", () => {
         new ConfirmModal(
           this.app,
-          `Delete Project: ${project.name}`,
-          `Delete '${project.name}'? This removes its tag from document frontmatters. (References in .references will remain safe).`,
-          "Delete Project",
+          `Delete Bucket: ${project.name}`,
+          `Delete bucket '${project.name}'? This removes its tag from document frontmatters. (References in .references will remain safe).`,
+          "Delete Bucket",
           true,
           async () => {
             await this.projectIndexer.deleteProjectGlobally(project.name, this.settings.referencesFolder);
             this.settings.projects = this.settings.projects.filter(p => p.id !== project.id);
             this.settings.activeProjectId = ALL_PROJECTS_ID;
             await this.onSaveSettings();
-            new Notice(`Deleted project '${project.name}'`);
+            new Notice(`Deleted bucket '${project.name}'`);
             await this.refreshData();
           }
         ).open();
@@ -289,7 +289,7 @@ export class CitationManagerView extends ItemView {
     // Search Input
     const searchBox = row.createEl("input", {
       type: "text",
-      placeholder: "Search citations (title, author, DOI)...",
+      placeholder: "Search or enter DOI/arXiv to fetch...",
       cls: "citation-merged-search-input",
       value: this.searchQuery
     });
@@ -313,6 +313,46 @@ export class CitationManagerView extends ItemView {
         const cardsList = container.querySelector(".citation-reference-list-container") as HTMLElement;
         if (cardsList) {
           this.renderCardsOnly(cardsList, this.getActiveProjectRecord());
+        }
+      }
+    });
+
+    // Enter shortcut on search box: detect DOI, arXiv, ISBN, URL and open fetch modal
+    searchBox.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        const val = searchBox.value.trim();
+        const isIdentifier = val.startsWith("10.") ||
+                             val.includes("doi.org") ||
+                             val.toLowerCase().startsWith("arxiv:") ||
+                             val.startsWith("http://") ||
+                             val.startsWith("https://") ||
+                             /^97[89][-0-9]+$/.test(val) ||
+                             /^\d{4}\.\d{4,5}(v\d+)?$/.test(val);
+        if (isIdentifier) {
+          e.preventDefault();
+          const notice = new Notice(`Fetching metadata for "${val}"...`, 0);
+          try {
+            const project = this.getActiveProjectRecord();
+            const resolved = await MetadataResolvers.detectAndResolve(val);
+            notice.hide();
+            new ReferenceEditorModal(
+              this.app,
+              {
+                ...resolved,
+                projects: project && project.id !== ALL_PROJECTS_ID ? [project.id] : (resolved.projects || [])
+              },
+              async (newRef) => {
+                await this.storageManager.saveReference(newRef);
+                this.searchQuery = "";
+                this.renderUI();
+                new Notice(`Added citation [${newRef.citekey}]`);
+              },
+              true
+            ).open();
+          } catch (err: any) {
+            notice.hide();
+            new Notice(`Fetch error: ${err.message}`);
+          }
         }
       }
     });
@@ -506,7 +546,7 @@ export class CitationManagerView extends ItemView {
     });
   }
 
-  private async openAttachedPDF(ref: ReferenceMetadata) {
+   private async openAttachedPDF(ref: ReferenceMetadata) {
     if (!ref.pdfAttachment) return;
     const pathsToTry = [
       normalizePath(ref.pdfAttachment),
@@ -515,8 +555,18 @@ export class CitationManagerView extends ItemView {
     ];
 
     for (const p of pathsToTry) {
+      const file = this.app.vault.getAbstractFileByPath(p);
+      if (file instanceof TFile) {
+        const leaf = this.app.workspace.getLeaf('tab');
+        await leaf.openFile(file);
+        return;
+      }
+    }
+
+    for (const p of pathsToTry) {
       if (await this.app.vault.adapter.exists(p)) {
         try {
+          const leaf = this.app.workspace.getLeaf('tab');
           await this.app.workspace.openLinkText(p, "", false);
           return;
         } catch {
@@ -599,10 +649,8 @@ export class CitationManagerView extends ItemView {
     const fileInput = dropZone.createEl("input", { type: "file", accept: ".pdf" });
     fileInput.style.display = "none";
 
-    dropZone.addEventListener("click", (e) => {
-      if (e.target !== fileInput) fileInput.click();
-    });
-    fileInput.addEventListener("change", async () => {
+    dropZone.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", () => {
       if (fileInput.files && fileInput.files.length > 0) {
         this.openPDFImport(fileInput.files[0], project);
       }
@@ -612,10 +660,8 @@ export class CitationManagerView extends ItemView {
       e.preventDefault();
       dropZone.addClass("drag-over");
     });
-    dropZone.addEventListener("dragleave", () => {
-      dropZone.removeClass("drag-over");
-    });
-    dropZone.addEventListener("drop", async (e) => {
+    dropZone.addEventListener("dragleave", () => dropZone.removeClass("drag-over"));
+    dropZone.addEventListener("drop", (e) => {
       e.preventDefault();
       e.stopPropagation();
       dropZone.removeClass("drag-over");
@@ -634,25 +680,7 @@ export class CitationManagerView extends ItemView {
   private renderBibliographySubpanel(container: HTMLElement, project: ProjectRecord | null) {
     const wrapper = container.createDiv({ cls: "citation-subpanel-fullheight" });
 
-    // Controls Card
-    const controlsCard = wrapper.createDiv({ cls: "citation-card" });
-    const styleRow = controlsCard.createDiv({ cls: "citation-format-controls-row" });
-    
-    styleRow.createSpan({ cls: "control-label", text: "Standard:" });
-    const styleSelect = styleRow.createEl("select", { cls: "dropdown mini-dropdown" });
-    styleSelect.createEl("option", { value: "apa7", text: "APA 7" });
-    styleSelect.createEl("option", { value: "ieee", text: "IEEE" });
-    styleSelect.createEl("option", { value: "harvard", text: "Harvard" });
-    styleSelect.createEl("option", { value: "chicago", text: "Chicago" });
-    styleSelect.createEl("option", { value: "vancouver", text: "Vancouver" });
-    styleSelect.value = this.bibSelectedStyle;
-
-    styleSelect.addEventListener("change", () => {
-      this.bibSelectedStyle = styleSelect.value as CitationStyle;
-      previewBox.setText(this.getFormattedBib(project));
-    });
-
-    // Live Output Box
+    // Live Output Box (Displays only cited items across attached project files)
     const previewBox = wrapper.createEl("pre", { cls: "citation-bib-preview-box" });
     previewBox.setText(this.getFormattedBib(project));
 
@@ -707,9 +735,10 @@ export class CitationManagerView extends ItemView {
   }
 
   private getFormattedBib(project: ProjectRecord | null): string {
+    const style = project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
     const virtualProj: ProjectRecord = (project && project.id !== ALL_PROJECTS_ID) ? project : {
       id: ALL_PROJECTS_ID,
-      name: "All References",
+      name: "All Citations",
       registeredFiles: [],
       referenceIds: Array.from(this.referencesMap.keys()),
       created: "",
@@ -719,8 +748,8 @@ export class CitationManagerView extends ItemView {
     return this.projectIndexer.generateBibliography(
       virtualProj,
       Array.from(this.referencesMap.values()),
-      this.bibSelectedStyle,
-      this.bibOnlyCited,
+      style,
+      true, // Only cited across attached files
       this.stats || undefined
     );
   }
@@ -732,29 +761,75 @@ export class CitationManagerView extends ItemView {
     // Format & Style Controls Card (if in project)
     if (project) {
       const controlsCard = wrapper.createDiv({ cls: "citation-card" });
-      controlsCard.createEl("h5", { text: `Project Settings: ${project.name}` });
+      controlsCard.createEl("h5", { text: `Bucket Settings: ${project.name}` });
 
       const row = controlsCard.createDiv({ cls: "citation-format-controls-row" });
 
-      // Format Selector
+      // Unified Citation Standard / Format Selector
       const formatWrap = row.createDiv({ cls: "format-control-item" });
-      formatWrap.createSpan({ cls: "control-label", text: "Format:" });
+      formatWrap.createSpan({ cls: "control-label", text: "Citation Standard:" });
       const formatSelect = formatWrap.createEl("select", { cls: "dropdown mini-dropdown" });
-      formatSelect.createEl("option", { value: "parenthetical", text: "Parenthetical (Author, Year)" });
+      formatSelect.createEl("option", { value: "apa7_parenthetical", text: "APA 7 (Author, Year)" });
+      formatSelect.createEl("option", { value: "apa7_narrative", text: "APA 7 Narrative Author (Year)" });
       formatSelect.createEl("option", { value: "footnote", text: "Footnote [^key]" });
-      formatSelect.createEl("option", { value: "narrative", text: "Narrative Author (Year)" });
-      formatSelect.createEl("option", { value: "citekey", text: "Citekey [@key]" });
-      formatSelect.value = project.inBodyFormat || this.settings.defaultInBodyFormat;
+      formatSelect.createEl("option", { value: "ieee", text: "IEEE [1]" });
+      formatSelect.createEl("option", { value: "harvard", text: "Harvard (Author Year)" });
+      formatSelect.createEl("option", { value: "chicago", text: "Chicago (Author Year)" });
+      formatSelect.createEl("option", { value: "vancouver", text: "Vancouver (1)" });
+      formatSelect.createEl("option", { value: "citekey", text: "Pandoc Citekey [@key]" });
+
+      // Calculate current value
+      let currentVal = "apa7_parenthetical";
+      if (project.inBodyFormat === 'footnote') currentVal = "footnote";
+      else if (project.inBodyFormat === 'citekey') currentVal = "citekey";
+      else if (project.inBodyFormat === 'narrative') currentVal = "apa7_narrative";
+      else if (project.citationStyle === 'ieee') currentVal = "ieee";
+      else if (project.citationStyle === 'harvard') currentVal = "harvard";
+      else if (project.citationStyle === 'chicago') currentVal = "chicago";
+      else if (project.citationStyle === 'vancouver') currentVal = "vancouver";
+      else currentVal = "apa7_parenthetical";
+
+      formatSelect.value = currentVal;
 
       formatSelect.addEventListener("change", async () => {
-        const newFormat = formatSelect.value as InBodyFormat;
+        const val = formatSelect.value;
+        let newStyle: CitationStyle = 'apa7';
+        let newFormat: InBodyFormat = 'parenthetical';
+
+        if (val === 'footnote') {
+          newStyle = project.citationStyle || 'apa7';
+          newFormat = 'footnote';
+        } else if (val === 'citekey') {
+          newStyle = project.citationStyle || 'apa7';
+          newFormat = 'citekey';
+        } else if (val === 'apa7_narrative') {
+          newStyle = 'apa7';
+          newFormat = 'narrative';
+        } else if (val === 'ieee') {
+          newStyle = 'ieee';
+          newFormat = 'parenthetical';
+        } else if (val === 'harvard') {
+          newStyle = 'harvard';
+          newFormat = 'parenthetical';
+        } else if (val === 'chicago') {
+          newStyle = 'chicago';
+          newFormat = 'parenthetical';
+        } else if (val === 'vancouver') {
+          newStyle = 'vancouver';
+          newFormat = 'parenthetical';
+        } else {
+          newStyle = 'apa7';
+          newFormat = 'parenthetical';
+        }
+
+        project.citationStyle = newStyle;
         project.inBodyFormat = newFormat;
         await this.onSaveSettings();
 
         new ConfirmModal(
           this.app,
-          "Update In-Text Citations?",
-          `Format changed to '${newFormat}'. Update existing citations across ${project.name} documents?`,
+          "Update Citations in Bucket?",
+          `Standard changed to '${formatSelect.selectedOptions[0]?.text}'. Synchronize citations across ${project.name} documents?`,
           "Update Documents",
           false,
           async () => {
@@ -762,46 +837,10 @@ export class CitationManagerView extends ItemView {
               project,
               newFormat,
               this.referencesMap,
-              project.citationStyle || this.settings.defaultCitationStyle,
-              this.settings.referencesFolder
-            );
-            new Notice(`Updated citation format across ${mod} document(s).`);
-            await this.refreshData();
-          }
-        ).open();
-      });
-
-      // Style Selector
-      const styleWrap = row.createDiv({ cls: "format-control-item" });
-      styleWrap.createSpan({ cls: "control-label", text: "Style:" });
-      const styleSelect = styleWrap.createEl("select", { cls: "dropdown mini-dropdown" });
-      styleSelect.createEl("option", { value: "apa7", text: "APA 7" });
-      styleSelect.createEl("option", { value: "ieee", text: "IEEE" });
-      styleSelect.createEl("option", { value: "harvard", text: "Harvard" });
-      styleSelect.createEl("option", { value: "chicago", text: "Chicago" });
-      styleSelect.createEl("option", { value: "vancouver", text: "Vancouver" });
-      styleSelect.value = project.citationStyle || this.settings.defaultCitationStyle;
-
-      styleSelect.addEventListener("change", async () => {
-        const newStyle = styleSelect.value as CitationStyle;
-        project.citationStyle = newStyle;
-        await this.onSaveSettings();
-
-        new ConfirmModal(
-          this.app,
-          "Update Citation Standard?",
-          `Style changed to '${newStyle.toUpperCase()}'. Synchronize and update existing citations across ${project.name} documents?`,
-          "Update Documents",
-          false,
-          async () => {
-            const mod = await this.projectIndexer.propagateFormatChange(
-              project,
-              project.inBodyFormat || this.settings.defaultInBodyFormat,
-              this.referencesMap,
               newStyle,
               this.settings.referencesFolder
             );
-            new Notice(`Updated citation style across ${mod} document(s).`);
+            new Notice(`Updated citations across ${mod} document(s).`);
             await this.refreshData();
           }
         ).open();
@@ -810,7 +849,7 @@ export class CitationManagerView extends ItemView {
       // Resync / Catch-Up Button (Offline redundancy & recovery)
       const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
       setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
-      syncBtn.createSpan({ text: " Resync & Catch Up Project Notes" });
+      syncBtn.createSpan({ text: " Resync & Catch Up Bucket Notes" });
       syncBtn.style.marginTop = "8px";
       syncBtn.title = "Manual catch-up tool if files were modified offline or external changes occurred";
       syncBtn.addEventListener("click", async () => {
@@ -845,61 +884,52 @@ export class CitationManagerView extends ItemView {
       createStatCard("In-Text Instances", this.stats.totalCitationsInFiles);
       createStatCard("Used Citations", this.stats.usedReferencesCount, "success");
       createStatCard("Unused Citations", this.stats.unusedReferencesCount, "muted");
-    }
 
-    // 1D Linked Files Explorer
-    const filesCard = wrapper.createDiv({ cls: "citation-card citation-files-card-flex" });
-    filesCard.createEl("h5", { text: project ? `Files Linked to '${project.name}'` : "Markdown Files in Vault" });
+      // Linked Files List
+      const filesCard = wrapper.createDiv({ cls: "citation-card" });
+      const fHead = filesCard.createDiv({ cls: "citation-card-header-flex" });
+      fHead.createEl("h5", { text: `Linked Documents (${project?.registeredFiles?.length || 0})` });
 
-    const linkedFiles = this.projectIndexer.getProjectFiles(project, this.settings.referencesFolder);
+      if (project && project.registeredFiles.length > 0) {
+        const fileList = filesCard.createEl("ul", { cls: "citation-registered-files-list" });
+        for (const filePath of project.registeredFiles) {
+          const li = fileList.createEl("li");
+          const nameSpan = li.createSpan({ cls: "file-name", text: filePath.split("/").pop() || filePath });
+          nameSpan.addEventListener("click", () => {
+            const f = this.app.vault.getAbstractFileByPath(filePath);
+            if (f instanceof TFile) {
+              this.app.workspace.getLeaf().openFile(f);
+            }
+          });
 
-    if (linkedFiles.length === 0) {
-      filesCard.createEl("p", { cls: "citation-sub-desc", text: "No files linked yet. Click '+ Link to Project' in the bottom bar to link your active note." });
-    } else {
-      const fileList = filesCard.createDiv({ cls: "citation-file-explorer-list" });
-      for (const file of linkedFiles) {
-        const fileRow = fileList.createDiv({ cls: "file-explorer-row" });
-        
-        const fileInfo = fileRow.createDiv({ cls: "file-info-wrap" });
-        setIcon(fileInfo.createSpan({ cls: "inline-icon" }), "file-text");
-        fileInfo.createSpan({ cls: "file-basename", text: file.basename });
-        fileInfo.createSpan({ cls: "file-folder-path", text: `(${file.parent?.path || "/"})` });
-
-        const rowActions = fileRow.createDiv({ cls: "file-row-actions" });
-
-        const openBtn = rowActions.createEl("button", { cls: "citation-mini-btn", title: "Open Note" });
-        setIcon(openBtn, "external-link");
-        openBtn.addEventListener("click", async () => {
-          await this.app.workspace.getLeaf(false).openFile(file);
-        });
-
-        if (project) {
-          const unlinkBtn = rowActions.createEl("button", { cls: "citation-mini-btn btn-danger", title: "Unlink Note" });
-          setIcon(unlinkBtn, "x");
-          unlinkBtn.addEventListener("click", async () => {
-            project.registeredFiles = project.registeredFiles.filter(p => p !== file.path);
-            this.updateActiveDocBanner();
-            await this.projectIndexer.removeProjectFromFrontmatter(file, project.name);
+          const removeBtn = li.createEl("button", { cls: "file-remove-btn", title: "Unlink file" });
+          removeBtn.setText("×");
+          removeBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            project.registeredFiles = project.registeredFiles.filter(p => p !== filePath);
+            const fileObj = this.app.vault.getAbstractFileByPath(filePath);
+            if (fileObj instanceof TFile) {
+              await this.projectIndexer.removeProjectFromFrontmatter(fileObj, project.name);
+            }
             await this.onSaveSettings();
-            new Notice(`Unlinked "${file.basename}" from ${project.name}`);
-            this.refreshDataDebounced(50);
+            this.updateActiveDocBanner();
+            await this.refreshData();
           });
         }
+      } else {
+        filesCard.createEl("p", { cls: "citation-card-muted-text", text: "No documents linked to this bucket yet. Open a note to link it via the bottom bar." });
       }
-    }
 
-    // Unresolved Citations Warning
-    if (project && this.stats && this.stats.unresolvedCitations.length > 0) {
-      const unresBox = wrapper.createDiv({ cls: "citation-card alert-card" });
-      const hRow = unresBox.createDiv({ cls: "alert-header" });
-      setIcon(hRow.createSpan(), "alert-triangle");
-      hRow.createEl("strong", { text: ` ${this.stats.unresolvedCitations.length} Unresolved Citations in Notes` });
-
-      const unresList = unresBox.createEl("ul", { cls: "unresolved-list" });
-      for (const u of this.stats.unresolvedCitations) {
-        const li = unresList.createEl("li");
-        li.createEl("code", { text: u.rawCitation });
-        li.createSpan({ text: ` in ${u.file.split('/').pop()} (Line ${u.line})` });
+      // Unresolved Citations warning
+      if (this.stats.unresolvedCitations.length > 0) {
+        const unresCard = wrapper.createDiv({ cls: "citation-card citation-warning-card" });
+        unresCard.createEl("h5", { text: `Unresolved Citekeys (${this.stats.unresolvedCitations.length})` });
+        const unresList = unresCard.createEl("ul", { cls: "citation-unresolved-list" });
+        for (const u of this.stats.unresolvedCitations.slice(0, 8)) {
+          const li = unresList.createEl("li");
+          li.createEl("code", { text: u.rawCitation });
+          li.createSpan({ text: ` in ${u.file.split('/').pop()} (Line ${u.line})` });
+        }
       }
     }
   }
@@ -959,12 +989,12 @@ export class CitationManagerView extends ItemView {
 
     const rightGroup = footer.createDiv({ cls: "status-island-right" });
 
-    // Settings / Stats Toggle Button (Cog icon)
+    // Settings / Stats Toggle Button (Standard Obsidian Settings Icon)
     const settingsBtn = rightGroup.createEl("button", { 
       cls: `status-stats-icon-btn ${this.currentSubpanel === 'stats' ? 'active' : ''}`, 
-      title: "Project Settings, Format & Stats" 
+      title: "Bucket Settings & Statistics" 
     });
-    setIcon(settingsBtn, "cog");
+    setIcon(settingsBtn, "settings");
     settingsBtn.addEventListener("click", () => {
       this.currentSubpanel = this.currentSubpanel === 'stats' ? 'citations' : 'stats';
       this.renderUI();
@@ -1030,9 +1060,7 @@ export class CitationManagerView extends ItemView {
     const cursor = editor.getCursor();
     editor.replaceRange(inBodyText, cursor);
 
-    const shouldIncludeFootnote = format === "footnote" || Boolean(project?.enableFootnoteAutoSync || this.settings.enableFootnoteAutoSync);
-
-    if (shouldIncludeFootnote) {
+    if (format === "footnote") {
       const docText = editor.getValue();
       const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
       const footnoteIndex = existingFnMatches.length + 1;
@@ -1094,7 +1122,7 @@ export class CitationManagerView extends ItemView {
     if (this.settings.projects.length === 0) {
       new PromptModal(
         this.app,
-        "Create Citation Project for this File",
+        "Create Citation Bucket for this File",
         "e.g. Spatial HCI",
         "",
         async (name) => {
@@ -1114,7 +1142,7 @@ export class CitationManagerView extends ItemView {
           await this.projectIndexer.addProjectToFrontmatter(file, name);
           await this.onSaveSettings();
           await this.refreshData();
-          new Notice(`Linked "${file.basename}" to new project '${name}'`);
+          new Notice(`Linked "${file.basename}" to new bucket '${name}'`);
         }
       ).open();
       return;
@@ -1122,7 +1150,7 @@ export class CitationManagerView extends ItemView {
 
     const modal = new (class extends PromptModal {
       constructor(app: App, projects: ProjectRecord[], onSelect: (proj: ProjectRecord) => void) {
-        super(app, "Link Current File to Project", "Type project name or select below", "", async (name) => {
+        super(app, "Link Current File to Bucket", "Type bucket name or select below", "", async (name) => {
           const matched = projects.find(p => p.name.toLowerCase() === name.toLowerCase());
           if (matched) onSelect(matched);
         });

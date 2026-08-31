@@ -1,8 +1,41 @@
-import { App, Modal, Setting, Notice, TFile, normalizePath } from 'obsidian';
+import { App, Modal, Setting, Notice, TFile, TFolder, FuzzySuggestModal, normalizePath } from 'obsidian';
 import { ProjectRecord, ReferenceMetadata, CitationStyle, CitationManagerSettings } from '../types';
 import { CitationEngine } from '../citationEngine';
 import { ProjectIndexer } from '../projectIndexer';
 import { ConfirmModal } from './ConfirmModal';
+
+export class FolderPickerModal extends FuzzySuggestModal<TFolder> {
+  private onSelectFolder: (folder: TFolder) => void;
+
+  constructor(app: App, onSelectFolder: (folder: TFolder) => void) {
+    super(app);
+    this.onSelectFolder = onSelectFolder;
+    this.setPlaceholder("Select destination folder in vault...");
+  }
+
+  getItems(): TFolder[] {
+    const folders: TFolder[] = [];
+    const collectFolders = (folder: TFolder) => {
+      folders.push(folder);
+      for (const child of folder.children) {
+        if (child instanceof TFolder) {
+          collectFolders(child);
+        }
+      }
+    };
+    const root = this.app.vault.getRoot();
+    collectFolders(root);
+    return folders;
+  }
+
+  getItemText(item: TFolder): string {
+    return item.path === "/" ? "/ (Vault Root)" : item.path;
+  }
+
+  onChooseItem(item: TFolder, evt: MouseEvent | KeyboardEvent) {
+    this.onSelectFolder(item);
+  }
+}
 
 export class ExportPublicationModal extends Modal {
   private project: ProjectRecord | null;
@@ -31,8 +64,31 @@ export class ExportPublicationModal extends Modal {
     this.projectIndexer = projectIndexer;
     this.settings = settings;
     this.targetFile = targetFile || app.workspace.getActiveFile();
-    this.selectedStyle = project?.citationStyle || settings.defaultCitationStyle || 'apa7';
-    this.outputFolder = project?.publicationFolder || 'publication';
+
+    const saved = project?.exportSettings;
+    if (saved) {
+      if (saved.style) this.selectedStyle = saved.style;
+      if (saved.scope) this.bibScope = saved.scope;
+      if (saved.cleanFootnotes !== undefined) this.cleanFootnotes = saved.cleanFootnotes;
+      if (saved.appendBib !== undefined) this.appendBib = saved.appendBib;
+      if (saved.outputFolder) this.outputFolder = saved.outputFolder;
+    } else {
+      this.selectedStyle = project?.citationStyle || settings.defaultCitationStyle || 'apa7';
+      this.outputFolder = project?.publicationFolder || 'publication';
+    }
+  }
+
+  private persistProjectState() {
+    if (this.project) {
+      this.project.exportSettings = {
+        style: this.selectedStyle,
+        scope: this.bibScope,
+        cleanFootnotes: this.cleanFootnotes,
+        appendBib: this.appendBib,
+        outputFolder: this.outputFolder,
+      };
+      this.project.publicationFolder = this.outputFolder;
+    }
   }
 
   onOpen() {
@@ -56,7 +112,10 @@ export class ExportPublicationModal extends Modal {
         drop.addOption("chicago", "Chicago (Author Year)");
         drop.addOption("vancouver", "Vancouver (1)");
         drop.setValue(this.selectedStyle);
-        drop.onChange(val => { this.selectedStyle = val as CitationStyle; });
+        drop.onChange(val => { 
+          this.selectedStyle = val as CitationStyle; 
+          this.persistProjectState();
+        });
       });
 
     new Setting(optCard)
@@ -67,10 +126,20 @@ export class ExportPublicationModal extends Modal {
         text.setValue(this.outputFolder);
         text.onChange(val => {
           this.outputFolder = normalizePath(val.trim() || 'publication');
-          if (this.project) {
-            this.project.publicationFolder = this.outputFolder;
-          }
+          this.persistProjectState();
           this.renderActions(actionsContainer);
+        });
+      })
+      .addButton(btn => {
+        btn.setButtonText("Browse...");
+        btn.setTooltip("Select destination folder from vault");
+        btn.onClick(() => {
+          new FolderPickerModal(this.app, (folder) => {
+            const folderPath = folder.path === "/" ? "publication" : folder.path;
+            this.outputFolder = normalizePath(folderPath);
+            this.persistProjectState();
+            this.onOpen();
+          }).open();
         });
       });
 
@@ -85,6 +154,7 @@ export class ExportPublicationModal extends Modal {
         drop.setValue(this.bibScope);
         drop.onChange(val => {
           this.bibScope = val as 'local' | 'global';
+          this.persistProjectState();
           this.renderActions(actionsContainer);
         });
       });
@@ -94,7 +164,10 @@ export class ExportPublicationModal extends Modal {
       .setDesc("Remove raw [^citekey]: ... definitions from note bottom.")
       .addToggle(toggle => {
         toggle.setValue(this.cleanFootnotes);
-        toggle.onChange(val => { this.cleanFootnotes = val; });
+        toggle.onChange(val => { 
+          this.cleanFootnotes = val; 
+          this.persistProjectState();
+        });
       });
 
     // 2. Dynamic Actions Container
