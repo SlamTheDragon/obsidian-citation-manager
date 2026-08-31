@@ -474,7 +474,7 @@ export class ProjectIndexer {
             modified = true;
           }
 
-          // Footnote definition sync or cleanup
+          // Footnote definition sync
           if (newFormat === 'footnote' || project.enableFootnoteAutoSync) {
             const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
             const fnRegex = new RegExp(`^\\[\\^${key}\\]:.*$`, 'm');
@@ -482,18 +482,22 @@ export class ProjectIndexer {
               content = content.trimEnd() + `\n\n${fnDef}\n`;
               modified = true;
             }
-          } else {
-            // Non-footnote format: automatically clean up citation footnote definitions unless explicitly enabled
-            const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
-            if (fnCleanRegex.test(content)) {
-              content = content.replace(fnCleanRegex, "");
-              modified = true;
-            }
           }
         }
 
-        // Clean up any trailing excessive empty lines left behind by footnote removals
+        // Non-footnote format: automatically clean up all citation footnote definitions unless explicitly enabled
         if (newFormat !== 'footnote' && !project.enableFootnoteAutoSync) {
+          const allFnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:.*$\n?/gm;
+          content = content.replace(allFnDefRegex, (fullMatch, matchedKey) => {
+            const isRefKey = Array.from(allReferences.keys()).some(k => 
+              k.toLowerCase().replace(/[^a-z0-9]/g, '') === matchedKey.toLowerCase().replace(/[^a-z0-9]/g, '')
+            );
+            if (isRefKey || fullMatch.includes('doi:') || fullMatch.includes('http') || fullMatch.includes('pp.') || fullMatch.includes('vol.')) {
+              modified = true;
+              return "";
+            }
+            return fullMatch;
+          });
           content = content.replace(/\n{3,}$/, "\n\n");
         }
 
@@ -532,15 +536,20 @@ export class ProjectIndexer {
         let modified = false;
 
         if (!shouldKeepFootnotes) {
-          // Clean up any citation footnote definitions
-          for (const [key] of allReferences.entries()) {
-            const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
-            if (fnCleanRegex.test(content)) {
-              content = content.replace(fnCleanRegex, "");
+          // Robust cleanup: match any [^key]: ... definition where key is a citekey or citation entry
+          const allFnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:.*$\n?/gm;
+          content = content.replace(allFnDefRegex, (fullMatch, matchedKey) => {
+            const isRefKey = Array.from(allReferences.keys()).some(k => 
+              k.toLowerCase().replace(/[^a-z0-9]/g, '') === matchedKey.toLowerCase().replace(/[^a-z0-9]/g, '')
+            );
+            if (isRefKey || fullMatch.includes('doi:') || fullMatch.includes('http') || fullMatch.includes('pp.') || fullMatch.includes('vol.')) {
               modified = true;
               removedFootnotesCount++;
+              return "";
             }
-          }
+            return fullMatch;
+          });
+
           if (modified) {
             content = content.replace(/\n{3,}$/, "\n\n");
             await this.app.vault.modify(file, content);

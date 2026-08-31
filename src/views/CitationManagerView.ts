@@ -783,9 +783,28 @@ export class CitationManagerView extends ItemView {
       styleSelect.value = project.citationStyle || this.settings.defaultCitationStyle;
 
       styleSelect.addEventListener("change", async () => {
-        project.citationStyle = styleSelect.value as CitationStyle;
+        const newStyle = styleSelect.value as CitationStyle;
+        project.citationStyle = newStyle;
         await this.onSaveSettings();
-        new Notice(`Citation standard set to ${project.citationStyle.toUpperCase()}`);
+
+        new ConfirmModal(
+          this.app,
+          "Update Citation Standard?",
+          `Style changed to '${newStyle.toUpperCase()}'. Synchronize and update existing citations across ${project.name} documents?`,
+          "Update Documents",
+          false,
+          async () => {
+            const mod = await this.projectIndexer.propagateFormatChange(
+              project,
+              project.inBodyFormat || this.settings.defaultInBodyFormat,
+              this.referencesMap,
+              newStyle,
+              this.settings.referencesFolder
+            );
+            new Notice(`Updated citation style across ${mod} document(s).`);
+            await this.refreshData();
+          }
+        ).open();
       });
 
       // Footnote Plugin Compatibility Toggle
@@ -797,7 +816,20 @@ export class CitationManagerView extends ItemView {
       fnCheckbox.addEventListener("change", async () => {
         project.enableFootnoteAutoSync = fnCheckbox.checked;
         await this.onSaveSettings();
-        new Notice(`Footnote auto-sync: ${project.enableFootnoteAutoSync ? 'Enabled' : 'Disabled'}`);
+        if (!project.enableFootnoteAutoSync && project.inBodyFormat !== 'footnote') {
+          const res = await this.projectIndexer.syncFootnotesInRegisteredFiles(
+            project,
+            this.referencesMap,
+            project.citationStyle || this.settings.defaultCitationStyle,
+            this.settings.referencesFolder
+          );
+          if (res.removedFootnotesCount > 0) {
+            new Notice(`Cleaned up ${res.removedFootnotesCount} footnote definition(s).`);
+          }
+        } else {
+          new Notice(`Footnote auto-sync: ${project.enableFootnoteAutoSync ? 'Enabled' : 'Disabled'}`);
+        }
+        await this.refreshData();
       });
       fnToggleLabel.createSpan({ text: "Auto-sync footnote definitions at note bottom" });
 
