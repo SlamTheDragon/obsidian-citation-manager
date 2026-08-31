@@ -251,6 +251,41 @@ export class CitationEngine {
   }
 
   /**
+   * Formats multiple references into a single grouped in-body citation
+   * (e.g. [@Smith2020; @Jones2021] or (Jones, 2021; Smith, 2020))
+   */
+  static formatMultiInBody(refs: ReferenceMetadata[], format: InBodyFormat, style: CitationStyle = 'apa7'): string {
+    if (!refs || refs.length === 0) return "";
+    if (refs.length === 1) return this.formatInBody(refs[0], format);
+
+    switch (format) {
+      case 'citekey':
+        return `[${refs.map(r => `@${r.citekey}`).join('; ')}]`;
+      case 'parenthetical': {
+        const sorted = [...refs].sort((a, b) => {
+          const authorA = a.authors?.[0] || a.citekey;
+          const authorB = b.authors?.[0] || b;
+          return authorA.localeCompare(authorB);
+        });
+        const parts = sorted.map(r => {
+          const single = this.formatInBody(r, 'parenthetical');
+          return single.replace(/^\(|\)$/g, '');
+        });
+        return `(${parts.join('; ')})`;
+      }
+      case 'narrative': {
+        const parts = refs.map(r => this.formatInBody(r, 'narrative'));
+        if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+        return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+      }
+      case 'footnote':
+        return refs.map(r => `[^${r.citekey}]`).join('');
+      default:
+        return `[${refs.map(r => `@${r.citekey}`).join('; ')}]`;
+    }
+  }
+
+  /**
    * Formats footnote definition text for bottom of markdown file
    */
   static formatFootnoteDefinition(ref: ReferenceMetadata, style: CitationStyle = 'apa7', index: number = 1): string {
