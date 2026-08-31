@@ -737,9 +737,10 @@ export class CitationManagerView extends ItemView {
 
     // Publication / Export Studio Button
     const pubStudioBtn = exportCard.createEl("button", { 
-      cls: "citation-small-btn citation-btn-secondary full-width-btn", 
-      text: "✨ Publication Studio (Prepare for PDF/Print)" 
+      cls: "citation-small-btn citation-btn-secondary full-width-btn"
     });
+    setIcon(pubStudioBtn.createSpan({ cls: "btn-icon" }), "printer");
+    pubStudioBtn.createSpan({ text: " Publication Studio (Prepare for PDF/Print)" });
     pubStudioBtn.style.marginTop = "6px";
     pubStudioBtn.addEventListener("click", () => {
       new ExportPublicationModal(

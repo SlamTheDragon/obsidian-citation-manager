@@ -1,5 +1,5 @@
-import { App, Modal, Setting, Notice, TFile, MarkdownView } from 'obsidian';
-import { ProjectRecord, ReferenceMetadata, CitationStyle, InBodyFormat } from '../types';
+import { App, Modal, Setting, Notice, TFile, normalizePath } from 'obsidian';
+import { ProjectRecord, ReferenceMetadata, CitationStyle } from '../types';
 import { CitationEngine } from '../citationEngine';
 import { ProjectIndexer } from '../projectIndexer';
 
@@ -11,6 +11,7 @@ export class ExportPublicationModal extends Modal {
 
   private selectedStyle: CitationStyle = 'apa7';
   private appendBib: boolean = true;
+  private bibScope: 'local' | 'global' = 'local';
   private cleanFootnotes: boolean = true;
 
   constructor(
@@ -29,7 +30,7 @@ export class ExportPublicationModal extends Modal {
   }
 
   onOpen() {
-    this.titleEl.setText("Export & Publication Studio");
+    this.titleEl.setText("Publication & PDF Export Studio");
 
     const { contentEl } = this;
     contentEl.empty();
@@ -37,14 +38,14 @@ export class ExportPublicationModal extends Modal {
 
     // 1. Info Card
     const infoCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
-    infoCard.createEl("div", { cls: "section-card-title", text: "Publication & Export Preparation" });
+    infoCard.createEl("div", { cls: "section-card-title", text: "Non-Destructive Publication & Export" });
     infoCard.createEl("div", { 
       cls: "section-card-desc", 
-      text: "Transform markdown citation markers into publication-ready formatted text, clean up local footnotes, and embed standard bibliography for PDF/Print export." 
+      text: "Prepare your documents for PDF export, journal submission, or printing without losing your source citekeys." 
     });
 
     if (this.targetFile) {
-      infoCard.createEl("div", { cls: "status-log-line", text: `Target Note: ${this.targetFile.path}` });
+      infoCard.createEl("div", { cls: "status-log-line", text: `Active Note: ${this.targetFile.path}` });
     }
 
     // 2. Options Card
@@ -52,7 +53,7 @@ export class ExportPublicationModal extends Modal {
     
     new Setting(optCard)
       .setName("Citation Standard")
-      .setDesc("Format to use for in-text citations and embedded bibliography")
+      .setDesc("In-text format and bibliography standard")
       .addDropdown(drop => {
         drop.addOption("apa7", "APA 7 (Author, Year)");
         drop.addOption("ieee", "IEEE [1], [2]");
@@ -64,8 +65,18 @@ export class ExportPublicationModal extends Modal {
       });
 
     new Setting(optCard)
-      .setName("Append Master Bibliography")
-      .setDesc("Embed a formatted References section at the end of the document")
+      .setName("Bibliography Scope")
+      .setDesc("Sync bibliography locally for this note or globally for the entire project")
+      .addDropdown(drop => {
+        drop.addOption("local", "Local (Only citations in this note)");
+        drop.addOption("global", "Global (All references in project)");
+        drop.setValue(this.bibScope);
+        drop.onChange(val => { this.bibScope = val as 'local' | 'global'; });
+      });
+
+    new Setting(optCard)
+      .setName("Append References Section")
+      .setDesc("Embed formatted bibliography section at the bottom")
       .addToggle(toggle => {
         toggle.setValue(this.appendBib);
         toggle.onChange(val => { this.appendBib = val; });
@@ -73,66 +84,90 @@ export class ExportPublicationModal extends Modal {
 
     new Setting(optCard)
       .setName("Clean Local Footnote Blocks")
-      .setDesc("Remove raw [^citekey]: ... definitions from the bottom")
+      .setDesc("Strip raw [^citekey]: ... definitions from note bottom")
       .addToggle(toggle => {
         toggle.setValue(this.cleanFootnotes);
         toggle.onChange(val => { this.cleanFootnotes = val; });
       });
 
-    // 3. Action Buttons
-    const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
-    
-    const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
-    cancelBtn.addEventListener("click", () => this.close());
+    // 3. Action Buttons Card
+    const actionsCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
+    actionsCard.createEl("div", { cls: "section-card-title", text: "Export Operations" });
 
-    // Clean Current Note
+    // Option 1: Export to Separate Published Copy (Safe & Non-Destructive)
     if (this.targetFile) {
-      const exportNoteBtn = buttonRow.createEl("button", { 
-        cls: "mod-cta", 
-        text: `Prepare "${this.targetFile.basename}" for Export` 
-      });
-      exportNoteBtn.addEventListener("click", async () => {
-        exportNoteBtn.disabled = true;
-        try {
-          await this.processFile(this.targetFile!);
-          new Notice(`Successfully prepared "${this.targetFile!.basename}" for publication!`);
-          this.close();
-        } catch (e: any) {
-          new Notice(`Export error: ${e.message}`);
-          exportNoteBtn.disabled = false;
-        }
-      });
+      new Setting(actionsCard)
+        .setName("Export Clean Copy (.md)")
+        .setDesc("Creates a new standalone published markdown file, keeping this note untouched")
+        .addButton(btn => btn
+          .setButtonText("Create Published Copy")
+          .setCta()
+          .onClick(async () => {
+            btn.setDisabled(true);
+            try {
+              const baseName = this.targetFile!.basename;
+              const dir = this.targetFile!.parent ? this.targetFile!.parent.path : "";
+              const outPath = normalizePath(dir ? `${dir}/${baseName} (Published).md` : `${baseName} (Published).md`);
+
+              const compiledText = await this.generateCompiledText(this.targetFile!);
+              await this.app.vault.adapter.write(outPath, compiledText);
+              new Notice(`Created standalone export: ${outPath}`);
+              this.close();
+            } catch (err: any) {
+              new Notice(`Export error: ${err.message}`);
+              btn.setDisabled(false);
+            }
+          }));
+
+      // Option 2: Format In-Place
+      new Setting(actionsCard)
+        .setName("Format Active Note In-Place")
+        .setDesc("Replaces citekeys in this document with formatted text")
+        .addButton(btn => btn
+          .setButtonText("Format In-Place")
+          .onClick(async () => {
+            btn.setDisabled(true);
+            try {
+              const compiled = await this.generateCompiledText(this.targetFile!);
+              await this.app.vault.modify(this.targetFile!, compiled);
+              new Notice(`Formatted "${this.targetFile!.basename}" for publication!`);
+              this.close();
+            } catch (err: any) {
+              new Notice(`Error: ${err.message}`);
+              btn.setDisabled(false);
+            }
+          }));
+
+      // Option 3: Revert In-Place to Citekeys
+      new Setting(actionsCard)
+        .setName("Revert Note to Citekeys")
+        .setDesc("Restores [@citekey] markers from formatted text")
+        .addButton(btn => btn
+          .setButtonText("Revert to Citekeys")
+          .onClick(async () => {
+            btn.setDisabled(true);
+            try {
+              await this.revertFileToCitekeys(this.targetFile!);
+              new Notice(`Reverted "${this.targetFile!.basename}" back to citekeys!`);
+              this.close();
+            } catch (err: any) {
+              new Notice(`Revert error: ${err.message}`);
+              btn.setDisabled(false);
+            }
+          }));
     }
 
-    // Process All Project Notes (if project active)
-    if (this.project) {
-      const exportAllBtn = buttonRow.createEl("button", { 
-        text: `Prepare All '${this.project.name}' Notes` 
-      });
-      exportAllBtn.addEventListener("click", async () => {
-        exportAllBtn.disabled = true;
-        try {
-          const files = this.projectIndexer.getProjectFiles(this.project);
-          let count = 0;
-          for (const f of files) {
-            await this.processFile(f);
-            count++;
-          }
-          new Notice(`Successfully prepared ${count} document(s) for publication!`);
-          this.close();
-        } catch (e: any) {
-          new Notice(`Export error: ${e.message}`);
-          exportAllBtn.disabled = false;
-        }
-      });
-    }
+    // Modal Close
+    const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
+    const closeBtn = buttonRow.createEl("button", { text: "Close" });
+    closeBtn.addEventListener("click", () => this.close());
   }
 
-  private async processFile(file: TFile) {
+  private async generateCompiledText(file: TFile): Promise<string> {
     let content = await this.app.vault.read(file);
     const usedCitekeys: string[] = [];
 
-    // 1. Identify all cited keys in document
+    // 1. Identify citekeys in document
     for (const [key, ref] of this.allReferences.entries()) {
       const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
       const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
@@ -160,13 +195,11 @@ export class ExportPublicationModal extends Modal {
         inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
       }
 
-      // Replace internal citekey & footnote markers
       const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
       const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
       content = content.replace(citekeyRegex, inBodyFormatted);
       content = content.replace(footnoteCallRegex, inBodyFormatted);
 
-      // Clean bottom footnote definition if requested
       if (this.cleanFootnotes) {
         const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
         content = content.replace(fnCleanRegex, "");
@@ -175,22 +208,58 @@ export class ExportPublicationModal extends Modal {
       numericIndex++;
     }
 
-    // 3. Clean trailing empty lines
     content = content.replace(/\n{3,}$/, "\n\n");
 
-    // 4. Append Bibliography if enabled
-    if (this.appendBib && usedCitekeys.length > 0) {
-      const citedRefs = usedCitekeys.map(k => this.allReferences.get(k)!).filter(Boolean);
-      const bibText = CitationEngine.generateBibliography(citedRefs, this.selectedStyle, "References");
-      
-      // Remove any existing bibliography heading
-      const bibHeadingRegex = /##\s*References[\s\S]*$/i;
-      content = content.replace(bibHeadingRegex, "").trimEnd();
+    // 3. Append Bibliography
+    if (this.appendBib) {
+      let targetRefs: ReferenceMetadata[] = [];
+      if (this.bibScope === 'local') {
+        targetRefs = usedCitekeys.map(k => this.allReferences.get(k)!).filter(Boolean);
+      } else {
+        targetRefs = Array.from(this.allReferences.values());
+      }
 
-      content += `\n\n${bibText}\n`;
+      if (targetRefs.length > 0) {
+        const bibText = CitationEngine.generateBibliography(targetRefs, this.selectedStyle, "References");
+        const bibHeadingRegex = /##\s*References[\s\S]*$/i;
+        content = content.replace(bibHeadingRegex, "").trimEnd();
+        content += `\n\n${bibText}\n`;
+      }
     }
 
-    await this.app.vault.modify(file, content);
+    return content;
+  }
+
+  private async revertFileToCitekeys(file: TFile) {
+    let content = await this.app.vault.read(file);
+    let modified = false;
+
+    // Remove any appended references section
+    const bibHeadingRegex = /\n*##\s*References[\s\S]*$/i;
+    if (bibHeadingRegex.test(content)) {
+      content = content.replace(bibHeadingRegex, "").trimEnd() + "\n";
+      modified = true;
+    }
+
+    // Revert parentheticals back to [@citekey]
+    for (const [key, ref] of this.allReferences.entries()) {
+      const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
+      const narrative = CitationEngine.formatInBody(ref, 'narrative');
+      const targetCitekey = `[@${key}]`;
+
+      if (parenthetical && content.includes(parenthetical)) {
+        content = content.split(parenthetical).join(targetCitekey);
+        modified = true;
+      }
+      if (narrative && content.includes(narrative)) {
+        content = content.split(narrative).join(targetCitekey);
+        modified = true;
+      }
+    }
+
+    if (modified) {
+      await this.app.vault.modify(file, content);
+    }
   }
 
   onClose() {
