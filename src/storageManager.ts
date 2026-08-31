@@ -1,0 +1,226 @@
+import { App, normalizePath, parseYaml, stringifyYaml } from 'obsidian';
+import { ReferenceMetadata, CitationManagerSettings } from './types';
+import { CitationEngine } from './citationEngine';
+import { Logger } from './logger';
+
+export class StorageManager {
+  private app: App;
+  private settings: CitationManagerSettings;
+
+  constructor(app: App, settings: CitationManagerSettings) {
+    this.app = app;
+    this.settings = settings;
+  }
+
+  updateSettings(settings: CitationManagerSettings) {
+    this.settings = settings;
+  }
+
+  async ensureStorageDirectories(): Promise<void> {
+    const rootPath = normalizePath(this.settings.referencesFolder);
+    const attachmentsPath = normalizePath(`${rootPath}/attachments`);
+
+    if (!(await this.app.vault.adapter.exists(rootPath))) {
+      await this.app.vault.createFolder(rootPath);
+      Logger.debug(`Created root references folder: ${rootPath}`);
+    }
+    if (!(await this.app.vault.adapter.exists(attachmentsPath))) {
+      await this.app.vault.createFolder(attachmentsPath);
+      Logger.debug(`Created attachments folder: ${attachmentsPath}`);
+    }
+  }
+
+  async loadAllReferences(): Promise<Map<string, ReferenceMetadata>> {
+    await this.ensureStorageDirectories();
+    const references = new Map<string, ReferenceMetadata>();
+    const rootPath = normalizePath(this.settings.referencesFolder);
+
+    try {
+      const listing = await this.app.vault.adapter.list(rootPath);
+      for (const filePath of listing.files) {
+        if (filePath.endsWith('.md')) {
+          try {
+            const content = await this.app.vault.adapter.read(filePath);
+            const fileName = filePath.split('/').pop()?.replace(/\.md$/, '') || '';
+            const ref = this.parseReferenceMarkdown(content, fileName);
+            if (ref && ref.citekey) {
+              references.set(ref.citekey, ref);
+            }
+          } catch (err) {
+            Logger.error(`Error reading reference file ${filePath}:`, err);
+          }
+        }
+      }
+      Logger.debug(`Loaded ${references.size} references from ${rootPath}`);
+    } catch (e) {
+      Logger.error(`Error listing references directory ${rootPath}:`, e);
+    }
+
+    return references;
+  }
+
+  async saveReference(ref: ReferenceMetadata, originalCitekey?: string, bodyContent?: string): Promise<string> {
+    await this.ensureStorageDirectories();
+    const cleanCitekey = ref.citekey.replace(/[^a-zA-Z0-9_-]/g, "");
+    ref.citekey = cleanCitekey;
+    ref.dateModified = new Date().toISOString();
+
+    const rootPath = normalizePath(this.settings.referencesFolder);
+    const newFilePath = normalizePath(`${rootPath}/${cleanCitekey}.md`);
+
+    // Handle Citekey Rename
+    if (originalCitekey && originalCitekey !== cleanCitekey) {
+      const oldFilePath = normalizePath(`${rootPath}/${originalCitekey}.md`);
+      if (await this.app.vault.adapter.exists(oldFilePath)) {
+        await this.app.vault.adapter.remove(oldFilePath);
+        Logger.debug(`Deleted old reference note during rename: ${oldFilePath}`);
+      }
+
+      // Rename PDF attachment if present
+      const oldPdfPath = normalizePath(`${rootPath}/attachments/${originalCitekey}.pdf`);
+      const newPdfPath = normalizePath(`${rootPath}/attachments/${cleanCitekey}.pdf`);
+      if (await this.app.vault.adapter.exists(oldPdfPath)) {
+        const pdfData = await this.app.vault.adapter.readBinary(oldPdfPath);
+        await this.app.vault.adapter.writeBinary(newPdfPath, pdfData);
+        await this.app.vault.adapter.remove(oldPdfPath);
+        ref.pdfAttachment = newPdfPath;
+        Logger.debug(`Renamed attached PDF: ${oldPdfPath} -> ${newPdfPath}`);
+      }
+    }
+
+    const enriched = CitationEngine.populateStyles(ref) as ReferenceMetadata;
+
+    let existingBody = bodyContent;
+    const fileExists = await this.app.vault.adapter.exists(newFilePath);
+
+    if (fileExists && existingBody === undefined) {
+      try {
+        const fullContent = await this.app.vault.adapter.read(newFilePath);
+        existingBody = this.extractBody(fullContent);
+      } catch {}
+    }
+
+    if (!existingBody) {
+      existingBody = `\n# ${enriched.title}\n\n## Abstract & Notes\n${enriched.abstract || "*No abstract available.*"}\n`;
+    }
+
+    const frontmatterObj = {
+      citekey: enriched.citekey,
+      type: enriched.type,
+      title: enriched.title,
+      authors: enriched.authors,
+      year: enriched.year,
+      month: enriched.month || null,
+      publication: enriched.publication || null,
+      volume: enriched.volume || null,
+      issue: enriched.issue || null,
+      pages: enriched.pages || null,
+      publisher: enriched.publisher || null,
+      doi: enriched.doi || null,
+      url: enriched.url || null,
+      isbn: enriched.isbn || null,
+      issn: enriched.issn || null,
+      pdfAttachment: enriched.pdfAttachment || null,
+      projects: enriched.projects || [],
+      tags: enriched.tags || [],
+      apa: enriched.apa || "",
+      ieee: enriched.ieee || "",
+      harvard: enriched.harvard || "",
+      chicago: enriched.chicago || "",
+      vancouver: enriched.vancouver || "",
+      dateAdded: enriched.dateAdded || new Date().toISOString(),
+      dateModified: enriched.dateModified,
+    };
+
+    const cleanFrontmatter: Record<string, any> = {};
+    for (const [k, v] of Object.entries(frontmatterObj)) {
+      if (v !== null && v !== undefined) cleanFrontmatter[k] = v;
+    }
+
+    const markdownText = `---\n${stringifyYaml(cleanFrontmatter)}---\n${existingBody.trim()}\n`;
+
+    await this.app.vault.adapter.write(newFilePath, markdownText);
+    Logger.debug(`Saved reference note to ${newFilePath}`);
+    return newFilePath;
+  }
+
+  async deleteReference(citekey: string): Promise<void> {
+    const rootPath = normalizePath(this.settings.referencesFolder);
+    const filePath = normalizePath(`${rootPath}/${citekey}.md`);
+
+    if (await this.app.vault.adapter.exists(filePath)) {
+      await this.app.vault.adapter.remove(filePath);
+      Logger.debug(`Deleted reference note: ${filePath}`);
+    }
+
+    const pdfPath = normalizePath(`${rootPath}/attachments/${citekey}.pdf`);
+    if (await this.app.vault.adapter.exists(pdfPath)) {
+      await this.app.vault.adapter.remove(pdfPath);
+      Logger.debug(`Deleted attached PDF: ${pdfPath}`);
+    }
+  }
+
+  async savePDFAttachment(citekey: string, data: ArrayBuffer): Promise<string> {
+    await this.ensureStorageDirectories();
+    const rootPath = normalizePath(this.settings.referencesFolder);
+    const pdfPath = normalizePath(`${rootPath}/attachments/${citekey}.pdf`);
+
+    await this.app.vault.adapter.writeBinary(pdfPath, data);
+    Logger.debug(`Saved PDF binary to ${pdfPath}`);
+    return pdfPath;
+  }
+
+  private parseReferenceMarkdown(content: string, fallbackCitekey: string): ReferenceMetadata | null {
+    const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+    if (!match) return null;
+
+    try {
+      const parsed = parseYaml(match[1]) as any;
+      if (!parsed || typeof parsed !== "object") return null;
+
+      const citekey = parsed.citekey || fallbackCitekey;
+      const authors = Array.isArray(parsed.authors)
+        ? parsed.authors
+        : (typeof parsed.authors === "string" ? parsed.authors.split(",").map(a => a.trim()) : ["Unknown"]);
+
+      const ref: ReferenceMetadata = {
+        citekey,
+        type: parsed.type || "journal",
+        title: parsed.title || "Untitled",
+        authors,
+        year: parsed.year || new Date().getFullYear(),
+        month: parsed.month,
+        publication: parsed.publication || parsed.journal || parsed.booktitle,
+        volume: parsed.volume,
+        issue: parsed.issue,
+        pages: parsed.pages,
+        publisher: parsed.publisher,
+        doi: parsed.doi,
+        url: parsed.url,
+        isbn: parsed.isbn,
+        issn: parsed.issn,
+        abstract: parsed.abstract,
+        pdfAttachment: parsed.pdfAttachment,
+        projects: Array.isArray(parsed.projects) ? parsed.projects : (parsed.projects ? [parsed.projects] : []),
+        tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+        apa: parsed.apa,
+        ieee: parsed.ieee,
+        harvard: parsed.harvard,
+        chicago: parsed.chicago,
+        vancouver: parsed.vancouver,
+        bibtex: parsed.bibtex,
+        dateAdded: parsed.dateAdded || new Date().toISOString(),
+        dateModified: parsed.dateModified || new Date().toISOString(),
+      };
+
+      return CitationEngine.populateStyles(ref) as ReferenceMetadata;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  private extractBody(fullContent: string): string {
+    const match = fullContent.match(/^---\r?\n([\s\S]*?)\r?\n---([\s\S]*)$/);
+    return match ? match[2].trim() : fullContent.trim();
+  }
+}

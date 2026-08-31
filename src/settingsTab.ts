@@ -1,0 +1,100 @@
+import { App, PluginSettingTab, Setting, normalizePath } from 'obsidian';
+import CitationManagerPlugin from './main';
+import { CitationStyle, InBodyFormat } from './types';
+import { Logger } from './logger';
+
+export class CitationManagerSettingTab extends PluginSettingTab {
+  plugin: CitationManagerPlugin;
+
+  constructor(app: App, plugin: CitationManagerPlugin) {
+    super(app, plugin);
+    this.plugin = plugin;
+  }
+
+  display(): void {
+    const { containerEl } = this;
+    containerEl.empty();
+
+    containerEl.createEl('h2', { text: 'Citation Manager & Reference Studio Settings' });
+
+    // References Directory
+    new Setting(containerEl)
+      .setName('References Storage Directory')
+      .setDesc('Folder at vault root where reference notes and PDF attachments are stored.')
+      .addText(text => text
+        .setPlaceholder('.references')
+        .setValue(this.plugin.settings.referencesFolder)
+        .onChange(async (value) => {
+          this.plugin.settings.referencesFolder = normalizePath(value.trim() || '.references');
+          await this.plugin.saveSettings();
+          this.plugin.storageManager.updateSettings(this.plugin.settings);
+        }));
+
+    // Default Citation Style
+    new Setting(containerEl)
+      .setName('Default Citation Style')
+      .setDesc('Primary citation standard for generating reference lists and footnotes.')
+      .addDropdown(drop => {
+        drop.addOption('apa7', 'APA 7th Edition');
+        drop.addOption('ieee', 'IEEE Format');
+        drop.addOption('harvard', 'Harvard Style');
+        drop.addOption('chicago', 'Chicago (Author-Date)');
+        drop.addOption('vancouver', 'Vancouver (Numeric)');
+        drop.setValue(this.plugin.settings.defaultCitationStyle);
+        drop.onChange(async (value) => {
+          this.plugin.settings.defaultCitationStyle = value as CitationStyle;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    // Default In-Body Format
+    new Setting(containerEl)
+      .setName('Default In-Body Citation Format')
+      .setDesc('How citations are inserted into the body of your active markdown documents.')
+      .addDropdown(drop => {
+        drop.addOption('parenthetical', 'Parenthetical (Author et al., Year)');
+        drop.addOption('footnote', 'Markdown Footnote [^citekey]');
+        drop.addOption('narrative', 'Narrative Author et al. (Year)');
+        drop.addOption('citekey', 'Citekey [@citekey]');
+        drop.setValue(this.plugin.settings.defaultInBodyFormat);
+        drop.onChange(async (value) => {
+          this.plugin.settings.defaultInBodyFormat = value as InBodyFormat;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    // In-Editor Auto-Suggest
+    new Setting(containerEl)
+      .setName('In-Editor Citation Autocomplete')
+      .setDesc('Suggest matching citations when typing [@ or \\cite{ or (( in any markdown document.')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enableEditorSuggest)
+        .onChange(async (value) => {
+          this.plugin.settings.enableEditorSuggest = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // Deletion Guard
+    new Setting(containerEl)
+      .setName('Deletion Guard (Prevent Broken References)')
+      .setDesc('Block deleting a reference if it is currently cited in any registered project document.')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.blockDeletionIfInUse)
+        .onChange(async (value) => {
+          this.plugin.settings.blockDeletionIfInUse = value;
+          await this.plugin.saveSettings();
+        }));
+
+    // Debug Mode
+    new Setting(containerEl)
+      .setName('Verbose Debug Logging')
+      .setDesc('Enable detailed console diagnostics and variable telemetry for troubleshooting.')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.debugMode)
+        .onChange(async (value) => {
+          this.plugin.settings.debugMode = value;
+          Logger.setEnabled(value);
+          await this.plugin.saveSettings();
+        }));
+  }
+}
