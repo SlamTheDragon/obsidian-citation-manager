@@ -188,7 +188,7 @@ export class ExportPublicationModal extends Modal {
             new ConfirmModal(
               this.app,
               "Confirm In-Place Baking",
-              `This will replace raw citekey markers in "${this.targetFile!.basename}" with formatted text. Are you sure? (You can use 'Revert to Citekeys' later if needed).`,
+              `This will replace raw citekey markers in "${this.targetFile!.basename}" with formatted text. Are you sure?`,
               "Bake In-Place",
               true,
               async () => {
@@ -204,24 +204,6 @@ export class ExportPublicationModal extends Modal {
             ).open();
           });
         });
-
-      // 3. Revert In-Place to Citekeys
-      new Setting(localCard)
-        .setName("Revert Note to Citekeys")
-        .setDesc("Scans formatted citations in this document and restores [@citekey] markers.")
-        .addButton(btn => btn
-          .setButtonText("Revert to Citekeys")
-          .onClick(async () => {
-            btn.setDisabled(true);
-            try {
-              await this.revertFileToCitekeys(this.targetFile!);
-              new Notice(`Reverted "${this.targetFile!.basename}" to citekeys.`);
-              this.close();
-            } catch (err: any) {
-              new Notice(`Revert error: ${err.message}`);
-              btn.setDisabled(false);
-            }
-          }));
     }
   }
 
@@ -286,38 +268,6 @@ export class ExportPublicationModal extends Modal {
     }
 
     return content;
-  }
-
-  private async revertFileToCitekeys(file: TFile) {
-    let content = await this.app.vault.read(file);
-    let modified = false;
-
-    // Remove any appended references section
-    const bibHeadingRegex = /\n*##\s*References[\s\S]*$/i;
-    if (bibHeadingRegex.test(content)) {
-      content = content.replace(bibHeadingRegex, "").trimEnd() + "\n";
-      modified = true;
-    }
-
-    // Revert formatted text back to [@citekey]
-    for (const [key, ref] of this.allReferences.entries()) {
-      const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
-      const narrative = CitationEngine.formatInBody(ref, 'narrative');
-      const targetCitekey = `[@${key}]`;
-
-      if (parenthetical && content.includes(parenthetical)) {
-        content = content.split(parenthetical).join(targetCitekey);
-        modified = true;
-      }
-      if (narrative && content.includes(narrative)) {
-        content = content.split(narrative).join(targetCitekey);
-        modified = true;
-      }
-    }
-
-    if (modified) {
-      await this.app.vault.modify(file, content);
-    }
   }
 
   onClose() {

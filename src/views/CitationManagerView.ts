@@ -9,7 +9,6 @@ import { UsageLocationsModal } from './UsageLocationsModal';
 import { PDFImportModal } from './PDFImportModal';
 import { PromptModal } from './PromptModal';
 import { ConfirmModal } from './ConfirmModal';
-import { FilePickerModal } from './FilePickerModal';
 import { ExportPublicationModal } from './ExportPublicationModal';
 import { Logger } from '../logger';
 
@@ -653,17 +652,6 @@ export class CitationManagerView extends ItemView {
       previewBox.setText(this.getFormattedBib(project));
     });
 
-    if (project && this.stats) {
-      const citedLabel = styleRow.createEl("label", { cls: "citation-checkbox-label" });
-      const cb = citedLabel.createEl("input", { type: "checkbox" });
-      cb.checked = this.bibOnlyCited;
-      cb.addEventListener("change", () => {
-        this.bibOnlyCited = cb.checked;
-        previewBox.setText(this.getFormattedBib(project));
-      });
-      citedLabel.createSpan({ text: "Only cited in notes" });
-    }
-
     // Live Output Box
     const previewBox = wrapper.createEl("pre", { cls: "citation-bib-preview-box" });
     previewBox.setText(this.getFormattedBib(project));
@@ -698,41 +686,6 @@ export class CitationManagerView extends ItemView {
       const separator = doc.endsWith("\n") ? "\n" : "\n\n";
       editor.replaceRange(`${separator}${bibText}\n`, { line: editor.lineCount(), ch: 0 });
       new Notice(`Appended bibliography to ${activeView.file?.basename}`);
-    });
-
-    // Export to File Input & Button
-    const fileRow = exportCard.createDiv({ cls: "citation-quick-input-row full-width-row" });
-    const fileInput = fileRow.createEl("input", {
-      type: "text",
-      placeholder: "Target file (leave empty to pick)...",
-      cls: "citation-quick-input",
-      value: this.bibExportPath
-    });
-    fileInput.addEventListener("input", () => { this.bibExportPath = fileInput.value; });
-
-    const exportFileBtn = fileRow.createEl("button", { cls: "citation-small-btn", text: "Export File" });
-    exportFileBtn.addEventListener("click", async () => {
-      const bibText = this.getFormattedBib(project);
-
-      if (!this.bibExportPath.trim()) {
-        new FilePickerModal(this.app, async (targetFile) => {
-          try {
-            await this.app.vault.modify(targetFile, bibText);
-            new Notice(`Exported bibliography to ${targetFile.path}`);
-          } catch (err: any) {
-            new Notice(`Export error: ${err.message}`);
-          }
-        }).open();
-        return;
-      }
-
-      const cleanPath = normalizePath(this.bibExportPath.endsWith('.md') ? this.bibExportPath : `${this.bibExportPath}.md`);
-      try {
-        await this.app.vault.adapter.write(cleanPath, bibText);
-        new Notice(`Saved bibliography to ${cleanPath}`);
-      } catch (err: any) {
-        new Notice(`Export error: ${err.message}`);
-      }
     });
 
     // Export for Publication Button
