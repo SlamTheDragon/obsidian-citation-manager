@@ -9,6 +9,7 @@ import { UsageLocationsModal } from './UsageLocationsModal';
 import { PDFImportModal } from './PDFImportModal';
 import { PromptModal } from './PromptModal';
 import { ConfirmModal } from './ConfirmModal';
+import { FilePickerModal } from './FilePickerModal';
 import { Logger } from '../logger';
 
 export const VIEW_TYPE_CITATION_MANAGER = "citation-manager-view";
@@ -699,10 +700,10 @@ export class CitationManagerView extends ItemView {
     });
 
     // Export to File Input & Button
-    const fileRow = exportCard.createDiv({ cls: "citation-quick-input-row" });
+    const fileRow = exportCard.createDiv({ cls: "citation-quick-input-row full-width-row" });
     const fileInput = fileRow.createEl("input", {
       type: "text",
-      placeholder: "Target file path (e.g. References.md)...",
+      placeholder: "Target file (leave empty to pick)...",
       cls: "citation-quick-input",
       value: this.bibExportPath
     });
@@ -710,13 +711,23 @@ export class CitationManagerView extends ItemView {
 
     const exportFileBtn = fileRow.createEl("button", { cls: "citation-small-btn", text: "Export File" });
     exportFileBtn.addEventListener("click", async () => {
+      const bibText = this.getFormattedBib(project);
+
       if (!this.bibExportPath.trim()) {
-        new Notice("Please specify a file path.");
+        new FilePickerModal(this.app, async (targetFile) => {
+          try {
+            await this.app.vault.modify(targetFile, bibText);
+            new Notice(`Exported bibliography to ${targetFile.path}`);
+          } catch (err: any) {
+            new Notice(`Export error: ${err.message}`);
+          }
+        }).open();
         return;
       }
+
       const cleanPath = normalizePath(this.bibExportPath.endsWith('.md') ? this.bibExportPath : `${this.bibExportPath}.md`);
       try {
-        await this.app.vault.adapter.write(cleanPath, this.getFormattedBib(project));
+        await this.app.vault.adapter.write(cleanPath, bibText);
         new Notice(`Saved bibliography to ${cleanPath}`);
       } catch (err: any) {
         new Notice(`Export error: ${err.message}`);

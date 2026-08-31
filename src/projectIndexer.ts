@@ -422,17 +422,41 @@ export class ProjectIndexer {
 
         for (const [key, ref] of allReferences.entries()) {
           const targetInBody = CitationEngine.formatInBody(ref, newFormat);
-          const citekeyPattern = new RegExp(`\\[@${key}\\]`, 'g');
-          if (citekeyPattern.test(content)) {
-            content = content.replace(citekeyPattern, targetInBody);
+          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
+          const narrative = CitationEngine.formatInBody(ref, 'narrative');
+
+          // 1. Citekey format [@key]
+          const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
+          if (newFormat !== 'citekey' && citekeyRegex.test(content)) {
+            content = content.replace(citekeyRegex, targetInBody);
             modified = true;
           }
 
+          // 2. Footnote call [^key]
+          const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+          if (newFormat !== 'footnote' && footnoteCallRegex.test(content)) {
+            content = content.replace(footnoteCallRegex, targetInBody);
+            modified = true;
+          }
+
+          // 3. Parenthetical format (Author, Year)
+          if (newFormat !== 'parenthetical' && parenthetical && content.includes(parenthetical)) {
+            content = content.split(parenthetical).join(targetInBody);
+            modified = true;
+          }
+
+          // 4. Narrative format Author (Year)
+          if (newFormat !== 'narrative' && narrative && content.includes(narrative)) {
+            content = content.split(narrative).join(targetInBody);
+            modified = true;
+          }
+
+          // Footnote definition sync
           if (newFormat === 'footnote') {
             const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
             const fnRegex = new RegExp(`^\\[\\^${key}\\]:`, 'm');
-            if (!fnRegex.test(content)) {
-              content += `\n\n${fnDef}\n`;
+            if (!fnRegex.test(content) && (content.includes(`[^${key}]`) || modified)) {
+              content = content.trimEnd() + `\n\n${fnDef}\n`;
               modified = true;
             }
           }
