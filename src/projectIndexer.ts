@@ -628,6 +628,53 @@ export class ProjectIndexer {
   }
 
   /**
+   * Propagates global Footnote Mode changes across all registered files
+   */
+  async propagateFootnoteModeGlobally(
+    enableFootnoteMode: boolean,
+    allReferences: Map<string, ReferenceMetadata>,
+    projects: ProjectRecord[],
+    referencesFolder: string = ".references"
+  ): Promise<{ updatedFilesCount: number }> {
+    let totalUpdated = 0;
+    for (const proj of projects) {
+      if (enableFootnoteMode) {
+        // Switch in-text to footnotes and sync definitions
+        const files = this.getProjectFiles(proj, referencesFolder);
+        for (const file of files) {
+          try {
+            let content = await this.app.vault.read(file);
+            let modified = false;
+            for (const [key, ref] of allReferences.entries()) {
+              const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
+              const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
+              if (citekeyRegex.test(content)) {
+                content = content.replace(citekeyRegex, `[^${key}]`);
+                modified = true;
+              }
+              if (parenthetical && content.includes(parenthetical)) {
+                content = content.split(parenthetical).join(`[^${key}]`);
+                modified = true;
+              }
+            }
+            if (modified) {
+              await this.app.vault.modify(file, content);
+              totalUpdated++;
+            }
+          } catch {}
+        }
+        await this.syncFootnotesInRegisteredFiles(proj, allReferences, proj.citationStyle || 'apa7', referencesFolder);
+      } else {
+        // Switch in-text to bucket citation standard
+        const targetFormat = proj.inBodyFormat || 'parenthetical';
+        const modCount = await this.propagateFormatChange(proj, targetFormat, allReferences, proj.citationStyle || 'apa7', referencesFolder);
+        totalUpdated += modCount;
+      }
+    }
+    return { updatedFilesCount: totalUpdated };
+  }
+
+  /**
    * Propagates in-text format change across project documents
    */
   async propagateFormatChange(

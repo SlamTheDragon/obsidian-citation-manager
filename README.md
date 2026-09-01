@@ -1,81 +1,91 @@
-# Obsidian Citation Manager & Reference Studio
+﻿# Obsidian Citation Manager & Reference Studio
 
-A project-centric, native reference manager, live citation indexer, linter, and bibliography studio for Obsidian with `.references` folder integration.
-
-Developed in `F:/.repo/obsidian-citation-manager` and integrated directly with your Obsidian vault.
+A project-centric, local-first academic reference manager, live citation indexer, linter, and publication export studio for Obsidian with `.references` folder integration.
 
 ---
 
-## UX Progressive Disclosure Architecture
+## Architectural Principles
+
+1. **Local-First & Markdown Native**: All reference metadata notes are stored as individual Markdown files inside `.references/` (or your configured root directory). No proprietary databases, no cloud dependencies, and zero vendor lock-in.
+2. **Authoritative Academic Standards**: Citation styles (APA 7th Edition, IEEE, Harvard, Chicago Author-Date, Vancouver) govern both in-body citations and reference lists consistently per project bucket.
+3. **Non-Destructive Footnote Mode**: Obsidian Footnote Mode (`[^citekey]`) is a toggleable companion setting for seamless Obsidian Footnotes plugin drafting, automatically converted to clean target standards upon publication export without data loss.
+4. **Interactive Diagnostic Telemetry**: Continuous background indexing detects formatting mismatches, style anomalies, and unresolved citation stubs with unified one-click resolution workflows.
+
+---
+
+## Complete UX Pathways & Entry Points
 
 ```mermaid
 flowchart TD
-    subgraph L1["<b>Level 1: Orientation & Discovery (Zero Overhead)</b>"]
-        O1["<b>Vault Scope View</b><br/>Global Reference Library <code>(.references)</code><br/>Instant search across all references"]
-        O2["<b>Active Document Context</b><br/>Displays currently active file: <i>claims.md</i><br/>Status: <code>[+ Associate with Project]</code> or <code>[Project: UIUX Foundational]</code>"]
-        O3["<b>Quick Actions Bar</b><br/><code>[+ Add Reference]</code> &bull; <code>[⚡ Quick Insert]</code> &bull; <code>[📁 New Project]</code>"]
+    subgraph INGESTION["1. Reference Ingestion & Attachment"]
+        I1["<b>Search Island</b><br/>Type DOI, arXiv, ISBN, URL &rarr; Enter"]
+        I2["<b>+ New Citation CTA</b><br/>Manual creation or quick identifier resolution"]
+        I3["<b>PDF Dropzone</b><br/>Drag &amp; drop PDF binary &rarr; Auto DOI scan &amp; verification"]
     end
 
-    subgraph L2["<b>Level 2: Focused Workspace (Contextual Task)</b>"]
-        W1["<b>Reference Cards (Clean Primary Info)</b><br/>&bull; Type Badge + Citekey + Year<br/>&bull; Title &amp; Authors<br/>&bull; Live Usage Indicator: <code>[Cited 2x]</code> / <code>[Unused]</code>"]
-        W2["<b>Instant Actions on Card</b><br/><code>[📋 Insert]</code> &bull; <code>[✏️ Edit]</code> &bull; <code>[📄 Note]</code> &bull; <code>[📎 PDF]</code>"]
+    subgraph SCOPE["2. Bucket & Scope Management"]
+        B1["<b>Project Buckets</b><br/>Isolate literature by manuscript / thesis scope"]
+        B2["<b>Citation Standard Selector</b><br/>Authoritative style per bucket (APA, IEEE, Vancouver, etc.)"]
+        B3["<b>Linked Documents Bar</b><br/>One-click note linking &amp; frontmatter binding"]
     end
 
-    subgraph L3["<b>Level 3: Contextual Modals (Progressive Detail)</b>"]
-        M1["<b>Reference Editor Modal</b><br/>DOI Auto-fetch &bull; Metadata Fields &bull; Live APA/IEEE Previews"]
-        M2["<b>PDF Attacher &amp; Importer</b><br/>Attach to new or existing reference &bull; Manual or DOI fill"]
-        M3["<b>Usage Inspector Modal</b><br/>Lists exact files, line numbers, and snippets &bull; Click to navigate"]
+    subgraph DRAFTING["3. Drafting & Insertion Entry Points"]
+        D1["<b>In-Editor Autocomplete</b><br/>Type <code>[@</code>, <code>\\cite{</code>, or <code>((</code> anywhere"]
+        D2["<b>Insert Citation Modal</b><br/>Fuzzy search &bull; Shift+Click multi-citation chips"]
+        D3["<b>Editor Context Menu</b><br/>Right click &rarr; Insert Citation..."]
+        D4["<b>Command Palette</b><br/><code>Ctrl/Cmd + P</code> &rarr; Quick Add / Insert"]
     end
 
-    subgraph L4["<b>Level 4: Advanced Studio (Project Synthesis)</b>"]
-        S1["<b>Bibliography Studio</b><br/>Explicit Output Selector &bull; APA/IEEE/Harvard/Chicago &bull; All vs Cited"]
-        S2["<b>Citation Health &amp; Linter</b><br/>Scans registered files &bull; Detects missing references &bull; Deletion Guard"]
-        S3["<b>Footnote Batch Sync</b><br/>Syncs all in-text footnote definitions across registered documents"]
+    subgraph DIAGNOSTICS["4. Link Diagnostics & Linter Engine"]
+        L1["<b>Real-time Metric Tiles</b><br/>Total, In-Text Instances, Used vs. Unused"]
+        L2["<b>Inconsistency Detection</b><br/>Format mismatches, nth footnote styles, unresolved stubs"]
+        L3["<b>Fix Inconsistencies Modal</b><br/>&bull; Batch format correction<br/>&bull; + Create Reference Entry<br/>&bull; Purge stub from note<br/>&bull; Dismiss warning to cache"]
     end
 
-    L1 --> L2
-    L2 --> L3
-    L2 --> L4
+    subgraph EXPORT["5. Bibliography & Publication Studio"]
+        E1["<b>Live Monospace Preview</b><br/>Displays formatted reference list for cited items"]
+        E2["<b>Quick Actions Island</b><br/>&bull; Copy to Clipboard<br/>&bull; Append <code>## References</code> to Note"]
+        E3["<b>Publication Export Studio</b><br/>&bull; Footnote-to-citation conversion<br/>&bull; Frontmatter sanitation<br/>&bull; Clean compiled output"]
+    end
+
+    INGESTION --> SCOPE
+    SCOPE --> DRAFTING
+    DRAFTING --> DIAGNOSTICS
+    DIAGNOSTICS --> EXPORT
 ```
 
 ---
 
-## Key Capabilities
+## Detailed UX Walkthrough
 
-### 1. Root `.references` Storage Architecture
-- All reference metadata notes are stored in a designated folder at the root of your vault (default `.references/`, configurable in settings).
-- Direct disk-adapter synchronization guarantees zero cache delay when reading, adding, or modifying references.
-- Local PDF attachments are automatically organized in `.references/attachments/<citekey>.pdf`.
+### 1. Ingestion & Attachment
+* **Instant Identifier Resolution**: Type any DOI (`10.1145/...`), arXiv ID (`2301.07041`), ISBN, or URL into the top search bar and press **Enter** to instantly fetch full metadata and open the editor modal.
+* **PDF Attachment & DOI Verification**: When editing or adding a citation, drag and drop a PDF file into the dropzone. The engine scans the PDF binary for an embedded DOI and compares it against your citation metadata:
+  * `✓ DOI Match Verified`: Confirms the PDF matches the citation record.
+  * `⚠ DOI Mismatch Warning`: Flags if the PDF's internal DOI differs from the entry.
+  * `ℹ DOI Status`: Notes if no DOI was detectable in scanned OCR text.
 
-### 2. Side Panel & Project Registry
-- **Global Project Registry**: Associate markdown documents to citation projects directly from the side panel UI without polluting note frontmatter.
-- **Active Document Context Banner**: Live visual indicator showing whether the note currently in your editor is registered or unregistered, with one-click `[+ Add to Project]` and `[Unlink]`.
-- **Default to All References**: Never forces a dummy default project; defaults to `🌐 All References` so you can immediately see and use your vault library.
+### 2. Drafting & In-Text Insertion
+* **In-Editor Autocomplete (`EditorSuggest`)**: Trigger citation suggestions anywhere in your active document by typing:
+  * `[@` (Pandoc citekey trigger)
+  * `\cite{` (LaTeX trigger)
+  * `((` (Double parenthesis trigger)
+* **Multi-Citation Insert Modal**: Press `Ctrl/Cmd + Shift + I` (or use context menu) to open the multi-citation picker. Hold `Shift` while clicking to assemble multiple citations into a single group (e.g. `(Spielberg et al., 2016; Thériault et al., 2022)` or `[^Spielberg2016][^Thériault2022]`).
 
-### 3. Real-Time Link Health & Diagnostic Telemetry
-- **Live Counters**:
-  - Total project references in `.references`
-  - Total in-body citation instances across registered files
-  - Used vs. Unused references
-- **Unresolved Citation Linter**: Scans registered documents and flags any in-text citation keys or footnotes (`[^key]`, `[@key]`, `[[key]]`) that are missing corresponding `.references` metadata notes.
-- **Deletion Guard**: Prevents accidental deletion of references that are actively cited in registered files. Clicking delete on an in-use reference presents a modal showing every file, line number, and snippet where it is cited.
+### 3. Footnote Mode & Synchronization
+* **Global Companion Setting**: Managed under **Obsidian Settings -> Citation Manager -> Enable Obsidian Footnote Mode**.
+* **Global Propagation**: Toggling Footnote Mode on or off automatically synchronizes all registered notes across your vault, converting between `[^citekey]` footnotes and your bucket's native in-body citation standard.
 
-### 4. Multi-Source Resolver & PDF Import Studio
-- **PDF Importer Modal**: Dropping a PDF opens an intuitive modal asking whether to create a new reference (with optional DOI auto-fill) or attach to an existing reference.
-- **Instant Metadata Resolvers**:
-  - **DOI**: Multi-stage resolution via Crossref API, CSL-JSON content negotiation, and Semantic Scholar.
-  - **arXiv**: Fetches preprint metadata and links.
-  - **ISBN**: Queries OpenLibrary and Google Books for book metadata.
-  - **Websites & Blogs**: Scrapes OpenGraph title, author, date, and publisher.
-  - **YouTube**: Auto-resolves video author, title, and date via oEmbed.
-  - **BibTeX**: Direct parsing of `@article`, `@inproceedings`, `@book`, `@misc` snippets.
+### 4. Citation Diagnostics & Automated Linter
+* **Status Bar & Diagnostics Panel**: The panel header and status bar highlight active diagnostic warnings across linked notes.
+* **Consolidated Unresolved Stubs**: Unresolved citekeys in-text and their bottom footnote definitions are consolidated into a single actionable incident.
+* **Action Decision Tree in Fix Modal**:
+  * **`+ Create Entry`**: Launches the reference editor pre-filled with the citekey and note definition text.
+  * **`Purge`**: Strips the invalid reference token and definition from the note.
+  * **`Dismiss`**: Silences the warning, persisting the state to `.references/.cache/dismissed_lints.json`.
 
-### 5. Multi-Style Citation Generator & In-Editor Autocomplete
-- **CSL Citation Styles**: APA 7th Edition, IEEE, Harvard, Chicago (Author-Date), and Vancouver (Numeric).
-- **In-Editor Autocomplete (`EditorSuggest`)**: Type `[@`, `\cite{`, or `((` anywhere in an active note to trigger instant fuzzy-autocomplete.
-- **Editor Context Menu**: Right-click in any Markdown note $\to$ `Insert Citation...` or `Register file to project`.
-- **In-Text Footnote Synchronizer**: One-click button updates all formatted footnote definitions across all registered project documents whenever reference metadata is edited.
-- **Explicit Bibliography Studio**: Configure explicit output destinations (Clipboard, Append `## References` to document, or Export to a customizable vault file).
+### 5. Publication Export Studio
+* **Sanitized Standalone Output**: Strips internal frontmatter keys (`projects`, etc.), converts `[^citekey]` footnote tokens into authoritative academic citations, appends the complete formatted bibliography, and exports the clean note to your designated publication directory.
 
 ---
 
@@ -83,12 +93,12 @@ flowchart TD
 
 | Command | Action |
 | :--- | :--- |
-| `Citation Manager: Open Citation Studio Panel` | Reveals the sidebar reference panel in the right sidebar. |
-| `Citation Manager: Insert Citation at Cursor` | Opens a fuzzy-search modal to insert formatted citation at active cursor. |
-| `Citation Manager: Quick Add Reference (DOI / URL / ISBN / BibTeX)` | Quick prompt to add any academic identifier directly from palette. |
-| `Citation Manager: Register Current File to Active Citation Project` | Adds the active note to the current citation project scope. |
-| `Citation Manager: Generate Project Bibliography` | Opens the Bibliography preview and export modal. |
-| `Citation Manager: Synchronize In-Text Footnotes in Project` | Scans registered documents and updates all footnote definitions to latest metadata. |
+| `Citation Manager: Open Panel` | Opens the Citation Studio right sidebar. |
+| `Citation Manager: Insert Citation` | Opens the search and multi-select insert modal. |
+| `Citation Manager: Quick Add Citation` | Quick identifier prompt (DOI / arXiv / URL / ISBN / Manual). |
+| `Citation Manager: Link File to Bucket` | Associates the active note with the selected project bucket. |
+| `Citation Manager: Generate Project Bibliography` | Opens the Bibliography preview and export subpanel. |
+| `Citation Manager: Export for Publication` | Opens the publication export modal for active note. |
 
 ---
 
@@ -98,6 +108,6 @@ flowchart TD
 # Build production bundle with Bun
 bun run build
 
-# Watch mode
+# Watch mode for active development
 bun run dev
 ```

@@ -30,39 +30,7 @@ export class CitationManagerSettingTab extends PluginSettingTab {
           this.plugin.storageManager.updateSettings(this.plugin.settings);
         }));
 
-    // Default Citation Style
-    new Setting(containerEl)
-      .setName('Default Citation Style')
-      .setDesc('Primary citation standard for generating reference lists and footnotes.')
-      .addDropdown(drop => {
-        drop.addOption('apa7', 'APA 7th Edition');
-        drop.addOption('ieee', 'IEEE Format');
-        drop.addOption('harvard', 'Harvard Style');
-        drop.addOption('chicago', 'Chicago (Author-Date)');
-        drop.addOption('vancouver', 'Vancouver (Numeric)');
-        drop.setValue(this.plugin.settings.defaultCitationStyle);
-        drop.onChange(async (value) => {
-          this.plugin.settings.defaultCitationStyle = value as CitationStyle;
-          await this.plugin.saveSettings();
-        });
-      });
-
-    // Default In-Body Format
-    new Setting(containerEl)
-      .setName('Default In-Body Citation Format')
-      .setDesc('How citations are inserted into the body of your active markdown documents.')
-      .addDropdown(drop => {
-        drop.addOption('parenthetical', 'Parenthetical (Author, Year)');
-        drop.addOption('narrative', 'Narrative Author (Year)');
-        drop.addOption('citekey', 'Pandoc Citekey [@citekey]');
-        drop.setValue(this.plugin.settings.defaultInBodyFormat === 'footnote' ? 'parenthetical' : this.plugin.settings.defaultInBodyFormat);
-        drop.onChange(async (value) => {
-          this.plugin.settings.defaultInBodyFormat = value as InBodyFormat;
-          await this.plugin.saveSettings();
-        });
-      });
-
-    // Obsidian Footnote Mode
+    // Obsidian Footnote Mode (Global Companion Setting)
     new Setting(containerEl)
       .setName('Enable Obsidian Footnote Mode ([^citekey])')
       .setDesc('Uses [^citekey] in-text and maintains formatted footnote definitions at note bottom for Obsidian Footnotes plugin support. Automatically converted upon publication export.')
@@ -71,6 +39,15 @@ export class CitationManagerSettingTab extends PluginSettingTab {
         .onChange(async (value) => {
           this.plugin.settings.enableFootnoteMode = value;
           await this.plugin.saveSettings();
+          const refsMap = await this.plugin.storageManager.loadAllReferences();
+          const res = await this.plugin.projectIndexer.propagateFootnoteModeGlobally(
+            value,
+            refsMap,
+            this.plugin.settings.projects,
+            this.plugin.settings.referencesFolder
+          );
+          new Notice(`Footnote Mode ${value ? 'Enabled' : 'Disabled'}: synced across ${res.updatedFilesCount} note(s).`);
+          this.plugin.refreshOpenViews();
         }));
 
     // In-Editor Auto-Suggest

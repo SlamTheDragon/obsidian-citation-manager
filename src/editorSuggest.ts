@@ -61,9 +61,14 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
     if (!this.context) return;
     const editor = this.context.editor;
     const project = this.plugin.getActiveProject();
-    const format: InBodyFormat = project?.inBodyFormat || this.plugin.settings.defaultInBodyFormat || 'parenthetical';
+    const isFootnote = Boolean(this.plugin.settings.enableFootnoteMode);
+    const format: InBodyFormat = isFootnote 
+      ? 'footnote' 
+      : (project?.inBodyFormat || 'parenthetical');
 
-    const inBodyText = CitationEngine.formatInBody(ref, format);
+    const inBodyText = isFootnote 
+      ? `[^${ref.citekey}]` 
+      : CitationEngine.formatInBody(ref, format);
 
     // Cleanly consume any auto-paired trailing closing bracket/brace
     const line = editor.getLine(this.context.end.line);

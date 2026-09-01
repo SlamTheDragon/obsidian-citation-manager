@@ -2,12 +2,14 @@ import { App, Modal, Notice, setIcon } from 'obsidian';
 import { ReferenceMetadata, ReferenceType } from '../types';
 import { CitationEngine } from '../citationEngine';
 import { MetadataResolvers } from '../metadataResolvers';
+import { ProjectIndexer } from '../projectIndexer';
 
 export class ReferenceEditorModal extends Modal {
   private ref: ReferenceMetadata;
   private originalCitekey: string;
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
+  private pdfDOIStatus: { status: 'match' | 'mismatch' | 'unknown'; detectedDOI?: string } | null = null;
 
   private previewEl: HTMLElement | null = null;
   private accordionCards: Map<string, { cardEl: HTMLElement; iconEl: HTMLElement }> = new Map();
@@ -360,44 +362,109 @@ export class ReferenceEditorModal extends Modal {
           removeBtn.style.padding = "2px 8px";
           removeBtn.addEventListener("click", () => {
             this.ref.pdfAttachment = undefined;
+            this.pdfDOIStatus = null;
             this.renderModal();
           });
         } else {
-          const emptyRow = pdfContainer.createDiv({ cls: "citation-empty-pdf-row" });
-          emptyRow.style.display = "flex";
-          emptyRow.style.alignItems = "center";
-          emptyRow.style.justifyContent = "space-between";
-          emptyRow.style.padding = "6px 0";
+          // Dropzone & File Picker Card
+          const dropzone = pdfContainer.createDiv({ cls: "citation-pdf-dropzone" });
+          dropzone.style.padding = "16px";
+          dropzone.style.display = "flex";
+          dropzone.style.flexDirection = "column";
+          dropzone.style.alignItems = "center";
+          dropzone.style.justifyContent = "center";
+          dropzone.style.gap = "6px";
+          dropzone.style.border = "2px dashed var(--background-modifier-border)";
+          dropzone.style.borderRadius = "var(--radius-m)";
+          dropzone.style.cursor = "pointer";
+          dropzone.style.textAlign = "center";
 
-          emptyRow.createSpan({ text: "No PDF document attached.", cls: "status-hint" });
+          setIcon(dropzone.createDiv({ cls: "empty-icon" }), "file-up");
+          dropzone.createEl("strong", { text: "Drop PDF here or click to browse" });
+          dropzone.createSpan({ cls: "status-hint", text: "PDF will be saved to .references/attachments and scanned for DOI" });
 
           const fileInput = document.createElement("input");
           fileInput.type = "file";
           fileInput.accept = ".pdf";
           fileInput.style.display = "none";
-          fileInput.addEventListener("change", async () => {
-            const file = fileInput.files?.[0];
-            if (!file) return;
+
+          const processPDFFile = async (file: File) => {
             try {
               const buffer = await file.arrayBuffer();
+              const detectedDOI = ProjectIndexer.extractDOIFromBuffer(buffer);
               const citekey = this.ref.citekey.trim() || CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
               const rootPath = ".references";
               const pdfPath = `${rootPath}/attachments/${citekey}.pdf`;
               await this.app.vault.adapter.writeBinary(pdfPath, buffer);
               this.ref.pdfAttachment = pdfPath;
+
+              if (detectedDOI && this.ref.doi) {
+                const cleanDetected = detectedDOI.toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, "").trim();
+                const cleanRef = this.ref.doi.toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, "").trim();
+                if (cleanDetected === cleanRef) {
+                  this.pdfDOIStatus = { status: 'match', detectedDOI };
+                } else {
+                  this.pdfDOIStatus = { status: 'mismatch', detectedDOI };
+                }
+              } else if (detectedDOI) {
+                this.pdfDOIStatus = { status: 'unknown', detectedDOI };
+              } else {
+                this.pdfDOIStatus = { status: 'unknown' };
+              }
+
               new Notice(`Attached PDF: ${file.name}`);
               this.renderModal();
             } catch (err: any) {
               new Notice(`Failed attaching PDF: ${err.message}`);
             }
+          };
+
+          dropzone.addEventListener("click", () => fileInput.click());
+          dropzone.addEventListener("dragover", (e) => {
+            e.preventDefault();
+            dropzone.style.borderColor = "var(--interactive-accent)";
+          });
+          dropzone.addEventListener("dragleave", () => {
+            dropzone.style.borderColor = "var(--background-modifier-border)";
+          });
+          dropzone.addEventListener("drop", (e) => {
+            e.preventDefault();
+            dropzone.style.borderColor = "var(--background-modifier-border)";
+            const file = e.dataTransfer?.files?.[0];
+            if (file && file.name.endsWith(".pdf")) processPDFFile(file);
           });
 
-          const attachBtn = emptyRow.createEl("button", { cls: "citation-mini-btn", text: "+ Attach PDF File" });
-          attachBtn.style.width = "auto";
-          attachBtn.style.padding = "4px 10px";
-          attachBtn.style.background = "var(--interactive-accent)";
-          attachBtn.style.color = "var(--text-on-accent)";
-          attachBtn.addEventListener("click", () => fileInput.click());
+          fileInput.addEventListener("change", () => {
+            const file = fileInput.files?.[0];
+            if (file) processPDFFile(file);
+          });
+        }
+
+        // DOI Verification Status Message
+        if (this.pdfDOIStatus) {
+          const statusBox = pdfContainer.createDiv({ cls: "citation-modal-section-card" });
+          statusBox.style.padding = "6px 10px";
+          statusBox.style.fontSize = "11px";
+
+          if (this.pdfDOIStatus.status === 'match') {
+            statusBox.style.borderColor = "var(--text-success, #22c55e)";
+            statusBox.createSpan({ 
+              text: `DOI Match Verified: Detected DOI (${this.pdfDOIStatus.detectedDOI}) matches citation metadata.`,
+              cls: "diff-new"
+            });
+          } else if (this.pdfDOIStatus.status === 'mismatch') {
+            statusBox.style.borderColor = "var(--text-warning, #eab308)";
+            const span = statusBox.createSpan({ 
+              text: `DOI Mismatch Warning: Detected DOI (${this.pdfDOIStatus.detectedDOI}) differs from citation DOI (${this.ref.doi}).`,
+              cls: "status-hint"
+            });
+            span.style.color = "var(--text-warning, #eab308)";
+          } else {
+            statusBox.createSpan({ 
+              text: this.pdfDOIStatus.detectedDOI ? `Detected DOI in PDF: ${this.pdfDOIStatus.detectedDOI}` : "DOI Status: No DOI detected in PDF binary.",
+              cls: "status-hint"
+            });
+          }
         }
       }
     );
