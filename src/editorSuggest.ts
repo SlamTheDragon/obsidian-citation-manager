@@ -62,9 +62,9 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
     const editor = this.context.editor;
     const project = this.plugin.getActiveProject();
     const isFootnote = Boolean(this.plugin.settings.enableFootnoteMode);
-    const format: InBodyFormat = isFootnote 
-      ? 'footnote' 
-      : (project?.inBodyFormat || 'parenthetical');
+    const format: InBodyFormat = (project?.inBodyFormat === ('footnote' as any) || !project?.inBodyFormat)
+      ? 'parenthetical'
+      : (project.inBodyFormat as InBodyFormat);
 
     const inBodyText = isFootnote 
       ? `[^${ref.citekey}]` 
@@ -85,14 +85,14 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
 
     editor.replaceRange(inBodyText, this.context.start, endPos);
 
-    // If footnote format, also add definition if missing
-    if (format === 'footnote') {
+    // If footnote mode is ON, also add definition if missing
+    if (isFootnote) {
       const docText = editor.getValue();
       const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
       if (!fnDefRegex.test(docText)) {
         const fnDefinition = CitationEngine.formatFootnoteDefinition(
           ref,
-          project?.citationStyle || this.plugin.settings.defaultCitationStyle
+          project?.citationStyle || 'apa7'
         );
         const hasTrailingNewline = docText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";

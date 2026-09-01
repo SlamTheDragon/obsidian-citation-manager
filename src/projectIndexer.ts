@@ -229,9 +229,11 @@ export class ProjectIndexer {
     const dismissed = dismissedLints || new Set<string>();
     let totalCitationsInFiles = 0;
 
-    const isFootnoteMode = Boolean(globalFootnoteMode ?? project.enableFootnoteMode);
-    const targetFormat = project.inBodyFormat || 'parenthetical';
-    const targetStyle = project.citationStyle || 'apa7';
+    const isFootnoteMode = Boolean(globalFootnoteMode);
+    const targetFormat: InBodyFormat = (project.inBodyFormat === ('footnote' as any) || !project.inBodyFormat) 
+      ? 'parenthetical' 
+      : project.inBodyFormat;
+    const targetStyle: CitationStyle = project.citationStyle || 'apa7';
 
     const bracketCitekeyGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
     const citekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;

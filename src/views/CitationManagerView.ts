@@ -1208,9 +1208,11 @@ export class CitationManagerView extends ItemView {
     }
 
     const editor = mdView.editor;
-    const isFootnoteMode = project ? Boolean(project.enableFootnoteMode) : Boolean(this.settings.enableFootnoteMode);
-    const format = isFootnoteMode ? 'footnote' : (project?.inBodyFormat || this.settings.defaultInBodyFormat);
-    const inBodyText = CitationEngine.formatInBody(ref, format);
+    const isFootnoteMode = Boolean(this.settings.enableFootnoteMode);
+    const format: InBodyFormat = (project?.inBodyFormat === ('footnote' as any) || !project?.inBodyFormat)
+      ? 'parenthetical'
+      : (project.inBodyFormat as InBodyFormat);
+    const inBodyText = isFootnoteMode ? `[^${ref.citekey}]` : CitationEngine.formatInBody(ref, format);
 
     const cursor = editor.getCursor();
     editor.replaceRange(inBodyText, cursor);
@@ -1224,7 +1226,7 @@ export class CitationManagerView extends ItemView {
       if (!fnDefRegex.test(docText)) {
         const fnDefinition = CitationEngine.formatFootnoteDefinition(
           ref,
-          project?.citationStyle || this.settings.defaultCitationStyle,
+          project?.citationStyle || 'apa7',
           footnoteIndex
         );
         const hasTrailingNewline = docText.endsWith("\n");

@@ -6,7 +6,7 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
   private references: ReferenceMetadata[];
   private project: ProjectRecord | null;
   private defaultStyle: CitationStyle;
-  private selectedFormat: InBodyFormat;
+  private selectedFormat: InBodyFormat | 'footnote';
   private selectedRefs: ReferenceMetadata[] = [];
   private chipsContainer: HTMLElement | null = null;
   private actionFooter: HTMLElement | null = null;
@@ -23,7 +23,8 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
     this.references = references;
     this.project = project;
     this.defaultStyle = project?.citationStyle || defaultStyle;
-    this.selectedFormat = enableFootnoteMode ? 'footnote' : (project?.inBodyFormat || defaultFormat);
+    const sanitizedProjFormat = (project?.inBodyFormat === ('footnote' as any) || !project?.inBodyFormat) ? defaultFormat : project.inBodyFormat;
+    this.selectedFormat = enableFootnoteMode ? 'footnote' : sanitizedProjFormat;
     this.setPlaceholder("Search citations (Shift+Click or Shift+Enter for multi-citation)...");
   }
 
@@ -46,13 +47,18 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
 
       const formatLabel = formatBar.createSpan({ text: "Format: ", cls: "control-label" });
       const select = formatBar.createEl("select", { cls: "dropdown mini-dropdown" });
+      if (this.selectedFormat === 'footnote') {
+        select.createEl("option", { value: "footnote", text: "Footnote [^key]" });
+      }
       select.createEl("option", { value: "parenthetical", text: "Parenthetical (Author, Year)" });
-      select.createEl("option", { value: "citekey", text: "Citekey [@key; @key2]" });
       select.createEl("option", { value: "narrative", text: "Narrative Author (Year)" });
-      select.createEl("option", { value: "footnote", text: "Footnote [^key]" });
+      select.createEl("option", { value: "citekey", text: "Citekey [@key]" });
+      if (this.selectedFormat !== 'footnote') {
+        select.createEl("option", { value: "footnote", text: "Footnote [^key]" });
+      }
       select.value = this.selectedFormat;
       select.addEventListener("change", () => {
-        this.selectedFormat = select.value as InBodyFormat;
+        this.selectedFormat = select.value as InBodyFormat | 'footnote';
       });
 
       promptEl.parentElement?.insertBefore(formatBar, promptEl);

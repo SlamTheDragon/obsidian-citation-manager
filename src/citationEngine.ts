@@ -223,7 +223,7 @@ export class CitationEngine {
   /**
    * Generates In-Body Citation string
    */
-  static formatInBody(ref: ReferenceMetadata, format: InBodyFormat, index: number = 1): string {
+  static formatInBody(ref: ReferenceMetadata, format: InBodyFormat | 'footnote', index: number = 1): string {
     const authors = ref.authors || [];
     let authorText = "Unknown";
     if (authors.length === 1) {
@@ -254,7 +254,7 @@ export class CitationEngine {
    * Formats multiple references into a single grouped in-body citation
    * (e.g. [@Smith2020; @Jones2021] or (Jones, 2021; Smith, 2020))
    */
-  static formatMultiInBody(refs: ReferenceMetadata[], format: InBodyFormat, style: CitationStyle = 'apa7'): string {
+  static formatMultiInBody(refs: ReferenceMetadata[], format: InBodyFormat | 'footnote', style: CitationStyle = 'apa7'): string {
     if (!refs || refs.length === 0) return "";
     if (refs.length === 1) return this.formatInBody(refs[0], format);
 
@@ -264,7 +264,7 @@ export class CitationEngine {
       case 'parenthetical': {
         const sorted = [...refs].sort((a, b) => {
           const authorA = a.authors?.[0] || a.citekey;
-          const authorB = b.authors?.[0] || b;
+          const authorB = b.authors?.[0] || b.citekey;
           return authorA.localeCompare(authorB);
         });
         const parts = sorted.map(r => {

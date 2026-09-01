@@ -13,7 +13,7 @@ export type ReferenceType =
 
 export type CitationStyle = 'apa7' | 'ieee' | 'harvard' | 'chicago' | 'vancouver';
 
-export type InBodyFormat = 'parenthetical' | 'footnote' | 'narrative' | 'citekey';
+export type InBodyFormat = 'parenthetical' | 'narrative' | 'citekey';
 
 export interface ReferenceMetadata {
   citekey: string;
@@ -61,7 +61,6 @@ export interface ProjectRecord {
   referenceIds: string[];    // Citekeys belonging to this project
   citationStyle?: CitationStyle;
   inBodyFormat?: InBodyFormat;
-  enableFootnoteMode?: boolean;
   publicationFolder?: string;
   exportSettings?: ProjectExportSettings;
   created: string;

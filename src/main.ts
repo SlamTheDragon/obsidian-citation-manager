@@ -306,6 +306,17 @@ export default class CitationManagerPlugin extends Plugin {
         }
       }
     } catch {}
+
+    // Sanitize any legacy project records
+    if (Array.isArray(this.settings.projects)) {
+      for (const p of this.settings.projects) {
+        if ((p as any).inBodyFormat === 'footnote' || !p.inBodyFormat) {
+          p.inBodyFormat = 'parenthetical';
+        }
+        delete (p as any).enableFootnoteMode;
+      }
+    }
+
     Logger.setEnabled(this.settings.debugMode);
   }
 
