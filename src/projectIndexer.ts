@@ -925,92 +925,81 @@ export class ProjectIndexer {
           let content = await this.app.vault.read(file);
           let modified = false;
 
-          if (enableFootnoteMode) {
-            // Transform in-body citations into footnotes [^key]
-            for (const [key, ref] of allReferences.entries()) {
-              // 1. Citekey [@key]
-              const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
-              if (citekeyRegex.test(content)) {
-                content = content.replace(citekeyRegex, `[^${key}]`);
-                modified = true;
-              }
+          let fnIdx = 1;
+          for (const [key, ref] of allReferences.entries()) {
+            const targetInBody = enableFootnoteMode 
+              ? `[^${key}]` 
+              : CitationEngine.formatInBody(ref, targetFormat, style, fnIdx);
 
-              // 2. Parenthetical & narrative variations across styles
-              const apaParenthetical = CitationEngine.formatInBody(ref, 'parenthetical', 'apa7');
-              const harvardParenthetical = CitationEngine.formatInBody(ref, 'parenthetical', 'harvard');
-              const narrative = CitationEngine.formatInBody(ref, 'narrative', style);
+            // 1. Citekey format [@key]
+            const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
+            if (citekeyRegex.test(content)) {
+              content = content.replace(citekeyRegex, targetInBody);
+              modified = true;
+            }
 
-              if (apaParenthetical && content.includes(apaParenthetical)) {
-                content = content.split(apaParenthetical).join(`[^${key}]`);
-                modified = true;
-              }
-              if (harvardParenthetical && content.includes(harvardParenthetical)) {
-                content = content.split(harvardParenthetical).join(`[^${key}]`);
-                modified = true;
-              }
-              if (narrative && content.includes(narrative)) {
-                content = content.split(narrative).join(`[^${key}]`);
+            // 2. Footnote call [^key]
+            const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+            if (!enableFootnoteMode && footnoteCallRegex.test(content)) {
+              content = content.replace(footnoteCallRegex, targetInBody);
+              modified = true;
+            }
+
+            // 3. Match across all possible citation style variations in-body
+            const variations = [
+              CitationEngine.formatInBody(ref, 'parenthetical', 'apa7', fnIdx),
+              CitationEngine.formatInBody(ref, 'parenthetical', 'harvard', fnIdx),
+              CitationEngine.formatInBody(ref, 'parenthetical', 'chicago', fnIdx),
+              CitationEngine.formatInBody(ref, 'parenthetical', 'ieee', fnIdx),
+              CitationEngine.formatInBody(ref, 'parenthetical', 'vancouver', fnIdx),
+              CitationEngine.formatInBody(ref, 'narrative', 'apa7', fnIdx),
+              CitationEngine.formatInBody(ref, 'narrative', 'harvard', fnIdx),
+              CitationEngine.formatInBody(ref, 'narrative', 'chicago', fnIdx),
+              CitationEngine.formatInBody(ref, 'narrative', 'ieee', fnIdx),
+              CitationEngine.formatInBody(ref, 'narrative', 'vancouver', fnIdx),
+            ];
+
+            for (const v of variations) {
+              if (v && v.length > 0 && content.includes(v)) {
+                content = content.split(v).join(targetInBody);
                 modified = true;
               }
             }
 
-            // 3. Ensure bottom definitions have [^key]: prefix and are styled
-            const footnoteCallRegex = /\[\^([a-zA-Z0-9_:\.-]+)\](?!:)/g;
-            const keysInFile: string[] = [];
-            let match: RegExpExecArray | null;
-            while ((match = footnoteCallRegex.exec(content)) !== null) {
-              if (!keysInFile.includes(match[1])) keysInFile.push(match[1]);
-            }
-
-            let fnIdx = 1;
-            for (const key of keysInFile) {
-              const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
-                r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
-              );
-              if (ref) {
-                const expectedDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIdx);
-                const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
-
-                if (fnDefRegex.test(content)) {
-                  const currentDef = content.match(fnDefRegex)?.[0];
-                  if (currentDef !== expectedDef) {
-                    content = content.replace(fnDefRegex, expectedDef);
-                    modified = true;
-                  }
-                } else {
-                  // Check if there is an un-prefixed reference line matching ref.title
-                  const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                  const plainEntryRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
-                  if (plainEntryRegex.test(content)) {
-                    content = content.replace(plainEntryRegex, expectedDef);
-                    modified = true;
-                  } else {
-                    content = content.trimEnd() + `\n\n${expectedDef}\n`;
-                    modified = true;
-                  }
-                }
-                fnIdx++;
-              }
-            }
-          } else {
-            // Footnote Mode OFF: Transform in-body [^key] -> targetInBody AND bottom [^key]: -> standard reference entry
-            let fnIdx = 1;
-            for (const [key, ref] of allReferences.entries()) {
-              const targetInBody = CitationEngine.formatInBody(ref, targetFormat, style, fnIdx);
-              const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-              if (footnoteCallRegex.test(content)) {
-                content = content.replace(footnoteCallRegex, targetInBody);
-                modified = true;
-              }
-
-              // Transform bottom definition [^key]: ... into plain reference entry without [^key]: prefix
-              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'gm');
+            // 4. Transform bottom definition / bibliography entry
+            if (enableFootnoteMode) {
+              const expectedDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIdx);
+              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
               if (fnDefRegex.test(content)) {
-                content = content.replace(fnDefRegex, '$1');
+                const currentDef = content.match(fnDefRegex)?.[0];
+                if (currentDef !== expectedDef) {
+                  content = content.replace(fnDefRegex, expectedDef);
+                  modified = true;
+                }
+              } else if (ref.title && ref.title.length > 5 && content.includes(ref.title)) {
+                const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
+                content = content.replace(plainRegex, expectedDef);
                 modified = true;
               }
-              fnIdx++;
+            } else {
+              const expectedBib = CitationEngine.formatBibliographyEntry(ref, style, fnIdx);
+              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'm');
+              if (fnDefRegex.test(content)) {
+                content = content.replace(fnDefRegex, expectedBib);
+                modified = true;
+              } else if (ref.title && ref.title.length > 5 && content.includes(ref.title)) {
+                const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
+                const currentLine = content.match(plainRegex)?.[0];
+                if (currentLine && currentLine.trim() !== expectedBib.trim()) {
+                  content = content.replace(plainRegex, expectedBib);
+                  modified = true;
+                }
+              }
             }
+
+            fnIdx++;
           }
 
           if (modified) {
