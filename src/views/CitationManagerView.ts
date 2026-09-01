@@ -505,11 +505,10 @@ export class CitationManagerView extends ItemView {
       card.createDiv({ cls: "citation-card-publication", text: ref.publication });
     }
 
-    // Expandable In-Card Notes Accordion (Shows 'Notes' when collapsed, 25-35 chars when opened, no headers)
+    // Expandable In-Card Notes Accordion (Shows 'Notes' when collapsed, 25-35 chars of note content when opened)
     const rawNotes = (ref.userNotes || "").trim();
     const cleanNotes = rawNotes
-      .replace(/^#+\s+[^\r\n]*/gm, '') // Strip all markdown headers
-      .replace(/\s+/g, ' ')             // Collapse extra newlines/spaces
+      .replace(/\s+/g, ' ')             // Normalize whitespace for single-line accordion snippet
       .trim();
 
     if (cleanNotes.length > 0) {
