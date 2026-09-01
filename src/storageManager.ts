@@ -264,6 +264,58 @@ export class StorageManager {
     return pdfPath;
   }
 
+  async loadReferenceUserNotes(citekey: string): Promise<string> {
+    const rootPath = normalizePath(this.settings.referencesFolder);
+    const filePath = normalizePath(`${rootPath}/${citekey}.md`);
+    if (!(await this.app.vault.adapter.exists(filePath))) return "";
+
+    try {
+      const content = await this.app.vault.adapter.read(filePath);
+      const body = this.extractBody(content);
+      const notesMatch = body.match(/## (?:Notes|Personal Notes|Notes & Synthesis|Synthesis|Literature Notes)\r?\n([\s\S]*)$/i);
+      if (notesMatch && notesMatch[1].trim()) {
+        return notesMatch[1].trim();
+      }
+      const stripped = body
+        .replace(/^#\s+[^\r\n]*\r?\n/m, '')
+        .replace(/## Abstract(?: & Notes)?\r?\n[\s\S]*?(?=\r?\n## |$)/i, '')
+        .trim();
+      return stripped;
+    } catch {
+      return "";
+    }
+  }
+
+  async saveReferenceUserNotes(citekey: string, userNotes: string): Promise<void> {
+    const rootPath = normalizePath(this.settings.referencesFolder);
+    const filePath = normalizePath(`${rootPath}/${citekey}.md`);
+    if (!(await this.app.vault.adapter.exists(filePath))) return;
+
+    try {
+      const fullContent = await this.app.vault.adapter.read(filePath);
+      const match = fullContent.match(/^---\r?\n([\s\S]*?)\r?\n---([\s\S]*)$/);
+      if (!match) return;
+
+      const fm = match[1];
+      const body = match[2].trim();
+
+      const titleMatch = body.match(/^#\s+([^\r\n]+)/m);
+      const title = titleMatch ? titleMatch[1] : citekey;
+
+      const abstractMatch = body.match(/## Abstract(?: & Notes)?\r?\n([\s\S]*?)(?=\r?\n## |\r?\n# |$)/i);
+      const abstractText = abstractMatch ? abstractMatch[1].trim() : "*No abstract available.*";
+
+      const newBody = `\n# ${title}\n\n## Abstract\n${abstractText}\n\n## Notes & Synthesis\n${userNotes.trim()}\n`;
+      const newFullContent = `---\n${fm.trim()}\n---\n${newBody.trim()}\n`;
+
+      await this.app.vault.adapter.write(filePath, newFullContent);
+      Logger.debug(`Saved user notes for [${citekey}]`);
+    } catch (e) {
+      Logger.error(`Failed saving user notes for [${citekey}]:`, e);
+      throw e;
+    }
+  }
+
   private parseReferenceMarkdown(content: string, fallbackCitekey: string): ReferenceMetadata | null {
     const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
     if (!match) return null;
@@ -285,6 +337,19 @@ export class StorageManager {
         }
       }
 
+      let userNotes = "";
+      const body = this.extractBody(content);
+      const notesMatch = body.match(/## (?:Notes|Personal Notes|Notes & Synthesis|Synthesis|Literature Notes)\r?\n([\s\S]*)$/i);
+      if (notesMatch && notesMatch[1].trim()) {
+        userNotes = notesMatch[1].trim();
+      } else {
+        const stripped = body
+          .replace(/^#\s+[^\r\n]*\r?\n/m, '')
+          .replace(/## Abstract(?: & Notes)?\r?\n[\s\S]*?(?=\r?\n## |$)/i, '')
+          .trim();
+        if (stripped) userNotes = stripped;
+      }
+
       const ref: ReferenceMetadata = {
         citekey,
         type: parsed.type || "journal",
@@ -302,6 +367,7 @@ export class StorageManager {
         isbn: parsed.isbn,
         issn: parsed.issn,
         abstract: abstract || "",
+        userNotes: userNotes || "",
         pdfAttachment: parsed.pdfAttachment,
         projects: Array.isArray(parsed.projects) ? parsed.projects : (parsed.projects ? [parsed.projects] : []),
         tags: Array.isArray(parsed.tags) ? parsed.tags : [],

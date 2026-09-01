@@ -11,6 +11,7 @@ import { FixInconsistenciesModal } from './FixInconsistenciesModal';
 import { PromptModal } from './PromptModal';
 import { ConfirmModal } from './ConfirmModal';
 import { ExportPublicationModal } from './ExportPublicationModal';
+import { CitationNotesModal } from './CitationNotesModal';
 import { Logger } from '../logger';
 
 export const VIEW_TYPE_CITATION_MANAGER = "citation-manager-view";
@@ -466,7 +467,7 @@ export class CitationManagerView extends ItemView {
     cardHeader.createSpan({ cls: `citation-type-badge type-${ref.type}`, text: ref.type.toUpperCase() });
     cardHeader.createSpan({ cls: "citation-key-pill", text: ref.citekey });
 
-    // Usage badge
+    // Usage & Notes badges
     const occurrences = this.stats?.referenceUsageMap[ref.citekey] || [];
     if (occurrences.length > 0) {
       const usageBadge = cardHeader.createSpan({ 
@@ -481,6 +482,19 @@ export class CitationManagerView extends ItemView {
       cardHeader.createSpan({ cls: "citation-usage-pill unused", text: "Unused" });
     }
 
+    if (ref.userNotes && ref.userNotes.trim()) {
+      const notesPill = cardHeader.createSpan({ 
+        cls: "citation-notes-pill", 
+        text: "Notes",
+        title: "Click to view/edit literature notes" 
+      });
+      notesPill.addEventListener("click", () => {
+        new CitationNotesModal(this.app, ref, this.storageManager, async () => {
+          await this.refreshData();
+        }).open();
+      });
+    }
+
     // Title & Authors
     card.createDiv({ cls: "citation-card-title", text: ref.title });
     const authorYear = card.createDiv({ cls: "citation-card-author-year" });
@@ -489,6 +503,21 @@ export class CitationManagerView extends ItemView {
 
     if (ref.publication) {
       card.createDiv({ cls: "citation-card-publication", text: ref.publication });
+    }
+
+    // Note Snippet preview (if literature notes exist)
+    if (ref.userNotes && ref.userNotes.trim()) {
+      const noteSnippet = card.createDiv({ 
+        cls: "citation-card-note-snippet", 
+        title: "Click to edit literature notes in modal" 
+      });
+      const cleanSnippet = ref.userNotes.trim().replace(/\r?\n+/g, ' ');
+      noteSnippet.setText(`“${cleanSnippet.slice(0, 110)}${cleanSnippet.length > 110 ? '...' : ''}”`);
+      noteSnippet.addEventListener("click", () => {
+        new CitationNotesModal(this.app, ref, this.storageManager, async () => {
+          await this.refreshData();
+        }).open();
+      });
     }
 
     // Actions Row
@@ -500,6 +529,19 @@ export class CitationManagerView extends ItemView {
     insertBtn.createSpan({ text: " Insert" });
     insertBtn.addEventListener("click", async () => {
       await this.insertCitationIntoActiveEditor(ref, project);
+    });
+
+    // Notes Button (Opens isolated literature note editor modal)
+    const notesBtn = actionsRow.createEl("button", { 
+      cls: `citation-card-btn ${ref.userNotes ? 'has-notes' : ''}`, 
+      title: "View & Edit Research Notes in Modal" 
+    });
+    setIcon(notesBtn.createSpan({ cls: "btn-icon" }), "file-text");
+    notesBtn.createSpan({ text: " Notes" });
+    notesBtn.addEventListener("click", () => {
+      new CitationNotesModal(this.app, ref, this.storageManager, async () => {
+        await this.refreshData();
+      }).open();
     });
 
     // Edit Button

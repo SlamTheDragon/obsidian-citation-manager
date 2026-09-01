@@ -41,6 +41,7 @@ export interface ReferenceMetadata {
   chicago?: string;
   vancouver?: string;
   bibtex?: string;
+  userNotes?: string;
   dateAdded: string;
   dateModified: string;
 }
