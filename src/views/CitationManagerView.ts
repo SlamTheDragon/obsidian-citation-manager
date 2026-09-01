@@ -721,7 +721,7 @@ export class CitationManagerView extends ItemView {
       cls: "citation-small-btn citation-btn-secondary full-width-btn"
     });
     setIcon(pubStudioBtn.createSpan({ cls: "btn-icon" }), "printer");
-    pubStudioBtn.createSpan({ text: " Export for Publication / PDF" });
+    pubStudioBtn.createSpan({ text: " Export for Publication" });
     pubStudioBtn.style.marginTop = "6px";
     pubStudioBtn.addEventListener("click", () => {
       new ExportPublicationModal(
