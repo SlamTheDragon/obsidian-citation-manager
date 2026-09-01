@@ -242,11 +242,11 @@ export class ProjectIndexer {
       : project.inBodyFormat;
     const targetStyle: CitationStyle = project.citationStyle || 'apa7';
 
-    const bracketCitekeyGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
-    const citekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;
-    const footnoteRegex = /\[\^([a-zA-Z0-9_:\.-]+)\](?!:)/g;
-    const parentheticalGroupRegex = /\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\)/g;
-    const narrativeRegex = /\b([A-Z][a-zA-Z\s&]+(?:\s+et\s+al\.)?)\s+\((19\d{2}|20\d{2})\)/g;
+    const bracketCitekeyGroupRegex = /\[([^\]]*@[\p{L}\p{N}_:\.-]+[^\]]*)\]/gu;
+    const citekeyRegex = /@([\p{L}\p{N}_:\.-]+)/gu;
+    const footnoteRegex = /\[\^([\p{L}\p{N}_:\.-]+)\](?!:)/gu;
+    const parentheticalGroupRegex = /\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\)/gu;
+    const narrativeRegex = /\b([\p{Lu}][\p{L}\s&]+(?:\s+et\s+al\.)?)\s+\((19\d{2}|20\d{2})\)/gu;
 
     const authorYearIndex = new Map<string, string>();
     for (const [key, ref] of allReferences.entries()) {
@@ -529,7 +529,7 @@ export class ProjectIndexer {
         });
 
         // 4. Style check on bottom footnote definitions
-        const fnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:\s*(.*)$/gm;
+        const fnDefRegex = /^\s*\[\^([\p{L}\p{N}_:\.-]+)\]:\s*(.*)$/gmu;
         let defMatch: RegExpExecArray | null;
         let footnoteIndex = 1;
         while ((defMatch = fnDefRegex.exec(rawContent)) !== null) {
