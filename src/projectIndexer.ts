@@ -821,6 +821,14 @@ export class ProjectIndexer {
       }
     }
 
+    const isAllProjects = (
+      project.id === ALL_PROJECTS_ID || 
+      project.id === '__ALL_PROJECTS__' || 
+      project.id === '__ALL_REFERENCES__' || 
+      project.name === 'All References' || 
+      project.name === 'All Citations'
+    );
+
     return {
       totalReferences,
       usedReferencesCount,
@@ -828,7 +836,7 @@ export class ProjectIndexer {
       totalCitationsInFiles,
       unresolvedCitations,
       referenceUsageMap,
-      lintWarnings,
+      lintWarnings: isAllProjects ? [] : lintWarnings,
     };
   }
 

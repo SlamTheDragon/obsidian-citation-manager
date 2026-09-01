@@ -1075,7 +1075,11 @@ export class CitationManagerView extends ItemView {
             descRow.setText(w.message);
           }
         } else {
-          contentBody.createEl("p", { cls: "citation-card-muted-text", text: "No citation inconsistencies detected. All notes align with bucket standards." });
+          const isAll = (project?.id === ALL_PROJECTS_ID || !project || project.id === '__ALL_PROJECTS__' || project.name === 'All References' || project.name === 'All Citations');
+          const emptyText = isAll 
+            ? "Formatting and consistency linting is scoped to individual Citation Buckets. Select a specific bucket to view and resolve diagnostics."
+            : "No citation inconsistencies detected. All notes align with bucket standards.";
+          contentBody.createEl("p", { cls: "citation-card-muted-text", text: emptyText });
         }
       }
 
