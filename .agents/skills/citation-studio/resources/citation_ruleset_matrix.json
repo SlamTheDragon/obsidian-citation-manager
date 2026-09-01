@@ -1,0 +1,219 @@
+{
+  "version": "1.0.0",
+  "generatedAt": "2026-09-01T11:57:00Z",
+  "description": "Authoritative Formatting, Overloading, and Linting Rule Matrix for Citation Studio",
+  "citationStandards": [
+    {
+      "id": "apa7_parenthetical",
+      "name": "APA 7 (Author, Year)",
+      "style": "apa7",
+      "inBodyFormat": "parenthetical",
+      "footnoteMode": false,
+      "inBodyRule": "Parenthetical author-date enclosed in parentheses with comma separator",
+      "inBodyPattern": "^\\([A-Za-z\\s&]+,\\s*(19|20)\\d{2}\\)$",
+      "bottomRule": "APA 7 un-prefixed bibliographic entry with hanging indent and italicized journal/volume",
+      "bottomPattern": "^[A-Za-z\\s,.-]+\\((19|20)\\d{2}\\)\\..*$",
+      "exampleInBody": "(Chen et al., 2024)",
+      "exampleBottom": "Chen, Q., Spapé, M. M., & Jacucci, G. (2024). Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms. *ACM TOCHI*, *31*(4), 1-34."
+    },
+    {
+      "id": "apa7_narrative",
+      "name": "APA 7 Narrative Author (Year)",
+      "style": "apa7",
+      "inBodyFormat": "narrative",
+      "footnoteMode": false,
+      "inBodyRule": "Author surname in prose followed by year in parentheses",
+      "inBodyPattern": "^[A-Za-z\\s&]+\\s*\\((19|20)\\d{2}\\)$",
+      "bottomRule": "APA 7 un-prefixed bibliographic entry",
+      "bottomPattern": "^[A-Za-z\\s,.-]+\\((19|20)\\d{2}\\)\\..*$",
+      "exampleInBody": "Chen et al. (2024)",
+      "exampleBottom": "Chen, Q., Spapé, M. M., & Jacucci, G. (2024). Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms. *ACM TOCHI*, *31*(4), 1-34."
+    },
+    {
+      "id": "ieee",
+      "name": "IEEE [1]",
+      "style": "ieee",
+      "inBodyFormat": "parenthetical",
+      "footnoteMode": false,
+      "inBodyRule": "Sequential integer in square brackets",
+      "inBodyPattern": "^\\[\\d+\\]$",
+      "bottomRule": "IEEE bibliographic entry prefixed with square-bracketed sequential index [N]",
+      "bottomPattern": "^\\[\\d+\\]\\s+[A-Za-z\\s,.-]+,\\s*\".*\",\\s*.*$",
+      "exampleInBody": "[1]",
+      "exampleBottom": "[1] Q. Chen, M. M. Spapé, and G. Jacucci, \"Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms,\" *ACM TOCHI*, vol. 31, no. 4, pp. 1-34, 2024."
+    },
+    {
+      "id": "harvard",
+      "name": "Harvard (Author Year)",
+      "style": "harvard",
+      "inBodyFormat": "parenthetical",
+      "footnoteMode": false,
+      "inBodyRule": "Author and year in parentheses without comma separator",
+      "inBodyPattern": "^\\([A-Za-z\\s&]+\\s+(19|20)\\d{2}\\)$",
+      "bottomRule": "Harvard bibliographic entry with year in parentheses directly following authors",
+      "bottomPattern": "^[A-Za-z\\s,.-]+\\s+\\((19|20)\\d{2}\\)\\s+.*$",
+      "exampleInBody": "(Chen et al. 2024)",
+      "exampleBottom": "Chen, Q., Spapé, M. M. and Jacucci, G. (2024) 'Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms', *ACM TOCHI*, 31(4), pp. 1-34."
+    },
+    {
+      "id": "chicago",
+      "name": "Chicago (Author Year)",
+      "style": "chicago",
+      "inBodyFormat": "parenthetical",
+      "footnoteMode": false,
+      "inBodyRule": "Author and year in parentheses without comma separator",
+      "inBodyPattern": "^\\([A-Za-z\\s&]+\\s+(19|20)\\d{2}\\)$",
+      "bottomRule": "Chicago Author-Date bibliographic entry with year directly following inverted author name",
+      "bottomPattern": "^[A-Za-z\\s,.-]+\\s+(19|20)\\d{2}\\.\\s+\".*\"\\s+.*$",
+      "exampleInBody": "(Chen et al. 2024)",
+      "exampleBottom": "Chen, Qi, Michiel M. Spapé, and Giulio Jacucci. 2024. \"Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms.\" *ACM TOCHI* 31 (4): 1-34."
+    },
+    {
+      "id": "vancouver",
+      "name": "Vancouver (1)",
+      "style": "vancouver",
+      "inBodyFormat": "parenthetical",
+      "footnoteMode": false,
+      "inBodyRule": "Sequential integer in parentheses",
+      "inBodyPattern": "^\\(\\d+\\)$",
+      "bottomRule": "Vancouver bibliographic entry prefixed with number and period (N.)",
+      "bottomPattern": "^\\d+\\.\\s+[A-Za-z\\s,.-]+\\..*$",
+      "exampleInBody": "(1)",
+      "exampleBottom": "1. Chen Qi, Spapé Michiel M, Jacucci Giulio. Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms. ACM TOCHI. 2024;31(4):1-34."
+    },
+    {
+      "id": "citekey",
+      "name": "Pandoc Citekey [@key]",
+      "style": "apa7",
+      "inBodyFormat": "citekey",
+      "footnoteMode": false,
+      "inBodyRule": "Pandoc citekey prefixed with @ inside square brackets",
+      "inBodyPattern": "^\\[@[\\p{L}\\p{N}_:\\.-]+\\]$",
+      "bottomRule": "Standard APA 7 un-prefixed bibliographic entry",
+      "bottomPattern": "^[A-Za-z\\s,.-]+\\((19|20)\\d{2}\\)\\..*$",
+      "exampleInBody": "[@Chen2024]",
+      "exampleBottom": "Chen, Q., Spapé, M. M., & Jacucci, G. (2024). Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms. *ACM TOCHI*, *31*(4), 1-34."
+    },
+    {
+      "id": "footnote_global",
+      "name": "Global Footnote Mode [^key]",
+      "style": "dynamic_by_bucket",
+      "inBodyFormat": "footnote",
+      "footnoteMode": true,
+      "inBodyRule": "Obsidian footnote anchor [^citekey]",
+      "inBodyPattern": "^\\[\\^[\\p{L}\\p{N}_:\\.-]+\\](?!:)$",
+      "bottomRule": "Footnote definition prefixed with [^citekey]: and formatted in bucket citation style",
+      "bottomPattern": "^\\[\\^[\\p{L}\\p{N}_:\\.-]+\\]:\\s+.*$",
+      "exampleInBody": "[^Chen2024]",
+      "exampleBottom": "[^Chen2024]: Chen, Q., Spapé, M. M., & Jacucci, G. (2024). Understanding Phantom Tactile Sensation on Commercially Available Social Virtual Reality Platforms. *ACM TOCHI*, *31*(4), 1-34."
+    }
+  ],
+  "overloadingRules": [
+    {
+      "contextType": "pandoc_citekey_bracket",
+      "cursorContextPattern": "\\[[^\\]]*@[\\p{L}\\p{N}_:\\.-]+[^\\]]*\\]",
+      "incomingAction": "Insert second citekey @Jones2021 inside existing [@Smith2020]",
+      "mergingRule": "Merge into single bracket, separated by semicolons: [@Smith2020; @Jones2021]",
+      "exampleBefore": "[@Smith2020]",
+      "exampleAfter": "[@Smith2020; @Jones2021]"
+    },
+    {
+      "contextType": "author_date_parenthetical",
+      "cursorContextPattern": "\\([^)]*(19|20)\\d{2}[^)]*\\)",
+      "incomingAction": "Insert Jones2021 inside existing (Smith, 2020)",
+      "mergingRule": "Merge into single parenthetical, sorted alphabetically by first author surname with semicolon delimiter",
+      "exampleBefore": "(Smith, 2020)",
+      "exampleAfter": "(Jones & Brown, 2021; Smith, 2020)"
+    },
+    {
+      "contextType": "ieee_numeric_bracket",
+      "cursorContextPattern": "\\[\\d+(?:\\s*,\\s*\\d+)*\\]",
+      "incomingAction": "Insert new reference inside existing [1]",
+      "mergingRule": "Merge into single bracket comma-separated numeric list: [1, 2]",
+      "exampleBefore": "[1]",
+      "exampleAfter": "[1, 2]"
+    },
+    {
+      "contextType": "vancouver_numeric_paren",
+      "cursorContextPattern": "\\(\\d+(?:\\s*,\\s*\\d+)*\\)",
+      "incomingAction": "Insert new reference inside existing (1)",
+      "mergingRule": "Merge into single parenthesis comma-separated numeric list: (1, 2)",
+      "exampleBefore": "(1)",
+      "exampleAfter": "(1, 2)"
+    },
+    {
+      "contextType": "footnote_call",
+      "cursorContextPattern": "\\[\\^[\\p{L}\\p{N}_:\\.-]+\\](?!:)",
+      "incomingAction": "Insert new reference inside or adjacent to [^Smith2020]",
+      "mergingRule": "Append adjacent contiguous footnote token: [^Smith2020][^Jones2021]",
+      "exampleBefore": "[^Smith2020]",
+      "exampleAfter": "[^Smith2020][^Jones2021]"
+    }
+  ],
+  "linterDecisionMatrix": [
+    {
+      "stateCondition": "Footnote Mode ON, In-Body is (Author, Year)",
+      "diagnosticType": "format_mismatch",
+      "badge": "Format Mismatch",
+      "message": "Expected footnote [^citekey] in Footnote Mode.",
+      "suggestedFix": "[^citekey]",
+      "batchFixAction": "Replace in-body token with [^citekey]"
+    },
+    {
+      "stateCondition": "Footnote Mode ON, In-Body is [@citekey]",
+      "diagnosticType": "format_mismatch",
+      "badge": "Format Mismatch",
+      "message": "Expected footnote [^citekey] in Footnote Mode.",
+      "suggestedFix": "[^citekey]",
+      "batchFixAction": "Replace in-body token with [^citekey]"
+    },
+    {
+      "stateCondition": "Footnote Mode ON, In-Body is (AuthorA, Year; AuthorB, Year)",
+      "diagnosticType": "format_mismatch",
+      "badge": "Format Mismatch",
+      "message": "Expected footnote citation in Footnote Mode.",
+      "suggestedFix": "[^citekeyA][^citekeyB]",
+      "batchFixAction": "Replace entire parenthetical group with contiguous footnotes"
+    },
+    {
+      "stateCondition": "Footnote Mode ON, Bottom definition missing [^citekey]: prefix",
+      "diagnosticType": "format_mismatch",
+      "badge": "Format Mismatch",
+      "message": "Convert reference line to [^citekey]: footnote definition in Footnote Mode.",
+      "suggestedFix": "[^citekey]: <CSL Entry>",
+      "batchFixAction": "Prepend [^citekey]: and format definition according to bucket standard"
+    },
+    {
+      "stateCondition": "Footnote Mode OFF, In-Body is [^citekey]",
+      "diagnosticType": "format_mismatch",
+      "badge": "Format Mismatch",
+      "message": "Expected {targetFormat} citation for [^citekey] (Footnote Mode is disabled).",
+      "suggestedFix": "CitationEngine.formatInBody(ref, targetFormat, targetStyle)",
+      "batchFixAction": "Replace [^citekey] with standard in-body citation"
+    },
+    {
+      "stateCondition": "Footnote Mode OFF, Bottom definition has [^citekey]: stub",
+      "diagnosticType": "format_mismatch",
+      "badge": "Format Mismatch",
+      "message": "Convert [^citekey]: stub to standard reference entry.",
+      "suggestedFix": "CitationEngine.formatBibliographyEntry(ref, targetStyle)",
+      "batchFixAction": "Strip [^citekey]: prefix and reformat as standard bibliography line"
+    },
+    {
+      "stateCondition": "Bottom reference entry present, but cited 0 times in-body (Both Modes)",
+      "diagnosticType": "orphan_definition",
+      "badge": "Orphan",
+      "message": "Reference definition is not cited anywhere in this file.",
+      "suggestedFix": "",
+      "batchFixAction": "Remove orphan reference line from note"
+    },
+    {
+      "stateCondition": "In-body citekey or footnote not registered in any connected library",
+      "diagnosticType": "unresolved",
+      "badge": "Unresolved",
+      "message": "Citekey is not registered in any connected reference library.",
+      "suggestedFix": null,
+      "batchFixAction": "Open Create Entry modal or Purge reference from document"
+    }
+  ]
+}
