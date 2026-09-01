@@ -528,7 +528,7 @@ export class CitationManagerView extends ItemView {
 
       accBody.createDiv({ 
         cls: "citation-card-note-snippet-text", 
-        text: `“${previewText}”`
+        text: `${previewText}`
       });
 
       let isOpen = false;
@@ -1410,7 +1410,7 @@ export class CitationManagerView extends ItemView {
       new PromptModal(
         this.app,
         "Create Citation Bucket for this File",
-        "e.g. Spatial HCI",
+        "e.g. Your Corpus Name",
         "",
         async (name) => {
           const id = name.toLowerCase().replace(/[^a-z0-9_-]/g, "-");

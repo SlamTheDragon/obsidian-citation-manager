@@ -31,6 +31,8 @@ export interface ReferenceMetadata {
   url?: string;
   isbn?: string;
   issn?: string;
+  accessedDate?: string;
+  duration?: string;
   abstract?: string;
   pdfAttachment?: string;
   projects: string[];

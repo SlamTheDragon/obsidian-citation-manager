@@ -313,6 +313,35 @@ export class ReferenceEditorModal extends Modal {
           value: this.ref.issn || ""
         });
         issnInput.addEventListener("input", () => { this.ref.issn = issnInput.value; });
+
+        // Online & Video Metadata Grid (Accessed Date & Duration)
+        const mediaGrid = body.createDiv({ cls: "citation-form-grid-2" });
+
+        const accessGroup = mediaGrid.createDiv({ cls: "citation-form-group" });
+        accessGroup.createEl("label", { cls: "citation-form-label", text: "Accessed Date" });
+        const accessInput = accessGroup.createEl("input", {
+          type: "text",
+          cls: "citation-form-input",
+          placeholder: "e.g. September 2, 2026",
+          value: this.ref.accessedDate || ""
+        });
+        accessInput.addEventListener("input", () => {
+          this.ref.accessedDate = accessInput.value;
+          this.updatePreviews();
+        });
+
+        const durationGroup = mediaGrid.createDiv({ cls: "citation-form-group" });
+        durationGroup.createEl("label", { cls: "citation-form-label", text: "Duration / Length" });
+        const durationInput = durationGroup.createEl("input", {
+          type: "text",
+          cls: "citation-form-input",
+          placeholder: "e.g. 14:20 or 1 hr 12 min",
+          value: this.ref.duration || ""
+        });
+        durationInput.addEventListener("input", () => {
+          this.ref.duration = durationInput.value;
+          this.updatePreviews();
+        });
       }
     );
 

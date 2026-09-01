@@ -53,6 +53,18 @@ export class CitationEngine {
   }
 
   /**
+   * Helper to identify corporate, institutional, or channel authors that should not be inverted
+   */
+  private static isCorporateAuthor(name: string): boolean {
+    const clean = name.trim();
+    if (clean.includes(",")) return false;
+    return (
+      /^(google|apple|microsoft|openai|deepmind|nature|meta|amazon|ibm|ieee|acm|who|cdc|nih|mit|stanford|harvard|oxford|cambridge|asapscience|veritasium|vsauce|kurzgesagt)\b/i.test(clean) ||
+      /\b(university|institute|organization|organisation|department|ministry|agency|council|association|foundation|laboratory|laboratories|labs|team|group|consortium|press|studio|studios|channel|media|guys|network)\b/i.test(clean)
+    );
+  }
+
+  /**
    * Formats author names for APA style (e.g., Smith, J. D., & Jones, A. B.)
    */
   static formatAuthorsAPA(authors: string[]): string {
@@ -60,6 +72,9 @@ export class CitationEngine {
     
     const formatted = authors.map(a => {
       const clean = a.trim();
+      if (this.isCorporateAuthor(clean)) {
+        return clean;
+      }
       if (clean.includes(",")) {
         const parts = clean.split(",");
         const last = parts[0].trim();
@@ -95,6 +110,9 @@ export class CitationEngine {
     if (!authors || authors.length === 0) return "Unknown";
     const formatted = authors.map(a => {
       const clean = a.trim();
+      if (this.isCorporateAuthor(clean)) {
+        return clean;
+      }
       if (clean.includes(",")) {
         const parts = clean.split(",");
         const last = parts[0].trim();
@@ -125,23 +143,44 @@ export class CitationEngine {
    * Generates APA 7th Edition Full Reference
    */
   static formatAPA7(ref: Partial<ReferenceMetadata>): string {
-    const authors = this.formatAuthorsAPA(ref.authors || []);
-    const year = ref.year ? `(${ref.year})` : "(n.d.)";
-    const title = ref.title ? (ref.title.endsWith(".") ? ref.title : `${ref.title}.`) : "Untitled.";
+    const rawAuthors = this.formatAuthorsAPA(ref.authors || []);
+    const authors = rawAuthors.endsWith(".") ? rawAuthors : `${rawAuthors}.`;
+    
+    let dateStr = "(n.d.).";
+    if (ref.year) {
+      if (ref.month) {
+        dateStr = `(${ref.year}, ${ref.month}).`;
+      } else {
+        dateStr = `(${ref.year}).`;
+      }
+    }
 
+    let title = ref.title ? ref.title.trim() : "Untitled";
     let source = "";
-    if (ref.type === "journal" || ref.type === "conference") {
+
+    if (ref.type === "video") {
+      title = `*${title}* [Video].`;
+      const platform = ref.publication || ref.publisher || "YouTube";
+      source = `${platform}.`;
+    } else if (ref.type === "journal" || ref.type === "conference") {
+      title = title.endsWith(".") ? title : `${title}.`;
       const pub = ref.publication ? `*${ref.publication}*` : "";
       const vol = ref.volume ? `, *${ref.volume}*` : "";
       const issue = ref.issue ? `(${ref.issue})` : "";
       const pages = ref.pages ? `, ${ref.pages}` : "";
       source = `${pub}${vol}${issue}${pages}.`;
     } else if (ref.type === "book") {
+      title = `*${title.endsWith(".") ? title : `${title}.`}*`;
       source = ref.publisher ? `${ref.publisher}.` : "";
-    } else if (ref.type === "webpage" || ref.type === "blog" || ref.type === "video") {
-      source = ref.publication ? `*${ref.publication}*.` : "";
+    } else if (ref.type === "webpage" || ref.type === "blog") {
+      title = `*${title.endsWith(".") ? title : `${title}.`}*`;
+      source = ref.publication ? `${ref.publication}.` : "";
     } else if (ref.type === "preprint") {
+      title = title.endsWith(".") ? title : `${title}.`;
       source = ref.publication ? `*${ref.publication}* (Preprint).` : "Preprint.";
+    } else {
+      title = title.endsWith(".") ? title : `${title}.`;
+      source = ref.publication ? `*${ref.publication}*.` : "";
     }
 
     let link = "";
@@ -149,10 +188,14 @@ export class CitationEngine {
       const cleanDoi = ref.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, "");
       link = `https://doi.org/${cleanDoi}`;
     } else if (ref.url) {
-      link = ref.url;
+      if (ref.accessedDate && (ref.type === "webpage" || ref.type === "blog" || !ref.year)) {
+        link = `Retrieved ${ref.accessedDate}, from ${ref.url}`;
+      } else {
+        link = ref.url;
+      }
     }
 
-    return [authors, year, title, source, link].filter(p => p && p.trim().length > 0).join(" ").replace(/\s\s+/g, " ").trim();
+    return [authors, dateStr, title, source, link].filter(p => p && p.trim().length > 0).join(" ").replace(/\s\s+/g, " ").trim();
   }
 
   /**
@@ -162,9 +205,15 @@ export class CitationEngine {
     const authors = this.formatAuthorsIEEE(ref.authors || []);
     const title = ref.title ? `"${ref.title.replace(/"/g, "'")},"` : "\"Untitled,\"";
     const year = ref.year ? `${ref.year}` : "n.d.";
+    const accessed = ref.accessedDate ? `Accessed: ${ref.accessedDate}. ` : "";
 
     let source = "";
-    if (ref.type === "journal" || ref.type === "conference") {
+    if (ref.type === "video") {
+      const platform = ref.publication || ref.publisher || "YouTube";
+      const dateStr = ref.month ? `${ref.month} ${year}` : year;
+      source = `${platform}, ${dateStr}. ${accessed}[Online Video]. Available: ${ref.url || ""}`;
+      return `[${index}] ${authors}, ${title} ${source}.`.replace(/\.\./g, ".").replace(/\s\s+/g, " ").trim();
+    } else if (ref.type === "journal" || ref.type === "conference") {
       const pub = ref.publication ? `*${ref.publication}*` : "*Proc.*";
       const vol = ref.volume ? `, vol. ${ref.volume}` : "";
       const issue = ref.issue ? `, no. ${ref.issue}` : "";
@@ -173,6 +222,9 @@ export class CitationEngine {
     } else if (ref.type === "book") {
       const pub = ref.publisher ? `${ref.publisher}, ` : "";
       source = `${pub}${year}`;
+    } else if (ref.type === "webpage" || ref.type === "blog") {
+      source = `${ref.publication ? `*${ref.publication}*, ` : ""}${year}. ${accessed}[Online]. Available: ${ref.url || ""}`;
+      return `[${index}] ${authors}, ${title} ${source}.`.replace(/\.\./g, ".").replace(/\s\s+/g, " ").trim();
     } else {
       source = `${ref.publication ? `*${ref.publication}*, ` : ""}${year}`;
     }
@@ -195,6 +247,14 @@ export class CitationEngine {
     const authors = this.formatAuthorsAPA(ref.authors || []).replace(/, &/g, " and");
     const year = ref.year ? `(${ref.year})` : "(no date)";
     const title = ref.title ? `'${ref.title}'` : "'Untitled'";
+    const accessed = ref.accessedDate ? `(Accessed: ${ref.accessedDate})` : "";
+
+    if (ref.type === "video") {
+      const platform = ref.publication || ref.publisher ? `${ref.publication || ref.publisher}. ` : "";
+      const dateUploaded = ref.month ? `${ref.month}. ` : "";
+      const urlStr = ref.url ? `Available at: ${ref.url} ` : "";
+      return `${authors} ${year} ${title} [Video]. ${platform}${dateUploaded}${urlStr}${accessed}`.replace(/\s\s+/g, " ").trim();
+    }
 
     let details = "";
     if (ref.publication) {
@@ -210,7 +270,7 @@ export class CitationEngine {
     if (ref.doi) {
       link = `doi: ${ref.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, "")}`;
     } else if (ref.url) {
-      link = `Available at: ${ref.url}`;
+      link = `Available at: ${ref.url} ${accessed}`.trim();
     }
 
     return `${authors} ${year} ${title}, ${details}. ${link}`.replace(/\s\s+/g, " ").trim();
@@ -223,6 +283,7 @@ export class CitationEngine {
     if (!authors || authors.length === 0) return "Unknown";
     const toFirstLast = (a: string) => {
       const clean = a.trim();
+      if (this.isCorporateAuthor(clean)) return clean;
       if (clean.includes(",")) {
         const parts = clean.split(",");
         return `${parts.slice(1).join(" ").trim()} ${parts[0].trim()}`.trim();
@@ -231,6 +292,7 @@ export class CitationEngine {
     };
     const toLastFirst = (a: string) => {
       const clean = a.trim();
+      if (this.isCorporateAuthor(clean)) return clean;
       if (clean.includes(",")) return clean;
       const parts = clean.split(/\s+/);
       if (parts.length === 1) return parts[0];
@@ -247,9 +309,18 @@ export class CitationEngine {
    * Generates Chicago (Author-Date) Format
    */
   static formatChicago(ref: Partial<ReferenceMetadata>): string {
-    const authors = this.formatAuthorsChicago(ref.authors || []);
+    const rawAuthors = this.formatAuthorsChicago(ref.authors || []);
+    const authors = rawAuthors.endsWith(".") ? rawAuthors : `${rawAuthors}.`;
     const year = ref.year ? `${ref.year}.` : "n.d.";
     const title = ref.title ? `"${ref.title}."` : "\"Untitled.\"";
+
+    if (ref.type === "video") {
+      const platform = ref.publication || ref.publisher || "YouTube";
+      const durStr = ref.duration ? `, ${ref.duration}` : "";
+      const accessStr = ref.accessedDate ? `, accessed ${ref.accessedDate}` : "";
+      const link = ref.url || (ref.doi ? `https://doi.org/${ref.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, "")}` : "");
+      return `${authors} ${year} ${title} ${platform} video${durStr}${accessStr}. ${link}`.replace(/\s\s+/g, " ").trim();
+    }
 
     let pub = "";
     if (ref.publication) {
@@ -262,7 +333,10 @@ export class CitationEngine {
 
     let link = "";
     if (ref.doi) link = `https://doi.org/${ref.doi.replace(/^https?:\/\/(dx\.)?doi\.org\//, "")}`;
-    else if (ref.url) link = ref.url;
+    else if (ref.url) {
+      const accessStr = ref.accessedDate ? `Accessed ${ref.accessedDate}. ` : "";
+      link = `${accessStr}${ref.url}`;
+    }
 
     return `${authors} ${year} ${title} ${pub} ${link}`.replace(/\s\s+/g, " ").trim();
   }
@@ -273,13 +347,27 @@ export class CitationEngine {
   static formatVancouver(ref: Partial<ReferenceMetadata>, index: number = 1): string {
     const authors = (ref.authors || []).map(a => a.replace(/,/g, "").replace(/\./g, "")).slice(0, 6).join(", ") || "Unknown";
     const title = ref.title ? `${ref.title}.` : "Untitled.";
+    const accessedStr = ref.accessedDate ? ` [Accessed ${ref.accessedDate}]` : "";
+
+    if (ref.type === "video") {
+      const platform = ref.publication || ref.publisher || "YouTube";
+      const yearStr = ref.year || "n.d.";
+      const urlStr = ref.url ? ` Available from: ${ref.url}` : "";
+      return `${index}. ${authors}. ${ref.title || "Untitled"} [Video]. ${platform}; ${yearStr}.${urlStr}${accessedStr}`.replace(/\s\s+/g, " ").trim();
+    }
+
     const pub = ref.publication || "Journal";
     const year = ref.year || "Year";
     const vol = ref.volume || "";
     const issue = ref.issue ? `(${ref.issue})` : "";
     const pages = ref.pages ? `:${ref.pages}` : "";
 
-    return `${index}. ${authors}. ${title} ${pub}. ${year};${vol}${issue}${pages}.`.replace(/\s\s+/g, " ").trim();
+    let urlPart = "";
+    if (ref.url && (ref.type === "webpage" || ref.type === "blog")) {
+      urlPart = ` Available from: ${ref.url}${accessedStr}`;
+    }
+
+    return `${index}. ${authors}. ${title} ${pub}. ${year};${vol}${issue}${pages}.${urlPart}`.replace(/\s\s+/g, " ").trim();
   }
 
   /**
@@ -595,6 +683,38 @@ export class CitationEngine {
   }
 
   /**
+   * Sorts references for bibliography output:
+   * - Author-Date styles (APA 7, Harvard, Chicago): Alphabetical by 1st author, then co-authors, then chronological by year, then title
+   * - Numeric styles (IEEE, Vancouver): Retains citation order or index
+   */
+  static sortReferences(refs: ReferenceMetadata[], style: CitationStyle = 'apa7'): ReferenceMetadata[] {
+    if (style === 'ieee' || style === 'vancouver') {
+      return [...refs];
+    }
+
+    return [...refs].sort((a, b) => {
+      const authorA = this.getLastName(a.authors?.[0] || "");
+      const authorB = this.getLastName(b.authors?.[0] || "");
+      const authorComp = authorA.localeCompare(authorB, undefined, { sensitivity: 'base' });
+      if (authorComp !== 0) return authorComp;
+
+      // Same first author: sort by all authors combined
+      const fullAuthorsA = (a.authors || []).join("; ");
+      const fullAuthorsB = (b.authors || []).join("; ");
+      const fullAuthorsComp = fullAuthorsA.localeCompare(fullAuthorsB, undefined, { sensitivity: 'base' });
+      if (fullAuthorsComp !== 0) return fullAuthorsComp;
+
+      // Same authors: sort chronologically by year ascending (e.g. 2020 before 2024)
+      const yearA = parseInt(String(a.year).replace(/[^0-9]/g, "")) || 0;
+      const yearB = parseInt(String(b.year).replace(/[^0-9]/g, "")) || 0;
+      if (yearA !== yearB) return yearA - yearB;
+
+      // Same authors and year: sort alphabetically by title
+      return (a.title || "").localeCompare(b.title || "", undefined, { sensitivity: 'base' });
+    });
+  }
+
+  /**
    * Generates formatted Bibliography markdown
    */
   static generateBibliography(refs: ReferenceMetadata[], style: CitationStyle = 'apa7', title: string = "Bibliography"): string {
@@ -602,8 +722,9 @@ export class CitationEngine {
       return `## ${title}\n\n*No citations found in this project.*`;
     }
 
+    const sortedRefs = this.sortReferences(refs, style);
     const lines: string[] = [`## ${title}\n`];
-    refs.forEach((ref, index) => {
+    sortedRefs.forEach((ref, index) => {
       let text = "";
       switch (style) {
         case 'apa7': text = this.formatAPA7(ref); break;
@@ -621,6 +742,7 @@ export class CitationEngine {
 
   private static getLastName(authorStr: string): string {
     const clean = authorStr.trim();
+    if (this.isCorporateAuthor(clean)) return clean;
     if (clean.includes(",")) return clean.split(",")[0].trim();
     const parts = clean.split(/\s+/);
     if (parts.length > 1) {
