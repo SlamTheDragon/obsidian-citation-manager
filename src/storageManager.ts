@@ -276,11 +276,7 @@ export class StorageManager {
       if (notesMatch && notesMatch[1].trim()) {
         return notesMatch[1].trim();
       }
-      const stripped = body
-        .replace(/^#\s+[^\r\n]*\r?\n/m, '')
-        .replace(/## Abstract(?: & Notes)?\r?\n[\s\S]*?(?=\r?\n## |$)/i, '')
-        .trim();
-      return stripped;
+      return "";
     } catch {
       return "";
     }
@@ -305,7 +301,9 @@ export class StorageManager {
       const abstractMatch = body.match(/## Abstract(?: & Notes)?\r?\n([\s\S]*?)(?=\r?\n## |\r?\n# |$)/i);
       const abstractText = abstractMatch ? abstractMatch[1].trim() : "*No abstract available.*";
 
-      const newBody = `\n# ${title}\n\n## Abstract\n${abstractText}\n\n## Notes & Synthesis\n${userNotes.trim()}\n`;
+      const cleanNotes = userNotes.trim();
+      const notesSection = cleanNotes ? `\n\n## Notes & Synthesis\n${cleanNotes}` : "";
+      const newBody = `\n# ${title}\n\n## Abstract\n${abstractText}${notesSection}\n`;
       const newFullContent = `---\n${fm.trim()}\n---\n${newBody.trim()}\n`;
 
       await this.app.vault.adapter.write(filePath, newFullContent);
@@ -342,12 +340,6 @@ export class StorageManager {
       const notesMatch = body.match(/## (?:Notes|Personal Notes|Notes & Synthesis|Synthesis|Literature Notes)\r?\n([\s\S]*)$/i);
       if (notesMatch && notesMatch[1].trim()) {
         userNotes = notesMatch[1].trim();
-      } else {
-        const stripped = body
-          .replace(/^#\s+[^\r\n]*\r?\n/m, '')
-          .replace(/## Abstract(?: & Notes)?\r?\n[\s\S]*?(?=\r?\n## |$)/i, '')
-          .trim();
-        if (stripped) userNotes = stripped;
       }
 
       const ref: ReferenceMetadata = {

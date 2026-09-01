@@ -1,4 +1,4 @@
-import { App, Modal, Notice, setIcon } from 'obsidian';
+import { App, Modal, Notice, setIcon, MarkdownRenderer } from 'obsidian';
 import { ReferenceMetadata } from '../types';
 import { StorageManager } from '../storageManager';
 
@@ -8,6 +8,7 @@ export class CitationNotesModal extends Modal {
   private onSave: () => Promise<void>;
   private notesText: string = "";
   private isAbstractOpen: boolean = false;
+  private activeTab: 'edit' | 'preview' = 'edit';
 
   constructor(
     app: App,
@@ -87,39 +88,71 @@ export class CitationNotesModal extends Modal {
       });
     }
 
-    // 3. Notes Editor Section
+    // 3. Notes Editor Section (With Native Markdown Preview)
     const notesCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
     const notesTitleRow = notesCard.createDiv({ cls: "section-card-title-row" });
     notesTitleRow.style.display = "flex";
     notesTitleRow.style.alignItems = "center";
     notesTitleRow.style.justifyContent = "space-between";
-    notesTitleRow.style.marginBottom = "6px";
+    notesTitleRow.style.marginBottom = "8px";
 
     notesTitleRow.createEl("div", { 
       cls: "section-card-title", 
       text: "Literature Synthesis & Notes" 
     });
 
-    const notesArea = notesCard.createEl("textarea", {
-      cls: "citation-form-textarea",
-      placeholder: "Write your literature review notes, methodology critique, key takeaways, synthesis, or relevant quotes..."
+    // Tab Switcher for Edit vs Native Markdown Preview
+    const modeBar = notesTitleRow.createDiv({ cls: "citation-notes-mode-bar" });
+    const editTabBtn = modeBar.createEl("button", { 
+      cls: `citation-mode-btn ${this.activeTab === 'edit' ? 'active' : ''}`, 
+      text: " Edit" 
     });
-    notesArea.style.minHeight = "220px";
-    notesArea.style.width = "100%";
-    notesArea.style.fontSize = "12.5px";
-    notesArea.style.lineHeight = "1.5";
-    notesArea.style.fontFamily = "var(--font-monospace, monospace)";
-    notesArea.style.padding = "8px";
-    notesArea.value = this.notesText;
+    setIcon(editTabBtn.createSpan({ cls: "btn-icon" }), "edit-3");
 
-    notesArea.addEventListener("input", () => {
-      this.notesText = notesArea.value;
+    const previewTabBtn = modeBar.createEl("button", { 
+      cls: `citation-mode-btn ${this.activeTab === 'preview' ? 'active' : ''}`, 
+      text: " Preview" 
+    });
+    setIcon(previewTabBtn.createSpan({ cls: "btn-icon" }), "eye");
+
+    const editorContainer = notesCard.createDiv({ cls: "citation-notes-container" });
+
+    if (this.activeTab === 'edit') {
+      const notesArea = editorContainer.createEl("textarea", {
+        cls: "citation-form-textarea",
+        placeholder: "Write your literature review notes, methodology critique, key takeaways, synthesis, or relevant quotes..."
+      });
+      notesArea.style.minHeight = "220px";
+      notesArea.style.width = "100%";
+      notesArea.style.fontSize = "12.5px";
+      notesArea.style.lineHeight = "1.5";
+      notesArea.style.fontFamily = "var(--font-monospace, monospace)";
+      notesArea.style.padding = "8px";
+      notesArea.value = this.notesText;
+
+      notesArea.addEventListener("input", () => {
+        this.notesText = notesArea.value;
+      });
+
+      setTimeout(() => {
+        notesArea.focus();
+        notesArea.setSelectionRange(notesArea.value.length, notesArea.value.length);
+      }, 50);
+    } else {
+      const previewPane = editorContainer.createDiv({ cls: "citation-notes-preview-pane markdown-rendered" });
+      const rawText = this.notesText.trim() || "*No notes written yet.*";
+      MarkdownRenderer.render(this.app, rawText, previewPane, '', this);
+    }
+
+    editTabBtn.addEventListener("click", () => {
+      this.activeTab = 'edit';
+      this.renderModal();
     });
 
-    setTimeout(() => {
-      notesArea.focus();
-      notesArea.setSelectionRange(notesArea.value.length, notesArea.value.length);
-    }, 50);
+    previewTabBtn.addEventListener("click", () => {
+      this.activeTab = 'preview';
+      this.renderModal();
+    });
 
     // 4. Modal Buttons Container
     const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });

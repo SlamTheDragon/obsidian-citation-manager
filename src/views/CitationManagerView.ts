@@ -505,18 +505,54 @@ export class CitationManagerView extends ItemView {
       card.createDiv({ cls: "citation-card-publication", text: ref.publication });
     }
 
-    // Note Snippet preview (if literature notes exist)
-    if (ref.userNotes && ref.userNotes.trim()) {
-      const noteSnippet = card.createDiv({ 
+    // Expandable In-Card Notes Accordion (Shows 'Notes' when collapsed, 25-35 chars when opened, no headers)
+    const rawNotes = (ref.userNotes || "").trim();
+    const cleanNotes = rawNotes
+      .replace(/^#+\s+[^\r\n]*/gm, '') // Strip all markdown headers
+      .replace(/\s+/g, ' ')             // Collapse extra newlines/spaces
+      .trim();
+
+    if (cleanNotes.length > 0) {
+      const accordion = card.createDiv({ cls: "citation-card-notes-accordion" });
+      const accHeader = accordion.createDiv({ cls: "citation-card-notes-header" });
+      const accChevron = accHeader.createSpan({ cls: "notes-accordion-icon" });
+      setIcon(accChevron, "chevron-right");
+      const accTitle = accHeader.createSpan({ cls: "notes-accordion-title", text: "Notes" });
+
+      const accBody = accordion.createDiv({ cls: "citation-card-notes-body" });
+      accBody.style.display = "none";
+
+      const previewLength = 30;
+      const previewText = cleanNotes.length > previewLength 
+        ? `${cleanNotes.slice(0, previewLength)}...` 
+        : cleanNotes;
+
+      const snippetEl = accBody.createDiv({ 
         cls: "citation-card-note-snippet", 
         title: "Click to edit literature notes in modal" 
       });
-      const cleanSnippet = ref.userNotes.trim().replace(/\r?\n+/g, ' ');
-      noteSnippet.setText(`“${cleanSnippet.slice(0, 110)}${cleanSnippet.length > 110 ? '...' : ''}”`);
-      noteSnippet.addEventListener("click", () => {
+      snippetEl.setText(`“${previewText}”`);
+      snippetEl.addEventListener("click", (e) => {
+        e.stopPropagation();
         new CitationNotesModal(this.app, ref, this.storageManager, async () => {
           await this.refreshData();
         }).open();
+      });
+
+      let isOpen = false;
+      accHeader.addEventListener("click", () => {
+        isOpen = !isOpen;
+        if (isOpen) {
+          accordion.addClass("open");
+          accBody.style.display = "block";
+          setIcon(accChevron, "chevron-down");
+          accTitle.style.display = "none"; // Hide title when opened as requested
+        } else {
+          accordion.removeClass("open");
+          accBody.style.display = "none";
+          setIcon(accChevron, "chevron-right");
+          accTitle.style.display = "inline"; // Show title when collapsed
+        }
       });
     }
 
