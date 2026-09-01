@@ -1047,33 +1047,40 @@ export class ProjectIndexer {
 
         for (const [key, ref] of allReferences.entries()) {
           const targetInBody = globalFootnoteMode ? `[^${key}]` : CitationEngine.formatInBody(ref, newFormat, style, fnIdx);
-          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical', style, fnIdx);
-          const narrative = CitationEngine.formatInBody(ref, 'narrative', style, fnIdx);
 
           // 1. Citekey format [@key]
           const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
-          if ((globalFootnoteMode || newFormat !== 'citekey') && citekeyRegex.test(content)) {
+          if (citekeyRegex.test(content)) {
             content = content.replace(citekeyRegex, targetInBody);
             modified = true;
           }
 
           // 2. Footnote call [^key]
           const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-          if (!globalFootnoteMode && footnoteCallRegex.test(content)) {
+          if (footnoteCallRegex.test(content)) {
             content = content.replace(footnoteCallRegex, targetInBody);
             modified = true;
           }
 
-          // 3. Parenthetical format (Author, Year)
-          if ((globalFootnoteMode || newFormat !== 'parenthetical') && parenthetical && content.includes(parenthetical)) {
-            content = content.split(parenthetical).join(targetInBody);
-            modified = true;
-          }
+          // 3. Match across all possible citation style variations
+          const variations = [
+            CitationEngine.formatInBody(ref, 'parenthetical', 'apa7', fnIdx),
+            CitationEngine.formatInBody(ref, 'parenthetical', 'harvard', fnIdx),
+            CitationEngine.formatInBody(ref, 'parenthetical', 'chicago', fnIdx),
+            CitationEngine.formatInBody(ref, 'parenthetical', 'ieee', fnIdx),
+            CitationEngine.formatInBody(ref, 'parenthetical', 'vancouver', fnIdx),
+            CitationEngine.formatInBody(ref, 'narrative', 'apa7', fnIdx),
+            CitationEngine.formatInBody(ref, 'narrative', 'harvard', fnIdx),
+            CitationEngine.formatInBody(ref, 'narrative', 'chicago', fnIdx),
+            CitationEngine.formatInBody(ref, 'narrative', 'ieee', fnIdx),
+            CitationEngine.formatInBody(ref, 'narrative', 'vancouver', fnIdx),
+          ];
 
-          // 4. Narrative format Author (Year)
-          if ((globalFootnoteMode || newFormat !== 'narrative') && narrative && content.includes(narrative)) {
-            content = content.split(narrative).join(targetInBody);
-            modified = true;
+          for (const v of variations) {
+            if (v && v.length > 0 && content.includes(v)) {
+              content = content.split(v).join(targetInBody);
+              modified = true;
+            }
           }
 
           // Transform bottom definitions / bibliography entries to the new style
