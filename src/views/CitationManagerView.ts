@@ -7,6 +7,7 @@ import { CitationEngine } from '../citationEngine';
 import { ReferenceEditorModal } from './ReferenceEditorModal';
 import { UsageLocationsModal } from './UsageLocationsModal';
 import { PDFImportModal } from './PDFImportModal';
+import { FixInconsistenciesModal } from './FixInconsistenciesModal';
 import { PromptModal } from './PromptModal';
 import { ConfirmModal } from './ConfirmModal';
 import { ExportPublicationModal } from './ExportPublicationModal';
@@ -24,6 +25,7 @@ export class CitationManagerView extends ItemView {
 
   private referencesMap: Map<string, ReferenceMetadata> = new Map();
   private stats: ProjectHealthStats | null = null;
+  private dismissedLints: Set<string> = new Set();
   private searchQuery: string = "";
   private selectedTypeFilter: string = "all";
   private currentSubpanel: ActiveSubpanel = 'citations';
@@ -95,6 +97,7 @@ export class CitationManagerView extends ItemView {
   async refreshData() {
     const t0 = performance.now();
     this.referencesMap = await this.storageManager.loadAllReferences();
+    this.dismissedLints = await this.storageManager.loadDismissedLints();
     this.discoverFrontmatterProjects();
 
     const activeProject = this.getActiveProjectRecord();
@@ -104,12 +107,13 @@ export class CitationManagerView extends ItemView {
         activeProject,
         this.referencesMap,
         this.settings.referencesFolder,
-        this.settings.projects
+        this.settings.projects,
+        this.dismissedLints
       );
     } else {
       const virtualAllProject: ProjectRecord = {
         id: ALL_PROJECTS_ID,
-        name: "All References",
+        name: "All Citations",
         registeredFiles: this.settings.projects.flatMap(p => p.registeredFiles || []),
         referenceIds: Array.from(this.referencesMap.keys()),
         created: "",
@@ -119,7 +123,8 @@ export class CitationManagerView extends ItemView {
         virtualAllProject,
         this.referencesMap,
         this.settings.referencesFolder,
-        this.settings.projects
+        this.settings.projects,
+        this.dismissedLints
       );
     }
 
@@ -546,7 +551,7 @@ export class CitationManagerView extends ItemView {
     });
   }
 
-   private async openAttachedPDF(ref: ReferenceMetadata) {
+  private async openAttachedPDF(ref: ReferenceMetadata) {
     if (!ref.pdfAttachment) return;
     const pathsToTry = [
       normalizePath(ref.pdfAttachment),
@@ -565,15 +570,10 @@ export class CitationManagerView extends ItemView {
 
     for (const p of pathsToTry) {
       if (await this.app.vault.adapter.exists(p)) {
-        try {
-          const leaf = this.app.workspace.getLeaf('tab');
-          await this.app.workspace.openLinkText(p, "", false);
+        if ((this.app as any).openWithDefaultApp) {
+          const fullPath = (this.app.vault.adapter as any).getFullPath ? (this.app.vault.adapter as any).getFullPath(p) : p;
+          (this.app as any).openWithDefaultApp(fullPath);
           return;
-        } catch {
-          if ((this.app as any).openWithDefaultApp) {
-            (this.app as any).openWithDefaultApp(p);
-            return;
-          }
         }
       }
     }
@@ -933,15 +933,75 @@ export class CitationManagerView extends ItemView {
         filesCard.createEl("p", { cls: "citation-card-muted-text", text: "No documents linked to this bucket yet. Open a note to link it via the bottom bar." });
       }
 
-      // Unresolved Citations warning
-      if (this.stats.unresolvedCitations.length > 0) {
-        const unresCard = wrapper.createDiv({ cls: "citation-card citation-warning-card" });
-        unresCard.createEl("h5", { text: `Unresolved Citekeys (${this.stats.unresolvedCitations.length})` });
-        const unresList = unresCard.createEl("ul", { cls: "citation-unresolved-list" });
-        for (const u of this.stats.unresolvedCitations.slice(0, 8)) {
-          const li = unresList.createEl("li");
-          li.createEl("code", { text: u.rawCitation });
-          li.createSpan({ text: ` in ${u.file.split('/').pop()} (Line ${u.line})` });
+      // Linter / Inconsistencies Diagnostics Card
+      if (this.stats.lintWarnings && this.stats.lintWarnings.length > 0) {
+        const lintCard = wrapper.createDiv({ cls: "citation-card citation-warning-card" });
+        const lintHead = lintCard.createDiv({ cls: "citation-card-header-flex" });
+        lintHead.createEl("h5", { text: `Citation Diagnostics (${this.stats.lintWarnings.length})` });
+
+        const fixBtn = lintHead.createEl("button", { cls: "citation-mini-btn", text: "Fix Inconsistencies" });
+        fixBtn.style.width = "auto";
+        fixBtn.style.padding = "2px 8px";
+        fixBtn.style.color = "var(--text-on-accent)";
+        fixBtn.style.background = "var(--interactive-accent)";
+
+        fixBtn.addEventListener("click", () => {
+          new FixInconsistenciesModal(this.app, this.stats!.lintWarnings, async (selected) => {
+            let fixedCount = 0;
+            const fileGroup = new Map<string, typeof selected>();
+            for (const item of selected) {
+              if (!fileGroup.has(item.filePath)) fileGroup.set(item.filePath, []);
+              fileGroup.get(item.filePath)!.push(item);
+            }
+
+            for (const [filePath, items] of fileGroup.entries()) {
+              const fileObj = this.app.vault.getAbstractFileByPath(filePath);
+              if (fileObj instanceof TFile) {
+                let content = await this.app.vault.read(fileObj);
+                for (const item of items) {
+                  if (item.suggestedFix) {
+                    content = content.replace(item.rawCitation, item.suggestedFix);
+                    fixedCount++;
+                  }
+                }
+                await this.app.vault.modify(fileObj, content);
+              }
+            }
+
+            new Notice(`Applied ${fixedCount} citation fix(es) across ${fileGroup.size} note(s).`);
+            await this.refreshData();
+          }).open();
+        });
+
+        const lintList = lintCard.createEl("ul", { cls: "citation-unresolved-list" });
+        for (const w of this.stats.lintWarnings.slice(0, 10)) {
+          const li = lintList.createEl("li");
+          li.style.display = "flex";
+          li.style.alignItems = "center";
+          li.style.justifyContent = "space-between";
+          li.style.gap = "6px";
+
+          const left = li.createDiv();
+          const fileLink = left.createSpan({ cls: "file-link-tag", text: `${w.fileName}:${w.lineNumber}` });
+          fileLink.style.fontWeight = "600";
+          fileLink.style.cursor = "pointer";
+          fileLink.addEventListener("click", () => {
+            const f = this.app.vault.getAbstractFileByPath(w.filePath);
+            if (f instanceof TFile) this.app.workspace.getLeaf().openFile(f);
+          });
+
+          left.createEl("code", { text: ` ${w.rawCitation} ` });
+          left.createSpan({ text: ` — ${w.message}`, cls: "status-hint" });
+
+          const dismissBtn = li.createEl("button", { cls: "citation-mini-btn", title: "Dismiss this warning" });
+          dismissBtn.setText("✕");
+          dismissBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            await this.storageManager.saveDismissedLint(w.id);
+            this.dismissedLints.add(w.id);
+            new Notice("Warning dismissed.");
+            await this.refreshData();
+          });
         }
       }
     }
@@ -994,18 +1054,16 @@ export class CitationManagerView extends ItemView {
             this.refreshDataDebounced(50);
           });
         }
-      } else {
-        const assignBtn = leftGroup.createEl("button", { cls: "status-link-btn-pill", text: "+ Link File to Project" });
-        assignBtn.addEventListener("click", () => this.openLinkFileModal(activeFile));
       }
     }
 
     const rightGroup = footer.createDiv({ cls: "status-island-right" });
 
-    // Settings / Stats Toggle Button (Standard Obsidian Settings Icon)
+    // Settings / Stats Toggle Button (Standard Obsidian Settings Icon with Yellow Glow on warnings)
+    const hasWarnings = Boolean(this.stats?.lintWarnings && this.stats.lintWarnings.length > 0);
     const settingsBtn = rightGroup.createEl("button", { 
-      cls: `status-stats-icon-btn ${this.currentSubpanel === 'stats' ? 'active' : ''}`, 
-      title: "Bucket Settings & Statistics" 
+      cls: `status-stats-icon-btn ${this.currentSubpanel === 'stats' ? 'active' : ''} ${hasWarnings ? 'has-warnings' : ''}`, 
+      title: hasWarnings ? `Bucket Settings & Diagnostics (${this.stats?.lintWarnings.length} Warnings)` : "Bucket Settings & Statistics" 
     });
     setIcon(settingsBtn, "settings");
     settingsBtn.addEventListener("click", () => {

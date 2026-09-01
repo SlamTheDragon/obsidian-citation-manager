@@ -218,12 +218,19 @@ export class ProjectIndexer {
     project: ProjectRecord,
     allReferences: Map<string, ReferenceMetadata>,
     referencesFolder: string = ".references",
-    allKnownProjects?: ProjectRecord[]
+    allKnownProjects?: ProjectRecord[],
+    dismissedLints?: Set<string>
   ): Promise<ProjectHealthStats> {
     const files = this.getProjectFiles(project, referencesFolder, allKnownProjects);
     const referenceUsageMap: Record<string, CitationOccurrence[]> = {};
     const unresolvedCitations: { rawCitation: string; file: string; line: number }[] = [];
+    const lintWarnings: LintWarning[] = [];
+    const dismissed = dismissedLints || new Set<string>();
     let totalCitationsInFiles = 0;
+
+    const isFootnoteMode = Boolean(project.enableFootnoteMode);
+    const targetFormat = project.inBodyFormat || 'parenthetical';
+    const targetStyle = project.citationStyle || 'apa7';
 
     const bracketCitekeyGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
     const citekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;
@@ -260,6 +267,7 @@ export class ProjectIndexer {
               const key = subMatch[1];
               totalCitationsInFiles++;
               if (allReferences.has(key)) {
+                const ref = allReferences.get(key)!;
                 if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
                 referenceUsageMap[key].push({
                   filePath: file.path,
@@ -267,8 +275,71 @@ export class ProjectIndexer {
                   lineNumber: lineIdx + 1,
                   lineContent: displayLine,
                 });
+
+                // Lint check: Format Mismatch
+                if (isFootnoteMode) {
+                  const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: `[@${key}]`,
+                      suggestedFix: `[^${ref.citekey}]`,
+                      type: 'format_mismatch',
+                      message: `Expected footnote [^${ref.citekey}] in Footnote Mode.`,
+                    });
+                  }
+                } else if (targetFormat === 'parenthetical') {
+                  const expected = CitationEngine.formatInBody(ref, 'parenthetical');
+                  const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: `[@${key}]`,
+                      suggestedFix: expected,
+                      type: 'format_mismatch',
+                      message: `Expected parenthetical citation for [@${key}].`,
+                    });
+                  }
+                } else if (targetFormat === 'narrative') {
+                  const expected = CitationEngine.formatInBody(ref, 'narrative');
+                  const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: `[@${key}]`,
+                      suggestedFix: expected,
+                      type: 'format_mismatch',
+                      message: `Expected narrative citation for [@${key}].`,
+                    });
+                  }
+                }
               } else {
                 unresolvedCitations.push({ rawCitation: `@${key}`, file: file.path, line: lineIdx + 1 });
+                const id = `${file.path}::${lineIdx + 1}::@${key}::unresolved`;
+                if (!dismissed.has(id)) {
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: `[@${key}]`,
+                    type: 'unresolved',
+                    message: `Unresolved citekey [@${key}] is not found in library.`,
+                  });
+                }
               }
             }
           }
@@ -279,6 +350,7 @@ export class ProjectIndexer {
             const key = match[1];
             totalCitationsInFiles++;
             if (allReferences.has(key)) {
+              const ref = allReferences.get(key)!;
               if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
               referenceUsageMap[key].push({
                 filePath: file.path,
@@ -286,6 +358,39 @@ export class ProjectIndexer {
                 lineNumber: lineIdx + 1,
                 lineContent: displayLine,
               });
+
+              // Lint check: If Footnote mode is OFF, flag as mismatch
+              if (!isFootnoteMode) {
+                const expected = CitationEngine.formatInBody(ref, targetFormat);
+                const id = `${file.path}::${lineIdx + 1}::[^${key}]::format_mismatch`;
+                if (!dismissed.has(id)) {
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: `[^${key}]`,
+                    suggestedFix: expected,
+                    type: 'format_mismatch',
+                    message: `Expected ${targetFormat} citation instead of [^${key}] (Footnote Mode is disabled).`,
+                  });
+                }
+              }
+            } else {
+              const id = `${file.path}::${lineIdx + 1}::[^${key}]::unresolved`;
+              if (!dismissed.has(id)) {
+                lintWarnings.push({
+                  id,
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx + 1,
+                  lineContent: displayLine,
+                  rawCitation: `[^${key}]`,
+                  type: 'unresolved',
+                  message: `Unresolved footnote [^${key}] not found in library.`,
+                });
+              }
             }
           }
 
@@ -299,6 +404,7 @@ export class ProjectIndexer {
               const year = parts[parts.length - 1].trim();
               const matchedKey = authorYearIndex.get(`${author}_${year}`);
               if (matchedKey && allReferences.has(matchedKey)) {
+                const ref = allReferences.get(matchedKey)!;
                 totalCitationsInFiles++;
                 if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
                 referenceUsageMap[matchedKey].push({
@@ -307,10 +413,74 @@ export class ProjectIndexer {
                   lineNumber: lineIdx + 1,
                   lineContent: displayLine,
                 });
+
+                // Lint check: If in footnote mode or citekey mode
+                if (isFootnoteMode) {
+                  const id = `${file.path}::${lineIdx + 1}::${match[0]}::format_mismatch`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: match[0],
+                      suggestedFix: `[^${ref.citekey}]`,
+                      type: 'format_mismatch',
+                      message: `Expected [^${ref.citekey}] in Footnote Mode.`,
+                    });
+                  }
+                } else if (targetFormat === 'citekey') {
+                  const id = `${file.path}::${lineIdx + 1}::${match[0]}::format_mismatch`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: match[0],
+                      suggestedFix: `[@${ref.citekey}]`,
+                      type: 'format_mismatch',
+                      message: `Expected citekey [@${ref.citekey}].`,
+                    });
+                  }
+                }
               }
             }
           }
         });
+
+        // 4. Style check on bottom footnote definitions
+        const fnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:\s*(.*)$/gm;
+        let defMatch: RegExpExecArray | null;
+        while ((defMatch = fnDefRegex.exec(rawContent)) !== null) {
+          const key = defMatch[1];
+          const currentDefLine = defMatch[0].trim();
+          const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
+            r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
+          );
+          if (ref) {
+            const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle);
+            if (currentDefLine !== expectedDef) {
+              const id = `${file.path}::def::${key}::style_mismatch`;
+              if (!dismissed.has(id)) {
+                const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                lintWarnings.push({
+                  id,
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                  lineContent: currentDefLine,
+                  rawCitation: currentDefLine,
+                  suggestedFix: expectedDef,
+                  type: 'style_mismatch',
+                  message: `Definition style does not match bucket standard (${targetStyle.toUpperCase()}).`,
+                });
+              }
+            }
+          }
+        }
       } catch (err) {
         Logger.warn(`Failed indexing file: ${file.path}`, err);
       }
@@ -339,6 +509,7 @@ export class ProjectIndexer {
       totalCitationsInFiles,
       unresolvedCitations,
       referenceUsageMap,
+      lintWarnings,
     };
   }
 

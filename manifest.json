@@ -1,10 +1,10 @@
 {
   "id": "citation-manager",
-  "name": "Citation Manager & Reference Studio",
+  "name": "Citation Manager",
   "version": "1.0.0",
   "minAppVersion": "0.15.0",
-  "description": "Project-centric reference manager, live citation indexer, linter, and bibliography studio with .references folder integration.",
-  "author": "Antigravity",
-  "authorUrl": "https://github.com",
+  "description": "Project-centric, local-first academic citation manager, live citation indexer, citation linter, and bibliography.",
+  "author": "SlamTheDragon",
+  "authorUrl": "https://github.com/SlamTheDragon",
   "isDesktopOnly": false
 }

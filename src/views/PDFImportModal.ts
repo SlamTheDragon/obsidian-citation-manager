@@ -72,9 +72,44 @@ export class PDFImportModal extends Modal {
     }
   }
 
-  async onOpen() {
+  onOpen() {
     this.titleEl.setText("Import PDF Document");
+    this.renderLoadingSkeleton();
+    this.extractAndRender();
+  }
 
+  private renderLoadingSkeleton() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.addClass("citation-modal-body");
+
+    const card = contentEl.createDiv({ cls: "citation-modal-section-card" });
+    const row = card.createDiv({ cls: "fetch-title" });
+    setIcon(row.createSpan({ cls: "inline-icon" }), "file-text");
+    row.createSpan({ text: ` Scanning & extracting metadata from ${this.pdfFile.name}...` });
+
+    const skeletonWrap = contentEl.createDiv({ cls: "citation-skeleton-container" });
+    skeletonWrap.style.display = "flex";
+    skeletonWrap.style.flexDirection = "column";
+    skeletonWrap.style.gap = "12px";
+    skeletonWrap.style.padding = "8px 0";
+
+    const createPulseBar = (h: string, w: string) => {
+      const bar = skeletonWrap.createDiv({ cls: "skeleton-pulse-bar" });
+      bar.style.height = h;
+      bar.style.width = w;
+      bar.style.borderRadius = "var(--radius-s)";
+      bar.style.background = "var(--background-modifier-border)";
+      bar.style.opacity = "0.6";
+    };
+
+    createPulseBar("26px", "80%");
+    createPulseBar("34px", "100%");
+    createPulseBar("24px", "55%");
+    createPulseBar("40px", "100%");
+  }
+
+  private async extractAndRender() {
     try {
       const buffer = await this.pdfFile.arrayBuffer();
       const detectedDOI = ProjectIndexer.extractDOIFromBuffer(buffer);

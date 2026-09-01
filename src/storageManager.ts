@@ -19,15 +19,66 @@ export class StorageManager {
   async ensureStorageDirectories(): Promise<void> {
     const rootPath = normalizePath(this.settings.referencesFolder);
     const attachmentsPath = normalizePath(`${rootPath}/attachments`);
+    const cachePath = normalizePath(`${rootPath}/.cache`);
 
-    if (!(await this.app.vault.adapter.exists(rootPath))) {
-      await this.app.vault.createFolder(rootPath);
-      Logger.debug(`Created root references folder: ${rootPath}`);
+    try {
+      if (!(await this.app.vault.adapter.exists(rootPath))) {
+        await this.app.vault.adapter.mkdir(rootPath);
+        Logger.debug(`Created root references folder: ${rootPath}`);
+      }
+    } catch {}
+
+    try {
+      if (!(await this.app.vault.adapter.exists(attachmentsPath))) {
+        await this.app.vault.adapter.mkdir(attachmentsPath);
+        Logger.debug(`Created attachments folder: ${attachmentsPath}`);
+      }
+    } catch {}
+
+    try {
+      if (!(await this.app.vault.adapter.exists(cachePath))) {
+        await this.app.vault.adapter.mkdir(cachePath);
+      }
+    } catch {}
+  }
+
+  async loadDismissedLints(): Promise<Set<string>> {
+    await this.ensureStorageDirectories();
+    const cacheFile = normalizePath(`${this.settings.referencesFolder}/.cache/dismissed_lints.json`);
+    try {
+      if (await this.app.vault.adapter.exists(cacheFile)) {
+        const raw = await this.app.vault.adapter.read(cacheFile);
+        const list = JSON.parse(raw);
+        if (Array.isArray(list)) {
+          return new Set(list);
+        }
+      }
+    } catch (e) {
+      Logger.warn("Failed loading dismissed lints:", e);
     }
-    if (!(await this.app.vault.adapter.exists(attachmentsPath))) {
-      await this.app.vault.createFolder(attachmentsPath);
-      Logger.debug(`Created attachments folder: ${attachmentsPath}`);
+    return new Set();
+  }
+
+  async saveDismissedLint(id: string): Promise<void> {
+    await this.ensureStorageDirectories();
+    const current = await this.loadDismissedLints();
+    current.add(id);
+    const cacheFile = normalizePath(`${this.settings.referencesFolder}/.cache/dismissed_lints.json`);
+    try {
+      await this.app.vault.adapter.write(cacheFile, JSON.stringify(Array.from(current), null, 2));
+    } catch (e) {
+      Logger.error("Failed saving dismissed lints:", e);
     }
+  }
+
+  async clearDismissedLints(): Promise<void> {
+    await this.ensureStorageDirectories();
+    const cacheFile = normalizePath(`${this.settings.referencesFolder}/.cache/dismissed_lints.json`);
+    try {
+      if (await this.app.vault.adapter.exists(cacheFile)) {
+        await this.app.vault.adapter.remove(cacheFile);
+      }
+    } catch {}
   }
 
   async loadAllReferences(): Promise<Map<string, ReferenceMetadata>> {

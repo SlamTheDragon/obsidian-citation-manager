@@ -103,6 +103,18 @@ export interface CitationOccurrence {
   rawCitation: string;
 }
 
+export interface LintWarning {
+  id: string; // Hash of file path, line, rawCitation, and type
+  filePath: string;
+  fileName: string;
+  lineNumber: number;
+  lineContent: string;
+  rawCitation: string;
+  suggestedFix?: string;
+  type: 'unresolved' | 'format_mismatch' | 'style_mismatch';
+  message: string;
+}
+
 export interface ProjectHealthStats {
   totalReferences: number;
   totalCitationsInFiles: number;
@@ -110,4 +122,5 @@ export interface ProjectHealthStats {
   unusedReferencesCount: number;
   unresolvedCitations: { citekey: string; file: string; line: number; rawCitation: string }[];
   referenceUsageMap: Record<string, CitationOccurrence[]>;
+  lintWarnings: LintWarning[];
 }
