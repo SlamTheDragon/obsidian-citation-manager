@@ -48,7 +48,14 @@ obsidian-citation-manager/
 ## 3. Subsystem Specifications
 
 ### 3.1 Tamper-Proof Markdown Parsing & Masking
-* **Masking Engine (`maskIgnoredMarkdown`)**: Masks fenced code blocks (` ```...``` `), inline code (`` `...` ``), and YAML frontmatter (`---...---`) before scanning. Code snippets never produce false-positive citation occurrences or get modified during propagation.
+* **Masking Engine (`maskIgnoredMarkdown`)**:
+  1. Frontmatter: `^---[\s\S]*?---\n?`
+  2. Fenced code blocks: `(?:```|~~~)[^`~]*?[\s\S]*?(?:```|~~~)`
+  3. HTML comments: `<!--[\s\S]*?-->`
+  4. LaTeX display math: `\$\$[\s\S]*?\$\$`
+  5. LaTeX inline math: `\$(?!\s)[^\$\n]+(?<!\s)\$`
+  6. Inline code: `` `[^`\n]+` ``
+  *Guarantee*: Math equations (e.g. `$x \in [1, 2]$`, `$$\mathbf{A} = [1, 0]$$`), programming snippets, and draft comments NEVER trigger false citation matches or warnings.
 * **Character Set**: Supports Pandoc / Zotero citekeys `[a-zA-Z0-9_:\.-]+` (including colons and accents).
 * **Multi-Citation Insertion**: Inserts space-separated individual tokens (`[@Baltar2012] [@Spielberg2016]`) to prevent syntax overloading across parsers.
 
@@ -80,6 +87,7 @@ Document diagnostics and transformations follow a 2-dimensional matrix (**Active
 | :--- | :--- | :--- |
 | **Footnote Mode ON** | In-body must be `[^key]`. Flag non-footnote tokens (`(Author, Year)`, `[@key]`, `Author (Year)`) $\to$ `suggestedFix: [^key]`. | Must have `[^key]: <Formatted Entry>`. Flag style mismatches $\to$ `suggestedFix: <authoritative definition>`. |
 | **Footnote Mode OFF** | In-body must match bucket standard (e.g. `(Author, Year)` for APA 7, `(Author Year)` for Harvard, `[1]` for IEEE). Flag `[^key]` $\to$ `suggestedFix: targetInBody`. | Must have un-prefixed `<Formatted Entry>`. Flag `[^key]: ` stubs $\to$ `suggestedFix: <Formatted Entry>` (strips prefix, retains 100% reference text). |
+| **Orphan Definition (Both Modes)** | N/A (Missing in-body call) | Flag unreferenced bottom definition line $\to$ Badge: **`Orphan`**, `suggestedFix: ""` (1-click removal). |
 
 ### 3.6 Diagnostic Telemetry, Purge, and Linter Invariants
 * **Consolidated Unresolved Incidents**: In-body `[^key]` and bottom definition `[^key]: ...` stubs for an unresolved reference are combined into a single diagnostic item per note.
@@ -92,10 +100,19 @@ Document diagnostics and transformations follow a 2-dimensional matrix (**Active
   - Enabling Footnote Mode: Converts all in-body citations to `[^key]` and updates bottom definitions to `[^key]: <Formatted Entry>`.
   - Disabling Footnote Mode: Converts all in-body `[^key]` to standard format and strips `[^key]: ` prefixes from bottom definitions, retaining 100% of bibliographic text.
 
+### 3.7 Academic Name & Numeric Narrative Standards
+1. **IEEE & Vancouver Narrative Citations**:
+   - Parenthetical: `[1]` (IEEE) / `(1)` (Vancouver)
+   - Narrative: `Chen et al. [1]` (IEEE) / `Chen et al. (1)` (Vancouver)
+2. **Compound Names & Suffix Parsing**:
+   - Hyphenated first names: `"Jean-Paul Sartre"` $\to$ `"Sartre, J.-P."`
+   - Suffixes: `"Martin Luther King Jr."` $\to$ `"King, Jr., M. L."` (APA) / `"King Jr. (1963)"` (Narrative)
+
 ---
 
 ## 4. Verification & Quality Assurance Protocol
 
+### 4.1 Interactive Visual Check
 When compiling and testing new builds:
 1. **Compilation**: Run `bun run build` in `F:/.repo/obsidian-citation-manager`.
 2. **Reload**: Reload Obsidian with `Ctrl+R`.
@@ -110,3 +127,16 @@ When compiling and testing new builds:
    - Purge an unresolved footnote from a note and verify that both in-body `[^key]` and the bottom definition line are completely removed.
 6. **Presence Check**:
    - Check that `Cited (Nx)` badge increments accurately across footnotes, parentheticals, and narrative citations regardless of Footnote Mode setting.
+
+### 4.2 Automated NIST Combinatorial Test Suite
+Run the automated combinatorial test suite to verify all 263 combinatorial states:
+```bash
+npx esbuild scratch/combinatorial_test.ts --bundle --platform=node --external:obsidian --outfile=scratch/combinatorial_test.bundle.js
+node scratch/run_comb.js
+```
+* **Coverage Matrix**:
+  - 5 Styles $\times$ 3 Formats $\times$ 5 Author Types = 75 In-Body States
+  - 5 Styles $\times$ 3 Formats $\times$ Multi-Lists = 15 Multi-Citation States
+  - 5 Styles $\times$ 5 Reference Records = 25 Bibliography / Footnote States
+  - 7 Masking Contexts (Code, Display Math, Inline Math, HTML comments, YAML)
+  - All Suffix & Hyphenated Name permutations
