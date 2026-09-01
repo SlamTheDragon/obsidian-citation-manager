@@ -479,6 +479,21 @@ export class ProjectIndexer {
                 });
               }
             }
+          } else {
+            const id = `${file.path}::def::${key}::unresolved`;
+            if (!dismissed.has(id)) {
+              const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+              lintWarnings.push({
+                id,
+                filePath: file.path,
+                fileName: file.basename,
+                lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                lineContent: currentDefLine,
+                rawCitation: currentDefLine,
+                type: 'unresolved',
+                message: `Unresolved footnote definition [^${key}]: reference not found in library.`,
+              });
+            }
           }
         }
       } catch (err) {
