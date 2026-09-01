@@ -1,4 +1,4 @@
-import { App, Modal, Notice, setIcon, TFile, normalizePath } from 'obsidian';
+import { App, Modal, Notice, setIcon } from 'obsidian';
 import { ReferenceMetadata } from '../types';
 import { StorageManager } from '../storageManager';
 
@@ -123,20 +123,6 @@ export class CitationNotesModal extends Modal {
 
     // 4. Modal Buttons Container
     const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
-
-    // Open File in Obsidian Leaf
-    const openFileBtn = buttonRow.createEl("button", { text: "Open Note File" });
-    openFileBtn.title = "Open full markdown note in Obsidian tab";
-    openFileBtn.addEventListener("click", () => {
-      const notePath = normalizePath(`.references/${this.ref.citekey}.md`);
-      const file = this.app.vault.getAbstractFileByPath(notePath);
-      if (file instanceof TFile) {
-        this.app.workspace.getLeaf('tab').openFile(file);
-        this.close();
-      } else {
-        new Notice(`Note file .references/${this.ref.citekey}.md not found.`);
-      }
-    });
 
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
     cancelBtn.addEventListener("click", () => this.close());
