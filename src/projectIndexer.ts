@@ -1359,6 +1359,19 @@ export class ProjectIndexer {
         content = content.replace(fnCleanRegex, "");
       }
 
+      // Sanitization: Coalesce accidental adjacent bracket collisions for Markdown/PDF/Docs export
+      if (style === 'ieee') {
+        const adjacentBracketRegex = /\[(\d+(?:\s*,\s*\d+)*)\]\s*\[(\d+(?:\s*,\s*\d+)*)\]/g;
+        while (adjacentBracketRegex.test(content)) {
+          content = content.replace(adjacentBracketRegex, '[$1, $2]');
+        }
+      } else if (style === 'vancouver') {
+        const adjacentParenRegex = /\((\d+(?:\s*,\s*\d+)*)\)\s*\((\d+(?:\s*,\s*\d+)*)\)/g;
+        while (adjacentParenRegex.test(content)) {
+          content = content.replace(adjacentParenRegex, '($1, $2)');
+        }
+      }
+
       content = content.replace(/\n{3,}$/, "\n\n");
 
       // Strip citation manager frontmatter from exported publication note
