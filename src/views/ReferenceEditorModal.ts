@@ -10,6 +10,7 @@ export class ReferenceEditorModal extends Modal {
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
   private pdfDOIStatus: { status: 'match' | 'mismatch' | 'unknown'; detectedDOI?: string } | null = null;
+  private openAccordionId: string | null = null;
 
   private previewEl: HTMLElement | null = null;
   private accordionCards: Map<string, { cardEl: HTMLElement; iconEl: HTMLElement }> = new Map();
@@ -363,6 +364,7 @@ export class ReferenceEditorModal extends Modal {
           removeBtn.addEventListener("click", () => {
             this.ref.pdfAttachment = undefined;
             this.pdfDOIStatus = null;
+            this.openAccordionId = 'pdf';
             this.renderModal();
           });
         } else {
@@ -413,6 +415,7 @@ export class ReferenceEditorModal extends Modal {
               }
 
               new Notice(`Attached PDF: ${file.name}`);
+              this.openAccordionId = 'pdf';
               this.renderModal();
             } catch (err: any) {
               new Notice(`Failed attaching PDF: ${err.message}`);
@@ -586,9 +589,15 @@ export class ReferenceEditorModal extends Modal {
 
     this.accordionCards.set(sectionId, { cardEl: card, iconEl: toggleIcon });
 
+    if (this.openAccordionId === sectionId) {
+      card.addClass("open");
+      setIcon(toggleIcon, "chevron-up");
+    }
+
     header.addEventListener("click", () => {
       const willOpen = !card.hasClass("open");
       if (willOpen) {
+        this.openAccordionId = sectionId;
         for (const [id, other] of this.accordionCards.entries()) {
           if (id !== sectionId) {
             other.cardEl.removeClass("open");
@@ -598,6 +607,7 @@ export class ReferenceEditorModal extends Modal {
         card.addClass("open");
         setIcon(toggleIcon, "chevron-up");
       } else {
+        this.openAccordionId = null;
         card.removeClass("open");
         setIcon(toggleIcon, "chevron-down");
       }

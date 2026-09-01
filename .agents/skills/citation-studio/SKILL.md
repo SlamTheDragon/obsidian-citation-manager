@@ -1,4 +1,4 @@
----
+﻿---
 name: citation-studio
 description: Universal academic citation manager, literature indexer, and bi-directional reference studio for Obsidian and markdown knowledge vaults. Governs automated DOI resolution, PDF binary metadata extraction, tamper-proof Markdown parsing, live footnote sync, multi-standard bibliography generation (APA 7, IEEE, Harvard, Chicago, Vancouver), and publication export pipeline.
 ---
@@ -7,10 +7,10 @@ description: Universal academic citation manager, literature indexer, and bi-dir
 
 ## 1. Core Tenets & Bucket Architecture
 
-1. **Zero External Lock-In**: Citations stored locally as YAML-frontmatter markdown notes (`.references/<citekey>.md`) with raw attachments (`.references/attachments/<citekey>.pdf`).
+1. **Zero External Lock-In**: Citations stored locally as YAML-frontmatter markdown notes (`.references/<citekey>.md`) with raw attachments (`.references/attachments/<citekey>.pdf`) and serialized settings in `.references/settings.json`.
 2. **Citation Buckets**: Projects are represented as **Citation Buckets** (`ProjectRecord`), declared via YAML frontmatter (`citation-manager: ["BucketName"]`) and managed with 1-click status bar affordances.
-3. **Single Unified Citation Standard**: In-body format and bibliography style are governed by a single dropdown per bucket (`APA 7`, `APA 7 Narrative`, `Footnote [^key]`, `IEEE [1]`, `Harvard`, `Chicago`, `Vancouver`, `Pandoc Citekey [@key]`).
-4. **Always-On Background Sync**: Silent debounced file-watcher maintains bottom footnote definitions when format is `footnote` and automatically cleans bottom definitions in non-footnote formats. Manual sync button exists purely for offline recovery.
+3. **Single Unified Citation Standard**: In-body format and bibliography style are governed by a single dropdown per bucket (`APA 7`, `APA 7 Narrative`, `IEEE [1]`, `Harvard`, `Chicago`, `Vancouver`, `Pandoc Citekey [@key]`).
+4. **Direct Editor Insertion & Global Footnote Mode**: Active drafting insertions use Obsidian Editor API (`editor.replaceRange`). Never rewrite open files asynchronously via `vault.modify` or `trim()` to prevent external modification alerts and whitespace loss. Footnote Mode is a global toggle that propagates note updates on demand.
 
 ---
 
@@ -21,7 +21,7 @@ obsidian-citation-manager/
 ├── src/
 │   ├── types.ts                # TypeScript interfaces (ReferenceMetadata, ProjectRecord, ProjectExportSettings)
 │   ├── logger.ts               # Ring-buffered in-memory execution logger
-│   ├── storageManager.ts       # Vault adapter I/O (.references/*.md, attachments/*.pdf)
+│   ├── storageManager.ts       # Vault adapter I/O (.references/*.md, attachments/*.pdf, settings.json)
 │   ├── projectIndexer.ts       # Scoped document parsing, code-block masking, frontmatter cleaner, corpus compiler
 │   ├── citationEngine.ts       # CSL formatters (APA 7, IEEE, Harvard, Chicago, Vancouver, multi-citation formatters)
 │   ├── metadataResolvers.ts    # Multi-API resolver (CrossRef, DataCite, SemanticScholar, arXiv, BibTeX)
@@ -30,9 +30,10 @@ obsidian-citation-manager/
 │   ├── main.ts                 # Plugin lifecycle, file watchers, commands, context menus
 │   └── views/
 │       ├── CitationManagerView.ts   # Main sidebar view (Header, Search Island, Cards, Footer Island)
-│       ├── ReferenceEditorModal.ts  # Add/Edit citation modal with interactive author chips
+│       ├── ReferenceEditorModal.ts  # Add/Edit citation modal with interactive author chips & PDF dropzone
 │       ├── InsertCitationModal.ts   # Multi-citation suggest modal with format dropdown & chips
 │       ├── ExportPublicationModal.ts# Publication export modal with vault folder picker
+│       ├── FixInconsistenciesModal.ts# Linter correction decision tree & batch fix modal
 │       ├── PDFImportModal.ts        # Drag & drop PDF importer with binary DOI extraction
 │       ├── BibliographyModal.ts     # Standalone bibliography generator with clipboard/note export
 │       ├── UsageLocationsModal.ts   # Deletion guard & occurrence inspector
@@ -59,6 +60,17 @@ obsidian-citation-manager/
 ### 3.3 Search & Acquisition Shortcuts
 * **Search Bar Fetching**: Pasting/typing a DOI, arXiv ID, ISBN, or URL into the top search bar and pressing `Enter` directly triggers metadata resolution and opens `ReferenceEditorModal` pre-filled.
 * **Tab-Safe PDF Leaf**: Opens attached PDF files via `workspace.getLeaf('tab').openFile(file)` for clean workspace tab preview.
+* **Absolute Desktop Shell Path Resolution**: On Windows virtual / shortcut drive mappings, resolve disk paths via `path.resolve(basePath, ref.pdfAttachment)` with `electron.shell.openPath` to prevent string truncation.
+* **PDF Binary DOI Verification**: When attaching PDFs, scan the binary for an embedded DOI and compare against `ref.doi` to display Match, Mismatch, or Unknown status badges. Preserve open accordion state on attachment/detachment.
+
+### 3.4 Diagnostic Telemetry & Linter Invariants
+* **Consolidated Unresolved Incidents**: In-body `[^key]` and bottom definition `[^key]: ...` stubs for an unresolved reference are combined into a single diagnostic item per note.
+* **Complete Resolution Tree**: `FixInconsistenciesModal` must provide:
+  1. `[+ Create Entry]`: Pre-populates `ReferenceEditorModal` with citekey and note definition text.
+  2. `[Purge]`: Removes the reference token and footnote definition from the note.
+  3. `[Dismiss]`: Serializes dismissal to `.references/.cache/dismissed_lints.json`.
+* **Sequential Numeric Footnote Indexing**: IEEE (`[N]`) and Vancouver (`(N)`) footnote checks must calculate the 1-based sequential occurrence index in the document to prevent false-positive style mismatch warnings on nth citations.
+* **Bake on Footnote Mode Disable**: Disabling Footnote Mode converts in-body citations to the bucket's academic standard AND cleanly strips out all bottom footnote definitions. Orphan definitions in non-footnote mode are flagged with empty suggested fix for automated removal.
 
 ---
 
@@ -69,7 +81,7 @@ When compiling and testing new builds:
 2. **Reload**: Reload Obsidian with `Ctrl+R`.
 3. **Modal Check**:
    - Verify modal opens at `620px` width with `82vh` constrained height.
-   - Verify accordions are mutually exclusive.
+   - Verify accordions are mutually exclusive and preserve open state upon dynamic re-renders.
    - Verify author chips allow adding names via `Enter` / `,` and removing via `✕`.
    - Verify the modal body scrolls vertically while bottom action buttons remain pinned and visible.
 4. **Linking Check**:

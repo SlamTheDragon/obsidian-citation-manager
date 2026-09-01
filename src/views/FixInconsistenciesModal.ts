@@ -1,4 +1,4 @@
-﻿import { App, Modal, Notice, setIcon, TFile } from 'obsidian';
+import { App, Modal, Notice, setIcon, TFile } from 'obsidian';
 import { LintWarning, ReferenceMetadata } from '../types';
 import { ReferenceEditorModal } from './ReferenceEditorModal';
 import { StorageManager } from '../storageManager';
@@ -20,7 +20,7 @@ export class FixInconsistenciesModal extends Modal {
     super(app);
     this.warnings = warnings;
     this.storageManager = storageManager;
-    this.selectedIds = new Set(this.warnings.filter(w => Boolean(w.suggestedFix)).map(w => w.id));
+    this.selectedIds = new Set(this.warnings.filter(w => w.suggestedFix !== undefined).map(w => w.id));
     this.onApplyFixes = onApplyFixes;
     this.onRefresh = onRefresh;
   }
@@ -35,7 +35,7 @@ export class FixInconsistenciesModal extends Modal {
     contentEl.empty();
     contentEl.addClass("citation-modal-body");
 
-    const fixableWarnings = this.warnings.filter(w => Boolean(w.suggestedFix));
+    const fixableWarnings = this.warnings.filter(w => w.suggestedFix !== undefined);
     const unresolvedWarnings = this.warnings.filter(w => w.type === 'unresolved');
 
     if (this.warnings.length === 0) {
@@ -140,9 +140,14 @@ export class FixInconsistenciesModal extends Modal {
         diffWrap.createSpan({ text: " → ", cls: "diff-arrow" });
 
         const newSpan = diffWrap.createSpan({ cls: "diff-new" });
-        newSpan.style.color = "var(--text-success, #22c55e)";
         newSpan.style.fontWeight = "600";
-        newSpan.createEl("code", { text: w.suggestedFix || "" });
+        if (w.suggestedFix === "") {
+          newSpan.style.color = "var(--text-warning, #eab308)";
+          newSpan.createEl("em", { text: "(Remove orphan definition)" });
+        } else {
+          newSpan.style.color = "var(--text-success, #22c55e)";
+          newSpan.createEl("code", { text: w.suggestedFix || "" });
+        }
       }
 
       const applyRow = fixableCard.createDiv({ cls: "apply-row" });

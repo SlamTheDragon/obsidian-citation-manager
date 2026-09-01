@@ -298,10 +298,23 @@ export default class CitationManagerPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    try {
+      if (this.storageManager) {
+        const vaultSettings = await this.storageManager.loadSerializedSettings();
+        if (vaultSettings) {
+          this.settings = Object.assign({}, this.settings, vaultSettings);
+        }
+      }
+    } catch {}
     Logger.setEnabled(this.settings.debugMode);
   }
 
   async saveSettings() {
     await this.saveData(this.settings);
+    try {
+      if (this.storageManager) {
+        await this.storageManager.saveSerializedSettings(this.settings);
+      }
+    } catch {}
   }
 }

@@ -906,59 +906,6 @@ export class CitationManagerView extends ItemView {
         headerArea.createEl("h5", { text: `Linked Documents (${fileCount})` });
       } else {
         headerArea.createEl("h5", { text: `Citation Diagnostics (${warningCount})` });
-        if (warningCount > 0) {
-          const fixBtn = headerArea.createEl("button", { 
-            cls: "citation-warn-cta-btn", 
-            text: "Fix Inconsistencies" 
-          });
-          fixBtn.style.flex = "1";
-          fixBtn.style.maxWidth = "160px";
-          fixBtn.style.marginLeft = "auto";
-          fixBtn.style.padding = "3px 10px";
-          fixBtn.style.fontSize = "11px";
-          fixBtn.style.fontWeight = "600";
-          fixBtn.style.background = "var(--text-warning, #eab308)";
-          fixBtn.style.color = "#000000";
-          fixBtn.style.border = "none";
-          fixBtn.style.borderRadius = "var(--radius-s)";
-          fixBtn.style.cursor = "pointer";
-
-          fixBtn.addEventListener("click", () => {
-            new FixInconsistenciesModal(
-              this.app,
-              this.stats!.lintWarnings,
-              this.storageManager,
-              async (selected) => {
-                let fixedCount = 0;
-                const fileGroup = new Map<string, typeof selected>();
-                for (const item of selected) {
-                  if (!fileGroup.has(item.filePath)) fileGroup.set(item.filePath, []);
-                  fileGroup.get(item.filePath)!.push(item);
-                }
-
-                for (const [filePath, items] of fileGroup.entries()) {
-                  const fileObj = this.app.vault.getAbstractFileByPath(filePath);
-                  if (fileObj instanceof TFile) {
-                    let content = await this.app.vault.read(fileObj);
-                    for (const item of items) {
-                      if (item.suggestedFix) {
-                        content = content.replace(item.rawCitation, item.suggestedFix);
-                        fixedCount++;
-                      }
-                    }
-                    await this.app.vault.modify(fileObj, content);
-                  }
-                }
-
-                new Notice(`Applied ${fixedCount} citation fix(es) across ${fileGroup.size} note(s).`);
-                await this.refreshData();
-              },
-              async () => {
-                await this.refreshData();
-              }
-            ).open();
-          });
-        }
       }
 
       // Content area
@@ -996,8 +943,79 @@ export class CitationManagerView extends ItemView {
           contentBody.createEl("p", { cls: "citation-card-muted-text", text: "No documents linked to this bucket yet. Open a note to link it via the bottom bar." });
         }
       } else {
-        // Tab 2: Citation Diagnostics / Warnings List (Uniform Accordion Style)
+        // Tab 2: Citation Diagnostics / Warnings List
         if (warningCount > 0) {
+          // Full-width Warning CTA button consuming horizontal space
+          const fixRow = contentBody.createDiv({ cls: "citation-fix-fullwidth-row" });
+          fixRow.style.marginBottom = "8px";
+          fixRow.style.width = "100%";
+
+          const fixBtn = fixRow.createEl("button", { 
+            cls: "citation-warn-cta-btn full-width-btn", 
+            text: `Fix All Inconsistencies (${warningCount})` 
+          });
+          fixBtn.style.width = "100%";
+          fixBtn.style.display = "block";
+          fixBtn.style.padding = "6px 12px";
+          fixBtn.style.fontSize = "11.5px";
+          fixBtn.style.fontWeight = "600";
+          fixBtn.style.background = "var(--text-warning, #eab308)";
+          fixBtn.style.color = "#000000";
+          fixBtn.style.border = "none";
+          fixBtn.style.borderRadius = "var(--radius-s)";
+          fixBtn.style.cursor = "pointer";
+          fixBtn.style.boxShadow = "0 1px 2px rgba(0, 0, 0, 0.12)";
+
+          fixBtn.addEventListener("click", () => {
+            new FixInconsistenciesModal(
+              this.app,
+              this.stats!.lintWarnings,
+              this.storageManager,
+              async (selected) => {
+                let fixedCount = 0;
+                const fileGroup = new Map<string, typeof selected>();
+                for (const item of selected) {
+                  if (!fileGroup.has(item.filePath)) fileGroup.set(item.filePath, []);
+                  fileGroup.get(item.filePath)!.push(item);
+                }
+
+                for (const [filePath, items] of fileGroup.entries()) {
+                  const fileObj = this.app.vault.getAbstractFileByPath(filePath);
+                  if (fileObj instanceof TFile) {
+                    let content = await this.app.vault.read(fileObj);
+                    for (const item of items) {
+                      if (item.suggestedFix !== undefined) {
+                        if (item.suggestedFix === "") {
+                          // Strip orphan definition line
+                          const escapedRaw = item.rawCitation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                          content = content.replace(new RegExp(`^.*${escapedRaw}.*$\\r?\\n?`, 'gm'), '');
+                          fixedCount++;
+                        } else {
+                          content = content.replace(item.rawCitation, item.suggestedFix);
+                          fixedCount++;
+                          // If converting footnote to in-body format, also remove bottom definition
+                          if (item.rawCitation.startsWith('[^') && !item.suggestedFix.startsWith('[^')) {
+                            const key = item.citekey || item.rawCitation.replace(/^\[\^?|\]$/g, '');
+                            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$\\r?\\n?`, 'gm');
+                            content = content.replace(fnDefRegex, '');
+                          }
+                        }
+                      }
+                    }
+                    await this.app.vault.modify(fileObj, content);
+                  }
+                }
+
+                new Notice(`Applied ${fixedCount} citation fix(es) across ${fileGroup.size} note(s).`);
+                await this.refreshData();
+              },
+              async () => {
+                await this.refreshData();
+              }
+            ).open();
+          });
+
+          // Diagnostics item list
           const fileList = contentBody.createEl("ul", { cls: "citation-registered-files-list" });
           for (const w of this.stats.lintWarnings.slice(0, 15)) {
             const li = fileList.createEl("li");

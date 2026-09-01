@@ -467,9 +467,9 @@ export class ProjectIndexer {
             r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
           );
           if (ref) {
-            const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, footnoteIndex);
-            if (currentDefLine !== expectedDef) {
-              const id = `${file.path}::def::${key}::style_mismatch`;
+            if (!isFootnoteMode) {
+              // Footnote mode is OFF: bottom footnote definitions should not exist
+              const id = `${file.path}::def::${key}::orphan_definition`;
               if (!dismissed.has(id)) {
                 const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
                 lintWarnings.push({
@@ -480,13 +480,33 @@ export class ProjectIndexer {
                   lineContent: currentDefLine,
                   rawCitation: currentDefLine,
                   citekey: key,
-                  suggestedFix: expectedDef,
-                  type: 'style_mismatch',
-                  message: `Definition style does not match bucket standard (${targetStyle.toUpperCase()}).`,
+                  suggestedFix: "",
+                  type: 'format_mismatch',
+                  message: `Orphan footnote definition [^${key}] found (Footnote Mode is disabled).`,
                 });
               }
+            } else {
+              const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, footnoteIndex);
+              if (currentDefLine !== expectedDef) {
+                const id = `${file.path}::def::${key}::style_mismatch`;
+                if (!dismissed.has(id)) {
+                  const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                    lineContent: currentDefLine,
+                    rawCitation: currentDefLine,
+                    citekey: key,
+                    suggestedFix: expectedDef,
+                    type: 'style_mismatch',
+                    message: `Definition style does not match bucket standard (${targetStyle.toUpperCase()}).`,
+                  });
+                }
+              }
+              footnoteIndex++;
             }
-            footnoteIndex++;
           } else {
             // Check if this unresolved key was already logged from in-body scan
             const existingWarning = lintWarnings.find(w => w.filePath === file.path && w.type === 'unresolved' && (w.citekey === key || w.rawCitation === `[^${key}]` || w.rawCitation === `[@${key}]`));
@@ -665,10 +685,33 @@ export class ProjectIndexer {
         }
         await this.syncFootnotesInRegisteredFiles(proj, allReferences, proj.citationStyle || 'apa7', referencesFolder);
       } else {
-        // Switch in-text to bucket citation standard
+        // Switch in-text to bucket citation standard AND bake out (remove) bottom footnote definitions
         const targetFormat = proj.inBodyFormat || 'parenthetical';
-        const modCount = await this.propagateFormatChange(proj, targetFormat, allReferences, proj.citationStyle || 'apa7', referencesFolder);
-        totalUpdated += modCount;
+        const files = this.getProjectFiles(proj, referencesFolder);
+        for (const file of files) {
+          try {
+            let content = await this.app.vault.read(file);
+            let modified = false;
+            for (const [key, ref] of allReferences.entries()) {
+              const targetInBody = CitationEngine.formatInBody(ref, targetFormat);
+              const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+              if (footnoteCallRegex.test(content)) {
+                content = content.replace(footnoteCallRegex, targetInBody);
+                modified = true;
+              }
+              // Remove bottom footnote definition for this key
+              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$\\r?\\n?`, 'gm');
+              if (fnDefRegex.test(content)) {
+                content = content.replace(fnDefRegex, '');
+                modified = true;
+              }
+            }
+            if (modified) {
+              await this.app.vault.modify(file, content);
+              totalUpdated++;
+            }
+          } catch {}
+        }
       }
     }
     return { updatedFilesCount: totalUpdated };

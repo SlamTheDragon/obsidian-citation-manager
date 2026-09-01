@@ -42,6 +42,30 @@ export class StorageManager {
     } catch {}
   }
 
+  async loadSerializedSettings(): Promise<Partial<CitationManagerSettings> | null> {
+    await this.ensureStorageDirectories();
+    const settingsFile = normalizePath(`${this.settings.referencesFolder}/settings.json`);
+    try {
+      if (await this.app.vault.adapter.exists(settingsFile)) {
+        const raw = await this.app.vault.adapter.read(settingsFile);
+        return JSON.parse(raw);
+      }
+    } catch (e) {
+      Logger.warn("Failed loading .references/settings.json:", e);
+    }
+    return null;
+  }
+
+  async saveSerializedSettings(settings: CitationManagerSettings): Promise<void> {
+    await this.ensureStorageDirectories();
+    const settingsFile = normalizePath(`${this.settings.referencesFolder}/settings.json`);
+    try {
+      await this.app.vault.adapter.write(settingsFile, JSON.stringify(settings, null, 2));
+    } catch (e) {
+      Logger.error("Failed writing .references/settings.json:", e);
+    }
+  }
+
   async loadDismissedLints(): Promise<Set<string>> {
     await this.ensureStorageDirectories();
     const cacheFile = normalizePath(`${this.settings.referencesFolder}/.cache/dismissed_lints.json`);
