@@ -37,6 +37,7 @@ export class CitationManagerView extends ItemView {
   private bibExportPath: string = "";
 
   private lastActiveMarkdownView: MarkdownView | null = null;
+  private lastActiveFilePath: string | null = null;
   private statusMessage: string = "Ready";
   private refreshDebounceTimer: any = null;
 
@@ -74,7 +75,11 @@ export class CitationManagerView extends ItemView {
         if (mdView) {
           this.lastActiveMarkdownView = mdView;
         }
-        this.updateActiveDocBanner();
+        const activeFile = mdView?.file || this.app.workspace.getActiveFile();
+        if (activeFile?.path !== this.lastActiveFilePath) {
+          this.lastActiveFilePath = activeFile?.path || null;
+          this.updateActiveDocBanner();
+        }
       })
     );
 
@@ -85,6 +90,7 @@ export class CitationManagerView extends ItemView {
     );
 
     this.lastActiveMarkdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    this.lastActiveFilePath = this.lastActiveMarkdownView?.file?.path || null;
     await this.refreshData();
   }
 
@@ -1095,9 +1101,28 @@ export class CitationManagerView extends ItemView {
   // --- 4. DISTINCT & VISIBLE STATUS BAR (Bottom Island) ---
   private renderVisibleStatusBar(container: HTMLElement, project: ProjectRecord | null) {
     const footer = container.createDiv({ cls: "citation-visible-status-island" });
-    const activeFile = this.app.workspace.getActiveFile() || this.lastActiveMarkdownView?.file;
-
     const leftGroup = footer.createDiv({ cls: "status-island-left" });
+    this.renderStatusBarLeftContent(leftGroup, project);
+
+    const rightGroup = footer.createDiv({ cls: "status-island-right" });
+
+    // Settings / Stats Toggle Button (Standard Obsidian Settings Icon with Yellow Glow on warnings)
+    const hasWarnings = Boolean(this.stats?.lintWarnings && this.stats.lintWarnings.length > 0);
+    const settingsBtn = rightGroup.createEl("button", { 
+      cls: `status-stats-icon-btn ${this.currentSubpanel === 'stats' ? 'active' : ''} ${hasWarnings ? 'has-warnings' : ''}`, 
+      title: hasWarnings ? `Bucket Settings & Diagnostics (${this.stats?.lintWarnings.length} Warnings)` : "Bucket Settings & Statistics" 
+    });
+    setIcon(settingsBtn, "settings");
+    settingsBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      this.currentSubpanel = this.currentSubpanel === 'stats' ? 'citations' : 'stats';
+      this.renderUI();
+    });
+  }
+
+  private renderStatusBarLeftContent(leftGroup: HTMLElement, project: ProjectRecord | null) {
+    const mdView = this.app.workspace.getActiveViewOfType(MarkdownView) || this.lastActiveMarkdownView;
+    const activeFile = mdView?.file || this.app.workspace.getActiveFile();
 
     if (!activeFile) {
       const hint = leftGroup.createSpan({ cls: "status-hint" });
@@ -1118,7 +1143,8 @@ export class CitationManagerView extends ItemView {
           leftGroup.createSpan({ cls: "status-badge-pill registered", text: `In ${project.name}` });
           const unlinkBtn = leftGroup.createEl("button", { cls: "status-unlink-icon-btn", title: `Unlink from ${project.name}` });
           setIcon(unlinkBtn, "unlink");
-          unlinkBtn.addEventListener("click", async () => {
+          unlinkBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
             project.registeredFiles = project.registeredFiles.filter(p => p !== activeFile.path);
             this.updateActiveDocBanner();
             await this.projectIndexer.removeProjectFromFrontmatter(activeFile, project.name);
@@ -1128,7 +1154,8 @@ export class CitationManagerView extends ItemView {
           });
         } else {
           const linkBtn = leftGroup.createEl("button", { cls: "status-link-btn-pill", text: `+ Link to Bucket` });
-          linkBtn.addEventListener("click", async () => {
+          linkBtn.addEventListener("click", async (e) => {
+            e.stopPropagation();
             if (!project.registeredFiles.includes(activeFile.path)) {
               project.registeredFiles.push(activeFile.path);
             }
@@ -1141,31 +1168,14 @@ export class CitationManagerView extends ItemView {
         }
       }
     }
-
-    const rightGroup = footer.createDiv({ cls: "status-island-right" });
-
-    // Settings / Stats Toggle Button (Standard Obsidian Settings Icon with Yellow Glow on warnings)
-    const hasWarnings = Boolean(this.stats?.lintWarnings && this.stats.lintWarnings.length > 0);
-    const settingsBtn = rightGroup.createEl("button", { 
-      cls: `status-stats-icon-btn ${this.currentSubpanel === 'stats' ? 'active' : ''} ${hasWarnings ? 'has-warnings' : ''}`, 
-      title: hasWarnings ? `Bucket Settings & Diagnostics (${this.stats?.lintWarnings.length} Warnings)` : "Bucket Settings & Statistics" 
-    });
-    setIcon(settingsBtn, "settings");
-    settingsBtn.addEventListener("click", () => {
-      this.currentSubpanel = this.currentSubpanel === 'stats' ? 'citations' : 'stats';
-      this.renderUI();
-    });
   }
 
   private updateActiveDocBanner() {
-    const existing = this.containerEl.querySelector(".citation-visible-status-island");
-    if (existing && existing.parentElement) {
+    const leftGroup = this.containerEl.querySelector(".status-island-left") as HTMLElement;
+    if (leftGroup) {
+      leftGroup.empty();
       const project = this.getActiveProjectRecord();
-      const parent = existing.parentElement;
-      const newBanner = document.createElement("div");
-      newBanner.className = "citation-visible-status-island";
-      this.renderVisibleStatusBar(newBanner, project);
-      parent.replaceChild(newBanner.firstChild as HTMLElement, existing);
+      this.renderStatusBarLeftContent(leftGroup, project);
     }
   }
 
