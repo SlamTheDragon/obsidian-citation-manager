@@ -269,9 +269,10 @@ export class FixInconsistenciesModal extends Modal {
             const fnDefRegex = new RegExp(`^\\s*\\[\\^${escapedKey}\\]:.*$(\\r?\\n[ \\t]+.*$)*\\r?\\n?`, 'gm');
             content = content.replace(fnDefRegex, '');
 
-            // 3. If definitionSnippet is present, also purge matching un-prefixed line if left behind
-            if (w.definitionSnippet && w.definitionSnippet.length > 5) {
-              const escapedSnippet = w.definitionSnippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            // 3. If definitionSnippet or plain rawCitation is present, also purge matching un-prefixed line
+            const snippetToPurge = w.definitionSnippet || (!w.rawCitation.startsWith('[^') && !w.rawCitation.startsWith('[@') ? w.rawCitation : "");
+            if (snippetToPurge && snippetToPurge.length > 5) {
+              const escapedSnippet = snippetToPurge.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
               content = content.replace(new RegExp(`^.*${escapedSnippet}.*$\\r?\\n?`, 'gm'), '');
             }
 

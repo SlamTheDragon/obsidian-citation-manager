@@ -647,19 +647,69 @@ export class ProjectIndexer {
           }
         }
 
-        // 5. Un-prefixed standard reference entries at document bottom (for Standard Mode)
+        // 5. Plain un-prefixed reference entries at document bottom (for Standard / Footnote Mode)
         for (const [key, ref] of allReferences.entries()) {
-          if (!referenceUsageMap[key] || referenceUsageMap[key].length === 0) {
-            if (ref.title && ref.title.length > 5 && rawContent.includes(ref.title)) {
+          const isCitedInBody = inBodyKeysInFile.has(key.toLowerCase()) || inBodyKeysInFile.has(ref.citekey.toLowerCase());
+          
+          // Search for matching plain reference line in the document
+          const lineIdx = rawLines.findIndex(l => {
+            const trimmed = l.trim();
+            if (trimmed.startsWith("[^")) return false; // Handled by footnote def scanner
+            if (ref.title && ref.title.length > 5 && trimmed.includes(ref.title)) return true;
+            if (ref.doi && ref.doi.length > 5 && trimmed.includes(ref.doi)) return true;
+            return false;
+          });
+
+          if (lineIdx >= 0) {
+            const currentLine = rawLines[lineIdx].trim();
+
+            if (!referenceUsageMap[key] || referenceUsageMap[key].length === 0) {
               if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
-              const lineIdx = rawLines.findIndex(l => l.includes(ref.title));
               referenceUsageMap[key].push({
                 filePath: file.path,
                 fileName: file.basename,
-                lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
-                lineContent: (rawLines[lineIdx] || ref.title).trim(),
+                lineNumber: lineIdx + 1,
+                lineContent: currentLine,
               });
               totalCitationsInFiles++;
+            }
+
+            if (!isCitedInBody) {
+              // Orphan plain reference line: declared at bottom but not cited in body
+              const id = `${file.path}::plain::${key}::orphan_definition`;
+              if (!dismissed.has(id)) {
+                lintWarnings.push({
+                  id,
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx + 1,
+                  lineContent: currentLine,
+                  rawCitation: currentLine,
+                  citekey: key,
+                  definitionSnippet: currentLine,
+                  suggestedFix: "",
+                  type: 'orphan_definition',
+                  message: `Reference for "${ref.citekey}" declared at bottom, but not cited in markdown body.`,
+                });
+              }
+            } else if (isFootnoteMode) {
+              // In footnote mode, plain references should be converted to [^key]: <Formatted>
+              const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, 1);
+              const id = `${file.path}::plain::${key}::missing_footnote_prefix`;
+              if (!dismissed.has(id)) {
+                lintWarnings.push({
+                  id,
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx + 1,
+                  lineContent: currentLine,
+                  rawCitation: currentLine,
+                  citekey: key,
+                  suggestedFix: expectedDef,
+                  type: 'format_mismatch',
+                  message: `Convert reference line to [^${ref.citekey}]: footnote definition in Footnote Mode.`,
+                });
+              }
             }
           }
         }
