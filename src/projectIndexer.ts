@@ -219,7 +219,8 @@ export class ProjectIndexer {
     allReferences: Map<string, ReferenceMetadata>,
     referencesFolder: string = ".references",
     allKnownProjects?: ProjectRecord[],
-    dismissedLints?: Set<string>
+    dismissedLints?: Set<string>,
+    globalFootnoteMode?: boolean
   ): Promise<ProjectHealthStats> {
     const files = this.getProjectFiles(project, referencesFolder, allKnownProjects);
     const referenceUsageMap: Record<string, CitationOccurrence[]> = {};
@@ -228,7 +229,7 @@ export class ProjectIndexer {
     const dismissed = dismissedLints || new Set<string>();
     let totalCitationsInFiles = 0;
 
-    const isFootnoteMode = Boolean(project.enableFootnoteMode);
+    const isFootnoteMode = Boolean(globalFootnoteMode ?? project.enableFootnoteMode);
     const targetFormat = project.inBodyFormat || 'parenthetical';
     const targetStyle = project.citationStyle || 'apa7';
 
@@ -336,8 +337,9 @@ export class ProjectIndexer {
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
                     rawCitation: `[@${key}]`,
+                    citekey: key,
                     type: 'unresolved',
-                    message: `Unresolved citekey [@${key}] is not found in library.`,
+                    message: `Reference [@${key}] not found in library.`,
                   });
                 }
               }
@@ -371,6 +373,7 @@ export class ProjectIndexer {
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
                     rawCitation: `[^${key}]`,
+                    citekey: key,
                     suggestedFix: expected,
                     type: 'format_mismatch',
                     message: `Expected ${targetFormat} citation instead of [^${key}] (Footnote Mode is disabled).`,
@@ -387,8 +390,9 @@ export class ProjectIndexer {
                   lineNumber: lineIdx + 1,
                   lineContent: displayLine,
                   rawCitation: `[^${key}]`,
+                  citekey: key,
                   type: 'unresolved',
-                  message: `Unresolved footnote [^${key}] not found in library.`,
+                  message: `Reference [^${key}] not found in library.`,
                 });
               }
             }
@@ -454,14 +458,16 @@ export class ProjectIndexer {
         // 4. Style check on bottom footnote definitions
         const fnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:\s*(.*)$/gm;
         let defMatch: RegExpExecArray | null;
+        let footnoteIndex = 1;
         while ((defMatch = fnDefRegex.exec(rawContent)) !== null) {
           const key = defMatch[1];
           const currentDefLine = defMatch[0].trim();
+          const currentDefText = defMatch[2]?.trim() || "";
           const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
             r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
           );
           if (ref) {
-            const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle);
+            const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, footnoteIndex);
             if (currentDefLine !== expectedDef) {
               const id = `${file.path}::def::${key}::style_mismatch`;
               if (!dismissed.has(id)) {
@@ -473,26 +479,36 @@ export class ProjectIndexer {
                   lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
                   lineContent: currentDefLine,
                   rawCitation: currentDefLine,
+                  citekey: key,
                   suggestedFix: expectedDef,
                   type: 'style_mismatch',
                   message: `Definition style does not match bucket standard (${targetStyle.toUpperCase()}).`,
                 });
               }
             }
+            footnoteIndex++;
           } else {
-            const id = `${file.path}::def::${key}::unresolved`;
-            if (!dismissed.has(id)) {
-              const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
-              lintWarnings.push({
-                id,
-                filePath: file.path,
-                fileName: file.basename,
-                lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
-                lineContent: currentDefLine,
-                rawCitation: currentDefLine,
-                type: 'unresolved',
-                message: `Unresolved footnote definition [^${key}]: reference not found in library.`,
-              });
+            // Check if this unresolved key was already logged from in-body scan
+            const existingWarning = lintWarnings.find(w => w.filePath === file.path && w.type === 'unresolved' && (w.citekey === key || w.rawCitation === `[^${key}]` || w.rawCitation === `[@${key}]`));
+            if (existingWarning) {
+              existingWarning.definitionSnippet = currentDefText;
+            } else {
+              const id = `${file.path}::def::${key}::unresolved`;
+              if (!dismissed.has(id)) {
+                const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                lintWarnings.push({
+                  id,
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                  lineContent: currentDefLine,
+                  rawCitation: `[^${key}]`,
+                  citekey: key,
+                  definitionSnippet: currentDefText,
+                  type: 'unresolved',
+                  message: `Reference [^${key}] not found in library.`,
+                });
+              }
             }
           }
         }

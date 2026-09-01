@@ -65,7 +65,8 @@ export default class CitationManagerPlugin extends Plugin {
                 refs,
                 this.getActiveProject(),
                 this.settings.defaultCitationStyle,
-                this.settings.defaultInBodyFormat
+                this.settings.defaultInBodyFormat,
+                this.settings.enableFootnoteMode
               ).open();
             });
         });
@@ -126,33 +127,7 @@ export default class CitationManagerPlugin extends Plugin {
       })
     );
 
-    // Live Automated Footnote Sync on Document Edits
-    let liveSyncDebounce: any = null;
-    this.registerEvent(
-      this.app.vault.on('modify', async (file) => {
-        if (!(file instanceof TFile) || !file.path.endsWith('.md')) return;
-        if (file.path.startsWith(this.settings.referencesFolder)) return;
 
-        const project = this.getActiveProject();
-        const shouldSync = Boolean(project?.enableFootnoteMode);
-
-        if (shouldSync && project) {
-          if (liveSyncDebounce) clearTimeout(liveSyncDebounce);
-          liveSyncDebounce = setTimeout(async () => {
-            const isFileInProj = this.projectIndexer.isFileInProject(file, project);
-            if (isFileInProj) {
-              const refsMap = await this.storageManager.loadAllReferences();
-              await this.projectIndexer.syncFootnotesInRegisteredFiles(
-                project,
-                refsMap,
-                project.citationStyle || this.settings.defaultCitationStyle,
-                this.settings.referencesFolder
-              );
-            }
-          }, 800);
-        }
-      })
-    );
 
     // Command Palette Commands (Clean, concise naming)
     this.addCommand({
@@ -178,7 +153,8 @@ export default class CitationManagerPlugin extends Plugin {
           refs,
           this.getActiveProject(),
           this.settings.defaultCitationStyle,
-          this.settings.defaultInBodyFormat
+          this.settings.defaultInBodyFormat,
+          this.settings.enableFootnoteMode
         ).open();
       },
     });

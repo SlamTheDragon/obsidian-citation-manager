@@ -16,13 +16,14 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
     references: ReferenceMetadata[],
     project: ProjectRecord | null,
     defaultStyle: CitationStyle = 'apa7',
-    defaultFormat: InBodyFormat = 'parenthetical'
+    defaultFormat: InBodyFormat = 'parenthetical',
+    enableFootnoteMode: boolean = false
   ) {
     super(app);
     this.references = references;
     this.project = project;
     this.defaultStyle = project?.citationStyle || defaultStyle;
-    this.selectedFormat = (project && project.enableFootnoteMode) ? 'footnote' : (project?.inBodyFormat || defaultFormat);
+    this.selectedFormat = enableFootnoteMode ? 'footnote' : (project?.inBodyFormat || defaultFormat);
     this.setPlaceholder("Search citations (Shift+Click or Shift+Enter for multi-citation)...");
   }
 

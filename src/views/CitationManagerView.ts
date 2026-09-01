@@ -109,7 +109,8 @@ export class CitationManagerView extends ItemView {
         this.referencesMap,
         this.settings.referencesFolder,
         this.settings.projects,
-        this.dismissedLints
+        this.dismissedLints,
+        this.settings.enableFootnoteMode
       );
     } else {
       const virtualAllProject: ProjectRecord = {
@@ -125,7 +126,8 @@ export class CitationManagerView extends ItemView {
         this.referencesMap,
         this.settings.referencesFolder,
         this.settings.projects,
-        this.dismissedLints
+        this.dismissedLints,
+        this.settings.enableFootnoteMode
       );
     }
 
@@ -350,8 +352,8 @@ export class CitationManagerView extends ItemView {
               async (newRef) => {
                 await this.storageManager.saveReference(newRef);
                 this.searchQuery = "";
-                this.renderUI();
                 new Notice(`Added citation [${newRef.citekey}]`);
+                await this.refreshData();
               },
               true
             ).open();
@@ -569,10 +571,26 @@ export class CitationManagerView extends ItemView {
       }
     }
 
+    const adapter: any = this.app.vault.adapter;
+    let basePath = adapter.basePath || "";
+    if (!basePath && typeof adapter.getBasePath === "function") {
+      basePath = adapter.getBasePath();
+    }
+
     for (const p of pathsToTry) {
       if (await this.app.vault.adapter.exists(p)) {
+        try {
+          const electron = (window as any).require ? (window as any).require('electron') : null;
+          const path = (window as any).require ? (window as any).require('path') : null;
+          if (electron && path && basePath) {
+            const absPath = path.resolve(basePath, p);
+            await electron.shell.openPath(absPath);
+            return;
+          }
+        } catch {}
+
         if ((this.app as any).openWithDefaultApp) {
-          const fullPath = (this.app.vault.adapter as any).getFullPath ? (this.app.vault.adapter as any).getFullPath(p) : p;
+          const fullPath = adapter.getFullPath ? adapter.getFullPath(p) : (basePath ? `${basePath}/${p}` : p);
           (this.app as any).openWithDefaultApp(fullPath);
           return;
         }
@@ -842,30 +860,6 @@ export class CitationManagerView extends ItemView {
         ).open();
       });
 
-      // Footnote Mode Companion Toggle (for Obsidian Footnotes plugin)
-      const fnRow = controlsCard.createDiv({ cls: "citation-format-controls-row" });
-      fnRow.style.marginTop = "6px";
-      const fnToggleLabel = fnRow.createEl("label", { cls: "citation-checkbox-label" });
-      const fnCheckbox = fnToggleLabel.createEl("input", { type: "checkbox" });
-      fnCheckbox.checked = Boolean(project.enableFootnoteMode);
-      fnCheckbox.addEventListener("change", async () => {
-        project.enableFootnoteMode = fnCheckbox.checked;
-        await this.onSaveSettings();
-        const res = await this.projectIndexer.syncFootnotesInRegisteredFiles(
-          project,
-          this.referencesMap,
-          project.citationStyle || this.settings.defaultCitationStyle,
-          this.settings.referencesFolder
-        );
-        if (project.enableFootnoteMode) {
-          new Notice(`Footnote Mode Enabled: synced ${res.updatedFootnotesCount} definition(s).`);
-        } else {
-          new Notice(`Footnote Mode Disabled: synced ${res.updatedFootnotesCount} definition(s).`);
-        }
-        await this.refreshData();
-      });
-      fnToggleLabel.createSpan({ text: "Enable Obsidian Footnote Mode ([^citekey])" });
-
       // Resync / Catch-Up Button (Offline redundancy & recovery)
       const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
       setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
@@ -913,38 +907,56 @@ export class CitationManagerView extends ItemView {
       } else {
         headerArea.createEl("h5", { text: `Citation Diagnostics (${warningCount})` });
         if (warningCount > 0) {
-          const fixBtn = headerArea.createEl("button", { cls: "citation-mini-btn", text: "Fix Inconsistencies" });
-          fixBtn.style.width = "auto";
-          fixBtn.style.padding = "2px 8px";
-          fixBtn.style.color = "var(--text-on-accent)";
-          fixBtn.style.background = "var(--interactive-accent)";
+          const fixBtn = headerArea.createEl("button", { 
+            cls: "citation-warn-cta-btn", 
+            text: "Fix Inconsistencies" 
+          });
+          fixBtn.style.flex = "1";
+          fixBtn.style.maxWidth = "160px";
+          fixBtn.style.marginLeft = "auto";
+          fixBtn.style.padding = "3px 10px";
+          fixBtn.style.fontSize = "11px";
+          fixBtn.style.fontWeight = "600";
+          fixBtn.style.background = "var(--text-warning, #eab308)";
+          fixBtn.style.color = "#000000";
+          fixBtn.style.border = "none";
+          fixBtn.style.borderRadius = "var(--radius-s)";
+          fixBtn.style.cursor = "pointer";
 
           fixBtn.addEventListener("click", () => {
-            new FixInconsistenciesModal(this.app, this.stats!.lintWarnings, async (selected) => {
-              let fixedCount = 0;
-              const fileGroup = new Map<string, typeof selected>();
-              for (const item of selected) {
-                if (!fileGroup.has(item.filePath)) fileGroup.set(item.filePath, []);
-                fileGroup.get(item.filePath)!.push(item);
-              }
-
-              for (const [filePath, items] of fileGroup.entries()) {
-                const fileObj = this.app.vault.getAbstractFileByPath(filePath);
-                if (fileObj instanceof TFile) {
-                  let content = await this.app.vault.read(fileObj);
-                  for (const item of items) {
-                    if (item.suggestedFix) {
-                      content = content.replace(item.rawCitation, item.suggestedFix);
-                      fixedCount++;
-                    }
-                  }
-                  await this.app.vault.modify(fileObj, content);
+            new FixInconsistenciesModal(
+              this.app,
+              this.stats!.lintWarnings,
+              this.storageManager,
+              async (selected) => {
+                let fixedCount = 0;
+                const fileGroup = new Map<string, typeof selected>();
+                for (const item of selected) {
+                  if (!fileGroup.has(item.filePath)) fileGroup.set(item.filePath, []);
+                  fileGroup.get(item.filePath)!.push(item);
                 }
-              }
 
-              new Notice(`Applied ${fixedCount} citation fix(es) across ${fileGroup.size} note(s).`);
-              await this.refreshData();
-            }).open();
+                for (const [filePath, items] of fileGroup.entries()) {
+                  const fileObj = this.app.vault.getAbstractFileByPath(filePath);
+                  if (fileObj instanceof TFile) {
+                    let content = await this.app.vault.read(fileObj);
+                    for (const item of items) {
+                      if (item.suggestedFix) {
+                        content = content.replace(item.rawCitation, item.suggestedFix);
+                        fixedCount++;
+                      }
+                    }
+                    await this.app.vault.modify(fileObj, content);
+                  }
+                }
+
+                new Notice(`Applied ${fixedCount} citation fix(es) across ${fileGroup.size} note(s).`);
+                await this.refreshData();
+              },
+              async () => {
+                await this.refreshData();
+              }
+            ).open();
           });
         }
       }
@@ -984,30 +996,40 @@ export class CitationManagerView extends ItemView {
           contentBody.createEl("p", { cls: "citation-card-muted-text", text: "No documents linked to this bucket yet. Open a note to link it via the bottom bar." });
         }
       } else {
-        // Tab 2: Citation Diagnostics / Warnings List
+        // Tab 2: Citation Diagnostics / Warnings List (Uniform Accordion Style)
         if (warningCount > 0) {
-          const lintList = contentBody.createEl("ul", { cls: "citation-unresolved-list" });
+          const fileList = contentBody.createEl("ul", { cls: "citation-registered-files-list" });
           for (const w of this.stats.lintWarnings.slice(0, 15)) {
-            const li = lintList.createEl("li");
-            li.style.display = "flex";
-            li.style.alignItems = "center";
-            li.style.justifyContent = "space-between";
-            li.style.gap = "6px";
+            const li = fileList.createEl("li");
+            li.style.flexDirection = "column";
+            li.style.alignItems = "stretch";
+            li.style.gap = "2px";
+            li.style.padding = "4px 6px";
 
-            const left = li.createDiv();
-            const fileLink = left.createSpan({ cls: "file-link-tag", text: `${w.fileName}:${w.lineNumber}` });
-            fileLink.style.fontWeight = "600";
-            fileLink.style.cursor = "pointer";
+            const topFlex = li.createDiv();
+            topFlex.style.display = "flex";
+            topFlex.style.alignItems = "center";
+            topFlex.style.justifyContent = "space-between";
+
+            const leftInfo = topFlex.createDiv();
+            leftInfo.style.display = "flex";
+            leftInfo.style.alignItems = "center";
+            leftInfo.style.gap = "6px";
+
+            const fileLink = leftInfo.createSpan({ cls: "file-name", text: `${w.fileName}:${w.lineNumber}` });
             fileLink.addEventListener("click", () => {
               const f = this.app.vault.getAbstractFileByPath(w.filePath);
               if (f instanceof TFile) this.app.workspace.getLeaf().openFile(f);
             });
 
-            left.createEl("code", { text: ` ${w.rawCitation} ` });
-            left.createSpan({ text: ` — ${w.message}`, cls: "status-hint" });
+            leftInfo.createEl("code", { text: w.rawCitation });
 
-            const dismissBtn = li.createEl("button", { cls: "citation-mini-btn", title: "Dismiss this warning" });
-            dismissBtn.setText("✕");
+            const badge = leftInfo.createSpan({ cls: "status-badge-pill", text: w.type === 'format_mismatch' ? "Format" : (w.type === 'style_mismatch' ? "Style" : "Unresolved") });
+            badge.style.fontSize = "8.5px";
+            badge.style.padding = "1px 4px";
+
+            const dismissBtn = topFlex.createEl("button", { cls: "file-remove-btn", title: "Dismiss this warning" });
+            dismissBtn.setText("×");
             dismissBtn.addEventListener("click", async (e) => {
               e.stopPropagation();
               await this.storageManager.saveDismissedLint(w.id);
@@ -1015,6 +1037,10 @@ export class CitationManagerView extends ItemView {
               new Notice("Warning dismissed.");
               await this.refreshData();
             });
+
+            const descRow = li.createDiv({ cls: "status-hint" });
+            descRow.style.fontSize = "9.5px";
+            descRow.setText(w.message);
           }
         } else {
           contentBody.createEl("p", { cls: "citation-card-muted-text", text: "No citation inconsistencies detected. All notes align with bucket standards." });

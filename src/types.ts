@@ -110,6 +110,8 @@ export interface LintWarning {
   lineNumber: number;
   lineContent: string;
   rawCitation: string;
+  citekey?: string;
+  definitionSnippet?: string;
   suggestedFix?: string;
   type: 'unresolved' | 'format_mismatch' | 'style_mismatch';
   message: string;

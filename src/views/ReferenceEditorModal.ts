@@ -328,7 +328,81 @@ export class ReferenceEditorModal extends Modal {
       }
     );
 
-    // 6. LIVE OUTPUT PREVIEW BOX
+    // 6. ACCORDION 4: ATTACHED PDF DOCUMENT
+    this.createAnimatedAccordion(
+      contentEl,
+      'pdf',
+      "Attached PDF Document",
+      (body) => {
+        const pdfContainer = body.createDiv({ cls: "citation-pdf-attach-wrap" });
+        pdfContainer.style.display = "flex";
+        pdfContainer.style.flexDirection = "column";
+        pdfContainer.style.gap = "8px";
+
+        if (this.ref.pdfAttachment) {
+          const pdfCard = pdfContainer.createDiv({ cls: "citation-modal-section-card" });
+          pdfCard.style.display = "flex";
+          pdfCard.style.alignItems = "center";
+          pdfCard.style.justifyContent = "space-between";
+
+          const leftInfo = pdfCard.createDiv({ cls: "pdf-file-info" });
+          setIcon(leftInfo.createSpan({ cls: "inline-icon" }), "file-text");
+          const fileName = this.ref.pdfAttachment.split("/").pop() || this.ref.pdfAttachment;
+          leftInfo.createSpan({ text: ` ${fileName}`, cls: "file-basename" });
+
+          const actionRow = pdfCard.createDiv({ cls: "pdf-card-actions" });
+          actionRow.style.display = "flex";
+          actionRow.style.gap = "6px";
+
+          const removeBtn = actionRow.createEl("button", { cls: "citation-mini-btn btn-danger", title: "Detach PDF" });
+          removeBtn.setText("Detach");
+          removeBtn.style.width = "auto";
+          removeBtn.style.padding = "2px 8px";
+          removeBtn.addEventListener("click", () => {
+            this.ref.pdfAttachment = undefined;
+            this.renderModal();
+          });
+        } else {
+          const emptyRow = pdfContainer.createDiv({ cls: "citation-empty-pdf-row" });
+          emptyRow.style.display = "flex";
+          emptyRow.style.alignItems = "center";
+          emptyRow.style.justifyContent = "space-between";
+          emptyRow.style.padding = "6px 0";
+
+          emptyRow.createSpan({ text: "No PDF document attached.", cls: "status-hint" });
+
+          const fileInput = document.createElement("input");
+          fileInput.type = "file";
+          fileInput.accept = ".pdf";
+          fileInput.style.display = "none";
+          fileInput.addEventListener("change", async () => {
+            const file = fileInput.files?.[0];
+            if (!file) return;
+            try {
+              const buffer = await file.arrayBuffer();
+              const citekey = this.ref.citekey.trim() || CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
+              const rootPath = ".references";
+              const pdfPath = `${rootPath}/attachments/${citekey}.pdf`;
+              await this.app.vault.adapter.writeBinary(pdfPath, buffer);
+              this.ref.pdfAttachment = pdfPath;
+              new Notice(`Attached PDF: ${file.name}`);
+              this.renderModal();
+            } catch (err: any) {
+              new Notice(`Failed attaching PDF: ${err.message}`);
+            }
+          });
+
+          const attachBtn = emptyRow.createEl("button", { cls: "citation-mini-btn", text: "+ Attach PDF File" });
+          attachBtn.style.width = "auto";
+          attachBtn.style.padding = "4px 10px";
+          attachBtn.style.background = "var(--interactive-accent)";
+          attachBtn.style.color = "var(--text-on-accent)";
+          attachBtn.addEventListener("click", () => fileInput.click());
+        }
+      }
+    );
+
+    // 7. LIVE OUTPUT PREVIEW BOX
     contentEl.createEl("div", { cls: "preview-section-title", text: "Live Output Preview" });
     this.previewEl = contentEl.createDiv({ cls: "citation-modal-preview-box" });
     this.updatePreviews();
