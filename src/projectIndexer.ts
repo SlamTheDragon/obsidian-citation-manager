@@ -316,15 +316,18 @@ export class ProjectIndexer {
           // 1. Citekeys in bracket groups [@key] or [@key1; @key2]
           bracketCitekeyGroupRegex.lastIndex = 0;
           while ((match = bracketCitekeyGroupRegex.exec(lineText)) !== null) {
+            const rawGroup = match[0];
             const groupContent = match[1];
             let subMatch: RegExpExecArray | null;
             citekeyRegex.lastIndex = 0;
+            const groupRefs: ReferenceMetadata[] = [];
             while ((subMatch = citekeyRegex.exec(groupContent)) !== null) {
               const key = subMatch[1];
               totalCitationsInFiles++;
               inBodyKeysInFile.add(key.toLowerCase());
               if (allReferences.has(key)) {
                 const ref = allReferences.get(key)!;
+                groupRefs.push(ref);
                 inBodyKeysInFile.add(ref.citekey.toLowerCase());
                 if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
                 referenceUsageMap[key].push({
@@ -333,56 +336,6 @@ export class ProjectIndexer {
                   lineNumber: lineIdx + 1,
                   lineContent: displayLine,
                 });
-
-                // Lint check: Format Mismatch
-                if (isFootnoteMode) {
-                  const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
-                  if (!dismissed.has(id)) {
-                    lintWarnings.push({
-                      id,
-                      filePath: file.path,
-                      fileName: file.basename,
-                      lineNumber: lineIdx + 1,
-                      lineContent: displayLine,
-                      rawCitation: `[@${key}]`,
-                      suggestedFix: `[^${ref.citekey}]`,
-                      type: 'format_mismatch',
-                      message: `Expected footnote [^${ref.citekey}] in Footnote Mode.`,
-                    });
-                  }
-                } else if (targetFormat === 'parenthetical') {
-                  const expected = CitationEngine.formatInBody(ref, 'parenthetical', targetStyle);
-                  const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
-                  if (!dismissed.has(id)) {
-                    lintWarnings.push({
-                      id,
-                      filePath: file.path,
-                      fileName: file.basename,
-                      lineNumber: lineIdx + 1,
-                      lineContent: displayLine,
-                      rawCitation: `[@${key}]`,
-                      suggestedFix: expected,
-                      type: 'format_mismatch',
-                      message: `Expected parenthetical citation for [@${key}].`,
-                    });
-                  }
-                } else if (targetFormat === 'narrative') {
-                  const expected = CitationEngine.formatInBody(ref, 'narrative', targetStyle);
-                  const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
-                  if (!dismissed.has(id)) {
-                    lintWarnings.push({
-                      id,
-                      filePath: file.path,
-                      fileName: file.basename,
-                      lineNumber: lineIdx + 1,
-                      lineContent: displayLine,
-                      rawCitation: `[@${key}]`,
-                      suggestedFix: expected,
-                      type: 'format_mismatch',
-                      message: `Expected narrative citation for [@${key}].`,
-                    });
-                  }
-                }
               } else {
                 unresolvedCitations.push({ rawCitation: `@${key}`, file: file.path, line: lineIdx + 1 });
                 const id = `${file.path}::${lineIdx + 1}::@${key}::unresolved`;
@@ -393,10 +346,46 @@ export class ProjectIndexer {
                     fileName: file.basename,
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
-                    rawCitation: `[@${key}]`,
+                    rawCitation: `@${key}`,
                     citekey: key,
                     type: 'unresolved',
-                    message: `Reference [@${key}] not found in library.`,
+                    message: `Citekey @${key} is not registered in any connected reference library.`,
+                  });
+                }
+              }
+            }
+
+            if (groupRefs.length > 0) {
+              if (isFootnoteMode) {
+                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                if (!dismissed.has(id)) {
+                  const expected = CitationEngine.formatMultiInBody(groupRefs, 'footnote', targetStyle);
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: rawGroup,
+                    suggestedFix: expected,
+                    type: 'format_mismatch',
+                    message: `Expected footnote citation in Footnote Mode.`,
+                  });
+                }
+              } else if (targetFormat !== 'citekey') {
+                const expected = CitationEngine.formatMultiInBody(groupRefs, targetFormat, targetStyle);
+                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                if (!dismissed.has(id)) {
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: rawGroup,
+                    suggestedFix: expected,
+                    type: 'format_mismatch',
+                    message: `Expected ${targetFormat} citation for ${rawGroup}.`,
                   });
                 }
               }
@@ -435,7 +424,7 @@ export class ProjectIndexer {
                     citekey: key,
                     suggestedFix: expected,
                     type: 'format_mismatch',
-                    message: `Expected ${targetFormat} citation instead of [^${key}] (Footnote Mode is disabled).`,
+                    message: `Expected ${targetFormat} citation for [^${key}] (Footnote Mode is disabled).`,
                   });
                 }
               }
@@ -460,8 +449,10 @@ export class ProjectIndexer {
           // 3. Parenthetical Groups (Author, Year) or (AuthorA, Year; AuthorB, Year)
           parentheticalGroupRegex.lastIndex = 0;
           while ((match = parentheticalGroupRegex.exec(lineText)) !== null) {
+            const rawGroup = match[0];
             const groupContent = match[1];
             const entries = groupContent.split(';').map(s => s.trim()).filter(Boolean);
+            const groupRefs: ReferenceMetadata[] = [];
             for (const entry of entries) {
               const yearMatch = entry.match(/\b(19\d{2}|20\d{2})\b/);
               if (yearMatch) {
@@ -470,6 +461,7 @@ export class ProjectIndexer {
                 const matchedKey = resolveAuthorYearKey(authorPart, year);
                 if (matchedKey && allReferences.has(matchedKey)) {
                   const ref = allReferences.get(matchedKey)!;
+                  groupRefs.push(ref);
                   totalCitationsInFiles++;
                   inBodyKeysInFile.add(matchedKey.toLowerCase());
                   inBodyKeysInFile.add(ref.citekey.toLowerCase());
@@ -480,38 +472,58 @@ export class ProjectIndexer {
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
                   });
+                }
+              }
+            }
 
-                  if (isFootnoteMode) {
-                    const id = `${file.path}::${lineIdx + 1}::(${entry})::format_mismatch`;
-                    if (!dismissed.has(id)) {
-                      lintWarnings.push({
-                        id,
-                        filePath: file.path,
-                        fileName: file.basename,
-                        lineNumber: lineIdx + 1,
-                        lineContent: displayLine,
-                        rawCitation: match[0],
-                        suggestedFix: `[^${ref.citekey}]`,
-                        type: 'format_mismatch',
-                        message: `Expected [^${ref.citekey}] in Footnote Mode.`,
-                      });
-                    }
-                  } else if (targetFormat === 'citekey') {
-                    const id = `${file.path}::${lineIdx + 1}::(${entry})::format_mismatch`;
-                    if (!dismissed.has(id)) {
-                      lintWarnings.push({
-                        id,
-                        filePath: file.path,
-                        fileName: file.basename,
-                        lineNumber: lineIdx + 1,
-                        lineContent: displayLine,
-                        rawCitation: match[0],
-                        suggestedFix: `[@${ref.citekey}]`,
-                        type: 'format_mismatch',
-                        message: `Expected citekey [@${ref.citekey}].`,
-                      });
-                    }
-                  }
+            if (groupRefs.length > 0) {
+              if (isFootnoteMode) {
+                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                if (!dismissed.has(id)) {
+                  const expected = CitationEngine.formatMultiInBody(groupRefs, 'footnote', targetStyle);
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: rawGroup,
+                    suggestedFix: expected,
+                    type: 'format_mismatch',
+                    message: `Expected footnote citation in Footnote Mode.`,
+                  });
+                }
+              } else if (targetFormat === 'citekey') {
+                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                if (!dismissed.has(id)) {
+                  const expected = CitationEngine.formatMultiInBody(groupRefs, 'citekey', targetStyle);
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: rawGroup,
+                    suggestedFix: expected,
+                    type: 'format_mismatch',
+                    message: `Expected citekey format for ${rawGroup}.`,
+                  });
+                }
+              } else if (targetStyle === 'ieee' || targetStyle === 'vancouver') {
+                const expected = CitationEngine.formatMultiInBody(groupRefs, targetFormat, targetStyle);
+                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                if (!dismissed.has(id) && rawGroup !== expected) {
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: rawGroup,
+                    suggestedFix: expected,
+                    type: 'format_mismatch',
+                    message: `Expected ${targetStyle.toUpperCase()} format for ${rawGroup}.`,
+                  });
                 }
               }
             }
