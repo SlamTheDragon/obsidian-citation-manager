@@ -261,9 +261,6 @@ export class CitationEngine {
     if (format === 'footnote') return `[^${ref.citekey}]`;
     if (format === 'citekey') return `[@${ref.citekey}]`;
 
-    if (style === 'ieee') return `[${index}]`;
-    if (style === 'vancouver') return `(${index})`;
-
     const authors = ref.authors || [];
     let authorText = "Unknown";
     if (authors.length === 1) {
@@ -272,6 +269,15 @@ export class CitationEngine {
       authorText = `${this.getLastName(authors[0])} & ${this.getLastName(authors[1])}`;
     } else if (authors.length > 2) {
       authorText = `${this.getLastName(authors[0])} et al.`;
+    }
+
+    if (style === 'ieee') {
+      if (format === 'narrative') return `${authorText} [${index}]`;
+      return `[${index}]`;
+    }
+    if (style === 'vancouver') {
+      if (format === 'narrative') return `${authorText} (${index})`;
+      return `(${index})`;
     }
 
     const year = ref.year || "n.d.";
@@ -294,16 +300,22 @@ export class CitationEngine {
     refs: ReferenceMetadata[], 
     format: InBodyFormat | 'footnote', 
     style: CitationStyle = 'apa7',
-    startIndex: number = 1
+    startIndex: number | number[] = 1
   ): string {
     if (!refs || refs.length === 0) return "";
-    if (refs.length === 1) return this.formatInBody(refs[0], format, style, startIndex);
+    if (refs.length === 1) return this.formatInBody(refs[0], format, style, Array.isArray(startIndex) ? startIndex[0] : startIndex);
 
     if (format === 'footnote') {
       return refs.map(r => `[^${r.citekey}]`).join('');
     }
     if (format === 'citekey') {
       return refs.map(r => `[@${r.citekey}]`).join(' ');
+    }
+
+    if (format === 'narrative') {
+      const parts = refs.map((r, i) => this.formatInBody(r, 'narrative', style, Array.isArray(startIndex) ? startIndex[i] : Number(startIndex) + i));
+      if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+      return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
     }
 
     if (style === 'ieee') {
@@ -313,12 +325,6 @@ export class CitationEngine {
     if (style === 'vancouver') {
       const indices = Array.isArray(startIndex) ? startIndex : refs.map((_, i) => Number(startIndex) + i);
       return `(${indices.join(', ')})`;
-    }
-
-    if (format === 'narrative') {
-      const parts = refs.map(r => this.formatInBody(r, 'narrative', style));
-      if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
-      return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
     }
 
     const sorted = [...refs].sort((a, b) => {
