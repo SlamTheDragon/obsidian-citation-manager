@@ -101,19 +101,24 @@ export class CitationNotesModal extends Modal {
       text: "Literature Synthesis & Notes" 
     });
 
-    // Tab Switcher for Edit vs Native Markdown Preview
-    const modeBar = notesTitleRow.createDiv({ cls: "citation-notes-mode-bar" });
-    const editTabBtn = modeBar.createEl("button", { 
-      cls: `citation-mode-btn ${this.activeTab === 'edit' ? 'active' : ''}`, 
-      text: " Edit" 
+    // Single Toggle Button for Edit vs Native Markdown Preview
+    const toggleBtn = notesTitleRow.createEl("button", { 
+      cls: "citation-card-btn citation-mode-toggle-btn", 
+      title: this.activeTab === 'edit' ? "Switch to Markdown Preview" : "Switch to Edit Mode" 
     });
-    setIcon(editTabBtn.createSpan({ cls: "btn-icon" }), "edit-3");
+    
+    if (this.activeTab === 'edit') {
+      setIcon(toggleBtn.createSpan({ cls: "btn-icon" }), "eye");
+      toggleBtn.createSpan({ text: " Preview" });
+    } else {
+      setIcon(toggleBtn.createSpan({ cls: "btn-icon" }), "pencil");
+      toggleBtn.createSpan({ text: " Edit" });
+    }
 
-    const previewTabBtn = modeBar.createEl("button", { 
-      cls: `citation-mode-btn ${this.activeTab === 'preview' ? 'active' : ''}`, 
-      text: " Preview" 
+    toggleBtn.addEventListener("click", () => {
+      this.activeTab = this.activeTab === 'edit' ? 'preview' : 'edit';
+      this.renderModal();
     });
-    setIcon(previewTabBtn.createSpan({ cls: "btn-icon" }), "eye");
 
     const editorContainer = notesCard.createDiv({ cls: "citation-notes-container" });
 
@@ -143,16 +148,6 @@ export class CitationNotesModal extends Modal {
       const rawText = this.notesText.trim() || "*No notes written yet.*";
       MarkdownRenderer.render(this.app, rawText, previewPane, '', this);
     }
-
-    editTabBtn.addEventListener("click", () => {
-      this.activeTab = 'edit';
-      this.renderModal();
-    });
-
-    previewTabBtn.addEventListener("click", () => {
-      this.activeTab = 'preview';
-      this.renderModal();
-    });
 
     // 4. Modal Buttons Container
     const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });

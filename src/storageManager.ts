@@ -271,10 +271,17 @@ export class StorageManager {
 
     try {
       const content = await this.app.vault.adapter.read(filePath);
+      // 1. Check for comment delimiter boundaries
+      const commentMatch = content.match(/<!--NOTE_START-->([\s\S]*?)<!--NOTE_END-->/i);
+      if (commentMatch) {
+        return commentMatch[1].trim();
+      }
+
+      // 2. Fallback to section heading
       const body = this.extractBody(content);
       const notesMatch = body.match(/## (?:Notes|Personal Notes|Notes & Synthesis|Synthesis|Literature Notes)\r?\n([\s\S]*)$/i);
       if (notesMatch && notesMatch[1].trim()) {
-        return notesMatch[1].trim();
+        return notesMatch[1].replace(/<!--NOTE_(?:START|END)-->/gi, '').trim();
       }
       return "";
     } catch {
@@ -302,7 +309,9 @@ export class StorageManager {
       const abstractText = abstractMatch ? abstractMatch[1].trim() : "*No abstract available.*";
 
       const cleanNotes = userNotes.trim();
-      const notesSection = cleanNotes ? `\n\n## Notes & Synthesis\n${cleanNotes}` : "";
+      const notesSection = cleanNotes 
+        ? `\n\n## Notes & Synthesis\n<!--NOTE_START-->\n${cleanNotes}\n<!--NOTE_END-->` 
+        : "";
       const newBody = `\n# ${title}\n\n## Abstract\n${abstractText}${notesSection}\n`;
       const newFullContent = `---\n${fm.trim()}\n---\n${newBody.trim()}\n`;
 
@@ -336,10 +345,15 @@ export class StorageManager {
       }
 
       let userNotes = "";
-      const body = this.extractBody(content);
-      const notesMatch = body.match(/## (?:Notes|Personal Notes|Notes & Synthesis|Synthesis|Literature Notes)\r?\n([\s\S]*)$/i);
-      if (notesMatch && notesMatch[1].trim()) {
-        userNotes = notesMatch[1].trim();
+      const commentMatch = content.match(/<!--NOTE_START-->([\s\S]*?)<!--NOTE_END-->/i);
+      if (commentMatch) {
+        userNotes = commentMatch[1].trim();
+      } else {
+        const body = this.extractBody(content);
+        const notesMatch = body.match(/## (?:Notes|Personal Notes|Notes & Synthesis|Synthesis|Literature Notes)\r?\n([\s\S]*)$/i);
+        if (notesMatch && notesMatch[1].trim()) {
+          userNotes = notesMatch[1].replace(/<!--NOTE_(?:START|END)-->/gi, '').trim();
+        }
       }
 
       const ref: ReferenceMetadata = {
