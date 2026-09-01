@@ -563,7 +563,7 @@ export class CitationEngine {
       harvard: this.formatHarvard(ref),
       chicago: this.formatChicago(ref),
       vancouver: this.formatVancouver(ref, 1),
-      bibtex: this.generateBibTeX(ref),
+      bibtex: ref.bibtex || this.generateBibTeX(ref),
     };
   }
 

@@ -145,6 +145,23 @@ export class MetadataResolvers {
       } catch {}
     }
 
+    // 4. Fallback / Augment for arXiv DOIs (e.g. 10.48550/arXiv.2603.25223)
+    const arxivDoiMatch = cleanDoi.match(/10\.48550\/arxiv\.([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)/i);
+    if (arxivDoiMatch) {
+      refType = "preprint";
+      if (!publication) publication = "arXiv Preprint";
+      const arxivId = arxivDoiMatch[1];
+      if (!title || !abstract) {
+        try {
+          const arxivData = await this.resolveArXiv(arxivId);
+          if (!title && arxivData.title) title = arxivData.title;
+          if (authors.length === 0 && arxivData.authors && arxivData.authors.length > 0) authors = arxivData.authors;
+          if (!abstract && arxivData.abstract) abstract = arxivData.abstract;
+          if (!year && arxivData.year) year = arxivData.year;
+        } catch {}
+      }
+    }
+
     // 4. Fallback via CSL-JSON
     if (!title) {
       try {

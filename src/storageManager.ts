@@ -181,8 +181,19 @@ export class StorageManager {
       } catch {}
     }
 
-    if (!existingBody) {
-      existingBody = `\n# ${enriched.title}\n\n## Abstract & Notes\n${enriched.abstract || "*No abstract available.*"}\n`;
+    if (existingBody) {
+      if (enriched.abstract) {
+        if (/## Abstract(?: & Notes)?/i.test(existingBody)) {
+          existingBody = existingBody.replace(
+            /(## Abstract(?: & Notes)?\r?\n)(?:[\s\S]*?)(?=\r?\n## |\r?\n# |$)/i,
+            `$1${enriched.abstract}\n\n`
+          );
+        } else {
+          existingBody = `\n# ${enriched.title}\n\n## Abstract\n${enriched.abstract}\n\n${existingBody.replace(/^#\s+[^\r\n]*\r?\n/, '')}`;
+        }
+      }
+    } else {
+      existingBody = `\n# ${enriched.title}\n\n## Abstract\n${enriched.abstract || "*No abstract available.*"}\n\n## Notes & Synthesis\n`;
     }
 
     const frontmatterObj = {
@@ -201,6 +212,8 @@ export class StorageManager {
       url: enriched.url || null,
       isbn: enriched.isbn || null,
       issn: enriched.issn || null,
+      abstract: enriched.abstract || null,
+      bibtex: enriched.bibtex || null,
       pdfAttachment: enriched.pdfAttachment || null,
       projects: enriched.projects || [],
       tags: enriched.tags || [],
@@ -264,6 +277,14 @@ export class StorageManager {
         ? parsed.authors
         : (typeof parsed.authors === "string" ? parsed.authors.split(",").map(a => a.trim()) : ["Unknown"]);
 
+      let abstract = parsed.abstract;
+      if (!abstract) {
+        const bodyMatch = content.match(/## Abstract(?: & Notes)?\r?\n([\s\S]*?)(?=\r?\n## |\r?\n# |$)/i);
+        if (bodyMatch && bodyMatch[1].trim() && !bodyMatch[1].trim().includes("*No abstract available.*")) {
+          abstract = bodyMatch[1].trim();
+        }
+      }
+
       const ref: ReferenceMetadata = {
         citekey,
         type: parsed.type || "journal",
@@ -280,7 +301,7 @@ export class StorageManager {
         url: parsed.url,
         isbn: parsed.isbn,
         issn: parsed.issn,
-        abstract: parsed.abstract,
+        abstract: abstract || "",
         pdfAttachment: parsed.pdfAttachment,
         projects: Array.isArray(parsed.projects) ? parsed.projects : (parsed.projects ? [parsed.projects] : []),
         tags: Array.isArray(parsed.tags) ? parsed.tags : [],
