@@ -474,31 +474,19 @@ export class ProjectIndexer {
             modified = true;
           }
 
-          // Footnote definition sync
-          if (project.enableFootnoteMode) {
-            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
-            const fnRegex = new RegExp(`^\\[\\^${key}\\]:.*$`, 'm');
-            if (!fnRegex.test(content) && (content.includes(`[^${key}]`) || modified)) {
-              content = content.trimEnd() + `\n\n${fnDef}\n`;
+          // Transform existing footnote definitions to the new style
+          const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
+          const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
+          if (fnDefRegex.test(content)) {
+            const currentDef = content.match(fnDefRegex)?.[0];
+            if (currentDef !== fnDef) {
+              content = content.replace(fnDefRegex, fnDef);
               modified = true;
             }
+          } else if (project.enableFootnoteMode && (content.includes(`[^${key}]`) || modified)) {
+            content = content.trimEnd() + `\n\n${fnDef}\n`;
+            modified = true;
           }
-        }
-
-        // Clean up all citation footnote definitions if footnote mode is disabled
-        if (!project.enableFootnoteMode) {
-          const allFnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:.*$\n?/gm;
-          content = content.replace(allFnDefRegex, (fullMatch, matchedKey) => {
-            const isRefKey = Array.from(allReferences.keys()).some(k => 
-              k.toLowerCase().replace(/[^a-z0-9]/g, '') === matchedKey.toLowerCase().replace(/[^a-z0-9]/g, '')
-            );
-            if (isRefKey || fullMatch.includes('doi:') || fullMatch.includes('http') || fullMatch.includes('pp.') || fullMatch.includes('vol.')) {
-              modified = true;
-              return "";
-            }
-            return fullMatch;
-          });
-          content = content.replace(/\n{3,}$/, "\n\n");
         }
 
         if (modified) {
@@ -514,7 +502,7 @@ export class ProjectIndexer {
   }
 
   /**
-   * Syncs and ensures footnote definitions exist at the bottom of all project files
+   * Syncs and transforms footnote definitions at the bottom of all project files to match the selected style.
    */
   async syncFootnotesInRegisteredFiles(
     project: ProjectRecord,
@@ -527,50 +515,38 @@ export class ProjectIndexer {
     let updatedFootnotesCount = 0;
     let removedFootnotesCount = 0;
 
-    const shouldKeepFootnotes = Boolean(project.enableFootnoteMode);
-    const footnoteCallRegex = /\[\^([a-zA-Z0-9_-]+)\](?!:)/g;
+    const footnoteCallRegex = /\[\^([a-zA-Z0-9_:\.-]+)\](?!:)/g;
+    const existingDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:.*$/gm;
 
     for (const file of files) {
       try {
         let content = await this.app.vault.read(file);
         let modified = false;
 
-        if (!shouldKeepFootnotes) {
-          // Robust cleanup: match any [^key]: ... definition where key is a citekey or citation entry
-          const allFnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:.*$\n?/gm;
-          content = content.replace(allFnDefRegex, (fullMatch, matchedKey) => {
-            const isRefKey = Array.from(allReferences.keys()).some(k => 
-              k.toLowerCase().replace(/[^a-z0-9]/g, '') === matchedKey.toLowerCase().replace(/[^a-z0-9]/g, '')
-            );
-            if (isRefKey || fullMatch.includes('doi:') || fullMatch.includes('http') || fullMatch.includes('pp.') || fullMatch.includes('vol.')) {
-              modified = true;
-              removedFootnotesCount++;
-              return "";
-            }
-            return fullMatch;
-          });
+        const keysInFile = new Set<string>();
 
-          if (modified) {
-            content = content.replace(/\n{3,}$/, "\n\n");
-            await this.app.vault.modify(file, content);
-            updatedFilesCount++;
-          }
-          continue;
-        }
-
-        const callsInFile = new Set<string>();
+        // Collect from in-body footnote calls [^key]
         let match: RegExpExecArray | null;
         footnoteCallRegex.lastIndex = 0;
         while ((match = footnoteCallRegex.exec(content)) !== null) {
-          callsInFile.add(match[1]);
+          keysInFile.add(match[1]);
+        }
+
+        // Also collect from existing bottom definitions [^key]: ...
+        existingDefRegex.lastIndex = 0;
+        while ((match = existingDefRegex.exec(content)) !== null) {
+          keysInFile.add(match[1]);
         }
 
         let fnIndex = 1;
-        for (const key of callsInFile) {
-          const ref = allReferences.get(key);
+        for (const key of keysInFile) {
+          const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
+            r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
+          );
+
           if (ref) {
             const fnDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIndex);
-            const fnDefRegex = new RegExp(`^\\[\\^${key}\\]:.*$`, 'm');
+            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
 
             if (fnDefRegex.test(content)) {
               const currentDef = content.match(fnDefRegex)?.[0];
@@ -579,7 +555,7 @@ export class ProjectIndexer {
                 modified = true;
                 updatedFootnotesCount++;
               }
-            } else {
+            } else if (project.enableFootnoteMode) {
               content = content.trimEnd() + `\n\n${fnDef}\n`;
               modified = true;
               updatedFootnotesCount++;
