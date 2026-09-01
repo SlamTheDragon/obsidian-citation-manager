@@ -418,30 +418,55 @@ export class MetadataResolvers {
     const entryRegex = /@([a-zA-Z]+)\s*\{\s*([^,]+),([\s\S]*?)(?=\n@|\n*$)/g;
     let match: RegExpExecArray | null;
 
+    const extractFieldFromText = (body: string, field: string): string => {
+      // 1. Match braced field = { ... } with nested brace support
+      const bracedRegex = new RegExp(`\\b${field}\\s*=\\s*\\{`, "i");
+      const bracedMatch = bracedRegex.exec(body);
+      if (bracedMatch) {
+        const startIndex = bracedMatch.index + bracedMatch[0].length;
+        let depth = 1;
+        let i = startIndex;
+        while (i < body.length && depth > 0) {
+          if (body[i] === '{' && body[i - 1] !== '\\') depth++;
+          else if (body[i] === '}' && body[i - 1] !== '\\') depth--;
+          i++;
+        }
+        if (depth === 0) {
+          return body.slice(startIndex, i - 1).trim();
+        }
+      }
+
+      // 2. Match double-quoted field = " ... "
+      const quotedRegex = new RegExp(`\\b${field}\\s*=\\s*"([^"]*)"`, "i");
+      const quotedMatch = body.match(quotedRegex);
+      if (quotedMatch) return quotedMatch[1].trim();
+
+      // 3. Match unquoted numeric or word value
+      const bareRegex = new RegExp(`\\b${field}\\s*=\\s*([0-9a-zA-Z_-]+)`, "i");
+      const bareMatch = body.match(bareRegex);
+      if (bareMatch) return bareMatch[1].trim();
+
+      return "";
+    };
+
     while ((match = entryRegex.exec(bibtex)) !== null) {
       const rawType = match[1].toLowerCase();
       const citekey = match[2].trim();
       const body = match[3];
 
-      const getField = (field: string): string => {
-        const reg = new RegExp(`${field}\\s*=\\s*[{"](.*?)[}"]`, "i");
-        const m = body.match(reg);
-        return m ? m[1].trim() : "";
-      };
-
-      const title = getField("title");
-      const rawAuthors = getField("author");
-      const authors = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(a => a.trim()) : ["Unknown Author"];
-      const year = getField("year") || new Date().getFullYear();
-      const publication = getField("journal") || getField("booktitle") || getField("howpublished") || "";
-      const volume = getField("volume");
-      const issue = getField("number") || getField("issue");
-      const pages = getField("pages");
-      const publisher = getField("publisher");
-      const doi = getField("doi");
-      const url = getField("url");
-      const isbn = getField("isbn");
-      const abstract = getField("abstract");
+      const title = extractFieldFromText(body, "title");
+      const rawAuthors = extractFieldFromText(body, "author");
+      const authors = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(a => a.replace(/[{}]/g, '').trim()) : ["Unknown Author"];
+      const year = extractFieldFromText(body, "year") || new Date().getFullYear();
+      const publication = extractFieldFromText(body, "journal") || extractFieldFromText(body, "booktitle") || extractFieldFromText(body, "howpublished") || "";
+      const volume = extractFieldFromText(body, "volume");
+      const issue = extractFieldFromText(body, "number") || extractFieldFromText(body, "issue");
+      const pages = extractFieldFromText(body, "pages");
+      const publisher = extractFieldFromText(body, "publisher");
+      const doi = extractFieldFromText(body, "doi");
+      const url = extractFieldFromText(body, "url");
+      const isbn = extractFieldFromText(body, "isbn");
+      const abstract = extractFieldFromText(body, "abstract");
 
       let type: ReferenceType = "other";
       if (rawType === "article") type = "journal";
@@ -454,7 +479,7 @@ export class MetadataResolvers {
       entries.push(CitationEngine.populateStyles({
         citekey,
         type,
-        title: title || "Untitled",
+        title: title ? title.replace(/[{}]/g, '') : "Untitled",
         authors,
         year,
         publication,
@@ -465,7 +490,7 @@ export class MetadataResolvers {
         doi,
         url,
         isbn,
-        abstract,
+        abstract: abstract ? abstract.replace(/[{}]/g, '') : "",
         projects: [],
         dateAdded: new Date().toISOString(),
         dateModified: new Date().toISOString(),
@@ -477,25 +502,20 @@ export class MetadataResolvers {
       if (typeMatch) {
         const rawType = typeMatch[1].toLowerCase();
         const citekey = typeMatch[2].trim();
-        const getField = (field: string): string => {
-          const reg = new RegExp(`${field}\\s*=\\s*[{"](.*?)[}"]`, "i");
-          const m = bibtex.match(reg);
-          return m ? m[1].trim() : "";
-        };
 
-        const title = getField("title");
-        const rawAuthors = getField("author");
-        const authors = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(a => a.trim()) : ["Unknown Author"];
-        const year = getField("year") || new Date().getFullYear();
-        const publication = getField("journal") || getField("booktitle") || getField("howpublished") || "";
-        const volume = getField("volume");
-        const issue = getField("number") || getField("issue");
-        const pages = getField("pages");
-        const publisher = getField("publisher");
-        const doi = getField("doi");
-        const url = getField("url");
-        const isbn = getField("isbn");
-        const abstract = getField("abstract");
+        const title = extractFieldFromText(bibtex, "title");
+        const rawAuthors = extractFieldFromText(bibtex, "author");
+        const authors = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(a => a.replace(/[{}]/g, '').trim()) : ["Unknown Author"];
+        const year = extractFieldFromText(bibtex, "year") || new Date().getFullYear();
+        const publication = extractFieldFromText(bibtex, "journal") || extractFieldFromText(bibtex, "booktitle") || extractFieldFromText(bibtex, "howpublished") || "";
+        const volume = extractFieldFromText(bibtex, "volume");
+        const issue = extractFieldFromText(bibtex, "number") || extractFieldFromText(bibtex, "issue");
+        const pages = extractFieldFromText(bibtex, "pages");
+        const publisher = extractFieldFromText(bibtex, "publisher");
+        const doi = extractFieldFromText(bibtex, "doi");
+        const url = extractFieldFromText(bibtex, "url");
+        const isbn = extractFieldFromText(bibtex, "isbn");
+        const abstract = extractFieldFromText(bibtex, "abstract");
 
         let type: ReferenceType = "other";
         if (rawType === "article") type = "journal";
@@ -508,7 +528,7 @@ export class MetadataResolvers {
         entries.push(CitationEngine.populateStyles({
           citekey,
           type,
-          title: title || "Untitled",
+          title: title ? title.replace(/[{}]/g, '') : "Untitled",
           authors,
           year,
           publication,
@@ -519,7 +539,7 @@ export class MetadataResolvers {
           doi,
           url,
           isbn,
-          abstract,
+          abstract: abstract ? abstract.replace(/[{}]/g, '') : "",
           projects: [],
           dateAdded: new Date().toISOString(),
           dateModified: new Date().toISOString(),

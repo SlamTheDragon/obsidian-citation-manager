@@ -200,7 +200,12 @@ export class PDFImportModal extends Modal {
         fetchBtn.setText("Fetching...");
         try {
           const res = await MetadataResolvers.detectAndResolve(val);
-          this.ref = { ...this.ref, ...res } as ReferenceMetadata;
+          const currentProjects = this.ref.projects ? [...this.ref.projects] : [];
+          this.ref = { 
+            ...this.ref, 
+            ...res, 
+            projects: currentProjects.length > 0 ? currentProjects : (res.projects || []) 
+          } as ReferenceMetadata;
           this.statusLog = "Metadata successfully populated.";
           new Notice("Metadata populated!");
           this.renderModal();
