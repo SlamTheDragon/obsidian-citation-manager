@@ -1212,7 +1212,9 @@ export class CitationManagerView extends ItemView {
     const format: InBodyFormat = (project?.inBodyFormat === ('footnote' as any) || !project?.inBodyFormat)
       ? 'parenthetical'
       : (project.inBodyFormat as InBodyFormat);
-    const inBodyText = isFootnoteMode ? `[^${ref.citekey}]` : CitationEngine.formatInBody(ref, format);
+    const inBodyText = isFootnoteMode 
+      ? `[^${ref.citekey}]` 
+      : CitationEngine.formatInBody(ref, format, project?.citationStyle || 'apa7');
 
     const cursor = editor.getCursor();
     editor.replaceRange(inBodyText, cursor);

@@ -223,7 +223,18 @@ export class CitationEngine {
   /**
    * Generates In-Body Citation string
    */
-  static formatInBody(ref: ReferenceMetadata, format: InBodyFormat | 'footnote', index: number = 1): string {
+  static formatInBody(
+    ref: ReferenceMetadata, 
+    format: InBodyFormat | 'footnote', 
+    style: CitationStyle = 'apa7', 
+    index: number = 1
+  ): string {
+    if (format === 'footnote') return `[^${ref.citekey}]`;
+    if (format === 'citekey') return `[@${ref.citekey}]`;
+
+    if (style === 'ieee') return `[${index}]`;
+    if (style === 'vancouver') return `(${index})`;
+
     const authors = ref.authors || [];
     let authorText = "Unknown";
     if (authors.length === 1) {
@@ -236,53 +247,61 @@ export class CitationEngine {
 
     const year = ref.year || "n.d.";
 
-    switch (format) {
-      case 'parenthetical':
-        return `(${authorText}, ${year})`;
-      case 'narrative':
-        return `${authorText} (${year})`;
-      case 'footnote':
-        return `[^${ref.citekey}]`;
-      case 'citekey':
-        return `[@${ref.citekey}]`;
-      default:
-        return `(${authorText}, ${year})`;
+    if (format === 'narrative') {
+      return `${authorText} (${year})`;
     }
+
+    if (style === 'harvard' || style === 'chicago') {
+      return `(${authorText} ${year})`;
+    }
+    return `(${authorText}, ${year})`;
   }
 
   /**
    * Formats multiple references into a single grouped in-body citation
    * (e.g. [@Smith2020; @Jones2021] or (Jones, 2021; Smith, 2020))
    */
-  static formatMultiInBody(refs: ReferenceMetadata[], format: InBodyFormat | 'footnote', style: CitationStyle = 'apa7'): string {
+  static formatMultiInBody(
+    refs: ReferenceMetadata[], 
+    format: InBodyFormat | 'footnote', 
+    style: CitationStyle = 'apa7',
+    startIndex: number = 1
+  ): string {
     if (!refs || refs.length === 0) return "";
-    if (refs.length === 1) return this.formatInBody(refs[0], format);
+    if (refs.length === 1) return this.formatInBody(refs[0], format, style, startIndex);
 
-    switch (format) {
-      case 'citekey':
-        return refs.map(r => `[@${r.citekey}]`).join(' ');
-      case 'parenthetical': {
-        const sorted = [...refs].sort((a, b) => {
-          const authorA = a.authors?.[0] || a.citekey;
-          const authorB = b.authors?.[0] || b.citekey;
-          return authorA.localeCompare(authorB);
-        });
-        const parts = sorted.map(r => {
-          const single = this.formatInBody(r, 'parenthetical');
-          return single.replace(/^\(|\)$/g, '');
-        });
-        return `(${parts.join('; ')})`;
-      }
-      case 'narrative': {
-        const parts = refs.map(r => this.formatInBody(r, 'narrative'));
-        if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
-        return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
-      }
-      case 'footnote':
-        return refs.map(r => `[^${r.citekey}]`).join('');
-      default:
-        return refs.map(r => `[@${r.citekey}]`).join(' ');
+    if (format === 'footnote') {
+      return refs.map(r => `[^${r.citekey}]`).join('');
     }
+    if (format === 'citekey') {
+      return refs.map(r => `[@${r.citekey}]`).join(' ');
+    }
+
+    if (style === 'ieee') {
+      const indices = refs.map((_, i) => startIndex + i);
+      return `[${indices.join(', ')}]`;
+    }
+    if (style === 'vancouver') {
+      const indices = refs.map((_, i) => startIndex + i);
+      return `(${indices.join(', ')})`;
+    }
+
+    if (format === 'narrative') {
+      const parts = refs.map(r => this.formatInBody(r, 'narrative', style));
+      if (parts.length === 2) return `${parts[0]} and ${parts[1]}`;
+      return `${parts.slice(0, -1).join(', ')}, and ${parts[parts.length - 1]}`;
+    }
+
+    const sorted = [...refs].sort((a, b) => {
+      const authorA = a.authors?.[0] || a.citekey;
+      const authorB = b.authors?.[0] || b.citekey;
+      return authorA.localeCompare(authorB);
+    });
+    const parts = sorted.map(r => {
+      const single = this.formatInBody(r, 'parenthetical', style);
+      return single.replace(/^\(|\)$/g, '');
+    });
+    return `(${parts.join('; ')})`;
   }
 
   /**

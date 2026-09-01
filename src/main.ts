@@ -111,7 +111,23 @@ export default class CitationManagerPlugin extends Plugin {
       })
     );
 
-    // Register File Watchers
+    // Register File Watchers with Bidirectional Settings Sync
+    this.registerEvent(
+      this.app.vault.on('modify', async (file) => {
+        if (file instanceof TFile) {
+          const expectedSettings = normalizePath(`${this.settings.referencesFolder}/settings.json`);
+          if (file.path === expectedSettings) {
+            if (!this.storageManager?.isWritingSettings) {
+              Logger.debug("External change in .references/settings.json detected. Reloading settings...");
+              await this.loadSettings();
+              this.refreshOpenViews();
+            }
+          } else if (file.path.startsWith(this.settings.referencesFolder)) {
+            this.refreshOpenViews();
+          }
+        }
+      })
+    );
     this.registerEvent(
       this.app.vault.on('create', (file) => {
         if (file.path.startsWith(this.settings.referencesFolder)) {

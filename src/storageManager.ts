@@ -6,6 +6,7 @@ import { Logger } from './logger';
 export class StorageManager {
   private app: App;
   private settings: CitationManagerSettings;
+  public isWritingSettings: boolean = false;
 
   constructor(app: App, settings: CitationManagerSettings) {
     this.app = app;
@@ -59,10 +60,15 @@ export class StorageManager {
   async saveSerializedSettings(settings: CitationManagerSettings): Promise<void> {
     await this.ensureStorageDirectories();
     const settingsFile = normalizePath(`${this.settings.referencesFolder}/settings.json`);
+    this.isWritingSettings = true;
     try {
       await this.app.vault.adapter.write(settingsFile, JSON.stringify(settings, null, 2));
     } catch (e) {
       Logger.error("Failed writing .references/settings.json:", e);
+    } finally {
+      setTimeout(() => {
+        this.isWritingSettings = false;
+      }, 300);
     }
   }
 

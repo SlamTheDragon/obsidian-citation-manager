@@ -68,7 +68,7 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
 
     const inBodyText = isFootnote 
       ? `[^${ref.citekey}]` 
-      : CitationEngine.formatInBody(ref, format);
+      : CitationEngine.formatInBody(ref, format, project?.citationStyle || 'apa7');
 
     // Cleanly consume any auto-paired trailing closing bracket/brace
     const line = editor.getLine(this.context.end.line);

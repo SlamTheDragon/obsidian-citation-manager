@@ -365,7 +365,7 @@ export class ProjectIndexer {
 
               // Lint check: If Footnote mode is OFF, flag as mismatch
               if (!isFootnoteMode) {
-                const expected = CitationEngine.formatInBody(ref, targetFormat);
+                const expected = CitationEngine.formatInBody(ref, targetFormat, targetStyle);
                 const id = `${file.path}::${lineIdx + 1}::[^${key}]::format_mismatch`;
                 if (!dismissed.has(id)) {
                   lintWarnings.push({
@@ -695,7 +695,7 @@ export class ProjectIndexer {
             let content = await this.app.vault.read(file);
             let modified = false;
             for (const [key, ref] of allReferences.entries()) {
-              const targetInBody = CitationEngine.formatInBody(ref, targetFormat);
+              const targetInBody = CitationEngine.formatInBody(ref, targetFormat, proj.citationStyle || 'apa7');
               const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
               if (footnoteCallRegex.test(content)) {
                 content = content.replace(footnoteCallRegex, targetInBody);
@@ -738,9 +738,9 @@ export class ProjectIndexer {
         let modified = false;
 
         for (const [key, ref] of allReferences.entries()) {
-          const targetInBody = CitationEngine.formatInBody(ref, newFormat);
-          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
-          const narrative = CitationEngine.formatInBody(ref, 'narrative');
+          const targetInBody = CitationEngine.formatInBody(ref, newFormat, style);
+          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical', style);
+          const narrative = CitationEngine.formatInBody(ref, 'narrative', style);
 
           // 1. Citekey format [@key]
           const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
