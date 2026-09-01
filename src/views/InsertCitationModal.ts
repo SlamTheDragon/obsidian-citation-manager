@@ -189,15 +189,18 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
     const cursor = editor.getCursor();
     editor.replaceRange(inBodyText, cursor);
 
+    const docText = editor.getValue();
+    const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
+    let footnoteIndex = existingFnMatches.length + 1;
+
     // If footnote format, ensure all footnote definitions are added
     if (format === 'footnote') {
-      const docText = editor.getValue();
       const newDefs: string[] = [];
 
       for (const ref of refs) {
         const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
         if (!fnDefRegex.test(docText)) {
-          const fnDefinition = CitationEngine.formatFootnoteDefinition(ref, this.defaultStyle);
+          const fnDefinition = CitationEngine.formatFootnoteDefinition(ref, this.defaultStyle, footnoteIndex++);
           newDefs.push(fnDefinition);
         }
       }
@@ -206,6 +209,20 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
         const hasTrailingNewline = docText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";
         editor.replaceRange(`${separator}${newDefs.join("\n")}\n`, { line: editor.lineCount(), ch: 0 });
+      }
+    } else {
+      // In standard mode, maintain per-file reference entries at bottom if not present
+      const newBibs: string[] = [];
+      for (const ref of refs) {
+        if (!docText.includes(ref.title) && !docText.includes(ref.citekey)) {
+          const bibEntry = CitationEngine.formatBibliographyEntry(ref, this.defaultStyle, footnoteIndex++);
+          newBibs.push(bibEntry);
+        }
+      }
+      if (newBibs.length > 0) {
+        const hasTrailingNewline = docText.endsWith("\n");
+        const separator = hasTrailingNewline ? "\n" : "\n\n";
+        editor.replaceRange(`${separator}${newBibs.join("\n")}\n`, { line: editor.lineCount(), ch: 0 });
       }
     }
 

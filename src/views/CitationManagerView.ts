@@ -993,11 +993,13 @@ export class CitationManagerView extends ItemView {
                         } else {
                           content = content.replace(item.rawCitation, item.suggestedFix);
                           fixedCount++;
-                          // If converting footnote to in-body format, also remove bottom definition
-                          if (item.rawCitation.startsWith('[^') && !item.suggestedFix.startsWith('[^')) {
+                          // If converting in-body footnote [^key] to in-body format, convert bottom footnote definition to standard reference entry (strip [^key]: prefix, keep reference text)
+                          if (item.rawCitation.startsWith('[^') && !item.rawCitation.includes(':') && !item.suggestedFix.startsWith('[^')) {
                             const key = item.citekey || item.rawCitation.replace(/^\[\^?|\]$/g, '');
-                            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$\\r?\\n?`, 'gm');
-                            content = content.replace(fnDefRegex, '');
+                            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'gm');
+                            if (fnDefRegex.test(content)) {
+                              content = content.replace(fnDefRegex, '$1');
+                            }
                           }
                         }
                       }
@@ -1219,11 +1221,11 @@ export class CitationManagerView extends ItemView {
     const cursor = editor.getCursor();
     editor.replaceRange(inBodyText, cursor);
 
-    if (isFootnoteMode) {
-      const docText = editor.getValue();
-      const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
-      const footnoteIndex = existingFnMatches.length + 1;
+    const docText = editor.getValue();
+    const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
+    const footnoteIndex = existingFnMatches.length + 1;
 
+    if (isFootnoteMode) {
       const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
       if (!fnDefRegex.test(docText)) {
         const fnDefinition = CitationEngine.formatFootnoteDefinition(
@@ -1234,6 +1236,18 @@ export class CitationManagerView extends ItemView {
         const hasTrailingNewline = docText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";
         editor.replaceRange(`${separator}${fnDefinition}\n`, { line: editor.lineCount(), ch: 0 });
+      }
+    } else {
+      // In standard mode, maintain per-file reference list at bottom if not already present
+      const bibEntry = CitationEngine.formatBibliographyEntry(
+        ref,
+        project?.citationStyle || 'apa7',
+        footnoteIndex
+      );
+      if (!docText.includes(ref.title) && !docText.includes(ref.citekey)) {
+        const hasTrailingNewline = docText.endsWith("\n");
+        const separator = hasTrailingNewline ? "\n" : "\n\n";
+        editor.replaceRange(`${separator}${bibEntry}\n`, { line: editor.lineCount(), ch: 0 });
       }
     }
 

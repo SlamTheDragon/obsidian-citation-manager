@@ -470,8 +470,9 @@ export class ProjectIndexer {
           );
           if (ref) {
             if (!isFootnoteMode) {
-              // Footnote mode is OFF: bottom footnote definitions should not exist
-              const id = `${file.path}::def::${key}::orphan_definition`;
+              // Footnote mode is OFF: bottom definitions should be formatted without the [^key]: prefix
+              const expectedBib = CitationEngine.formatBibliographyEntry(ref, targetStyle, footnoteIndex);
+              const id = `${file.path}::def::${key}::footnote_prefix_in_standard_mode`;
               if (!dismissed.has(id)) {
                 const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
                 lintWarnings.push({
@@ -482,11 +483,12 @@ export class ProjectIndexer {
                   lineContent: currentDefLine,
                   rawCitation: currentDefLine,
                   citekey: key,
-                  suggestedFix: "",
+                  suggestedFix: expectedBib,
                   type: 'format_mismatch',
-                  message: `Orphan footnote definition [^${key}] found (Footnote Mode is disabled).`,
+                  message: `Convert [^${key}]: stub to standard ${targetStyle.toUpperCase()} reference entry.`,
                 });
               }
+              footnoteIndex++;
             } else {
               const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, footnoteIndex);
               if (currentDefLine !== expectedDef) {
@@ -701,10 +703,10 @@ export class ProjectIndexer {
                 content = content.replace(footnoteCallRegex, targetInBody);
                 modified = true;
               }
-              // Remove bottom footnote definition for this key
-              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$\\r?\\n?`, 'gm');
+              // Transform bottom footnote definition for this key into standard reference (strip [^key]: prefix, retain reference text)
+              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'gm');
               if (fnDefRegex.test(content)) {
-                content = content.replace(fnDefRegex, '');
+                content = content.replace(fnDefRegex, '$1');
                 modified = true;
               }
             }

@@ -305,29 +305,30 @@ export class CitationEngine {
   }
 
   /**
+   * Formats a single bibliography entry according to the selected academic standard
+   */
+  static formatBibliographyEntry(ref: ReferenceMetadata, style: CitationStyle = 'apa7', index: number = 1): string {
+    switch (style) {
+      case 'apa7':
+        return this.formatAPA7(ref);
+      case 'ieee':
+        return this.formatIEEE(ref, index);
+      case 'harvard':
+        return this.formatHarvard(ref);
+      case 'chicago':
+        return this.formatChicago(ref);
+      case 'vancouver':
+        return this.formatVancouver(ref, index);
+      default:
+        return this.formatAPA7(ref);
+    }
+  }
+
+  /**
    * Formats footnote definition text for bottom of markdown file
    */
   static formatFootnoteDefinition(ref: ReferenceMetadata, style: CitationStyle = 'apa7', index: number = 1): string {
-    let citationString = "";
-    switch (style) {
-      case 'apa7':
-        citationString = this.formatAPA7(ref);
-        break;
-      case 'ieee':
-        citationString = this.formatIEEE(ref, index);
-        break;
-      case 'harvard':
-        citationString = this.formatHarvard(ref);
-        break;
-      case 'chicago':
-        citationString = this.formatChicago(ref);
-        break;
-      case 'vancouver':
-        citationString = this.formatVancouver(ref, index);
-        break;
-      default:
-        citationString = this.formatAPA7(ref);
-    }
+    const citationString = this.formatBibliographyEntry(ref, style, index);
     return `[^${ref.citekey}]: ${citationString}`;
   }
 
