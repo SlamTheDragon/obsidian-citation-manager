@@ -61,6 +61,7 @@ export interface ProjectRecord {
   referenceIds: string[];    // Citekeys belonging to this project
   citationStyle?: CitationStyle;
   inBodyFormat?: InBodyFormat;
+  enableFootnoteMode?: boolean;
   publicationFolder?: string;
   exportSettings?: ProjectExportSettings;
   created: string;
@@ -71,6 +72,7 @@ export interface CitationManagerSettings {
   referencesFolder: string;
   defaultCitationStyle: CitationStyle;
   defaultInBodyFormat: InBodyFormat;
+  enableFootnoteMode: boolean;
   projects: ProjectRecord[];
   activeProjectId: string; // "ALL" or specific project id
   enableEditorSuggest: boolean;
@@ -84,6 +86,7 @@ export const DEFAULT_SETTINGS: CitationManagerSettings = {
   referencesFolder: ".references",
   defaultCitationStyle: "apa7",
   defaultInBodyFormat: "parenthetical",
+  enableFootnoteMode: false,
   projects: [],
   activeProjectId: ALL_PROJECTS_ID,
   enableEditorSuggest: true,

@@ -134,7 +134,7 @@ export default class CitationManagerPlugin extends Plugin {
         if (file.path.startsWith(this.settings.referencesFolder)) return;
 
         const project = this.getActiveProject();
-        const shouldSync = project?.inBodyFormat === 'footnote';
+        const shouldSync = Boolean(project?.enableFootnoteMode);
 
         if (shouldSync && project) {
           if (liveSyncDebounce) clearTimeout(liveSyncDebounce);

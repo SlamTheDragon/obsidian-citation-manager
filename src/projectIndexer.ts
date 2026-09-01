@@ -475,7 +475,7 @@ export class ProjectIndexer {
           }
 
           // Footnote definition sync
-          if (newFormat === 'footnote' || project.enableFootnoteAutoSync) {
+          if (project.enableFootnoteMode) {
             const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
             const fnRegex = new RegExp(`^\\[\\^${key}\\]:.*$`, 'm');
             if (!fnRegex.test(content) && (content.includes(`[^${key}]`) || modified)) {
@@ -485,8 +485,8 @@ export class ProjectIndexer {
           }
         }
 
-        // Non-footnote format: automatically clean up all citation footnote definitions unless explicitly enabled
-        if (newFormat !== 'footnote' && !project.enableFootnoteAutoSync) {
+        // Clean up all citation footnote definitions if footnote mode is disabled
+        if (!project.enableFootnoteMode) {
           const allFnDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:.*$\n?/gm;
           content = content.replace(allFnDefRegex, (fullMatch, matchedKey) => {
             const isRefKey = Array.from(allReferences.keys()).some(k => 
@@ -527,7 +527,7 @@ export class ProjectIndexer {
     let updatedFootnotesCount = 0;
     let removedFootnotesCount = 0;
 
-    const shouldKeepFootnotes = project.inBodyFormat === 'footnote' || Boolean(project.enableFootnoteAutoSync);
+    const shouldKeepFootnotes = Boolean(project.enableFootnoteMode);
     const footnoteCallRegex = /\[\^([a-zA-Z0-9_-]+)\](?!:)/g;
 
     for (const file of files) {

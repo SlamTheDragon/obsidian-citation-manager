@@ -765,71 +765,60 @@ export class CitationManagerView extends ItemView {
 
       const row = controlsCard.createDiv({ cls: "citation-format-controls-row" });
 
-      // Unified Citation Standard / Format Selector
+      // 1. Citation Standard Selector
+      const styleWrap = row.createDiv({ cls: "format-control-item" });
+      styleWrap.createSpan({ cls: "control-label", text: "Standard:" });
+      const styleSelect = styleWrap.createEl("select", { cls: "dropdown mini-dropdown" });
+      styleSelect.createEl("option", { value: "apa7", text: "APA 7" });
+      styleSelect.createEl("option", { value: "ieee", text: "IEEE" });
+      styleSelect.createEl("option", { value: "harvard", text: "Harvard" });
+      styleSelect.createEl("option", { value: "chicago", text: "Chicago" });
+      styleSelect.createEl("option", { value: "vancouver", text: "Vancouver" });
+      styleSelect.value = project.citationStyle || this.settings.defaultCitationStyle;
+
+      styleSelect.addEventListener("change", async () => {
+        const newStyle = styleSelect.value as CitationStyle;
+        project.citationStyle = newStyle;
+        await this.onSaveSettings();
+
+        new ConfirmModal(
+          this.app,
+          "Update Citation Standard?",
+          `Style changed to '${newStyle.toUpperCase()}'. Synchronize citations across ${project.name} documents?`,
+          "Update Documents",
+          false,
+          async () => {
+            const mod = await this.projectIndexer.propagateFormatChange(
+              project,
+              project.inBodyFormat || this.settings.defaultInBodyFormat,
+              this.referencesMap,
+              newStyle,
+              this.settings.referencesFolder
+            );
+            new Notice(`Updated citation style across ${mod} document(s).`);
+            await this.refreshData();
+          }
+        ).open();
+      });
+
+      // 2. In-Body Format Selector
       const formatWrap = row.createDiv({ cls: "format-control-item" });
-      formatWrap.createSpan({ cls: "control-label", text: "Citation Standard:" });
+      formatWrap.createSpan({ cls: "control-label", text: "In-Body:" });
       const formatSelect = formatWrap.createEl("select", { cls: "dropdown mini-dropdown" });
-      formatSelect.createEl("option", { value: "apa7_parenthetical", text: "APA 7 (Author, Year)" });
-      formatSelect.createEl("option", { value: "apa7_narrative", text: "APA 7 Narrative Author (Year)" });
-      formatSelect.createEl("option", { value: "footnote", text: "Footnote [^key]" });
-      formatSelect.createEl("option", { value: "ieee", text: "IEEE [1]" });
-      formatSelect.createEl("option", { value: "harvard", text: "Harvard (Author Year)" });
-      formatSelect.createEl("option", { value: "chicago", text: "Chicago (Author Year)" });
-      formatSelect.createEl("option", { value: "vancouver", text: "Vancouver (1)" });
+      formatSelect.createEl("option", { value: "parenthetical", text: "Parenthetical (Author, Year)" });
+      formatSelect.createEl("option", { value: "narrative", text: "Narrative Author (Year)" });
       formatSelect.createEl("option", { value: "citekey", text: "Pandoc Citekey [@key]" });
-
-      // Calculate current value
-      let currentVal = "apa7_parenthetical";
-      if (project.inBodyFormat === 'footnote') currentVal = "footnote";
-      else if (project.inBodyFormat === 'citekey') currentVal = "citekey";
-      else if (project.inBodyFormat === 'narrative') currentVal = "apa7_narrative";
-      else if (project.citationStyle === 'ieee') currentVal = "ieee";
-      else if (project.citationStyle === 'harvard') currentVal = "harvard";
-      else if (project.citationStyle === 'chicago') currentVal = "chicago";
-      else if (project.citationStyle === 'vancouver') currentVal = "vancouver";
-      else currentVal = "apa7_parenthetical";
-
-      formatSelect.value = currentVal;
+      formatSelect.value = project.inBodyFormat || this.settings.defaultInBodyFormat;
 
       formatSelect.addEventListener("change", async () => {
-        const val = formatSelect.value;
-        let newStyle: CitationStyle = 'apa7';
-        let newFormat: InBodyFormat = 'parenthetical';
-
-        if (val === 'footnote') {
-          newStyle = project.citationStyle || 'apa7';
-          newFormat = 'footnote';
-        } else if (val === 'citekey') {
-          newStyle = project.citationStyle || 'apa7';
-          newFormat = 'citekey';
-        } else if (val === 'apa7_narrative') {
-          newStyle = 'apa7';
-          newFormat = 'narrative';
-        } else if (val === 'ieee') {
-          newStyle = 'ieee';
-          newFormat = 'parenthetical';
-        } else if (val === 'harvard') {
-          newStyle = 'harvard';
-          newFormat = 'parenthetical';
-        } else if (val === 'chicago') {
-          newStyle = 'chicago';
-          newFormat = 'parenthetical';
-        } else if (val === 'vancouver') {
-          newStyle = 'vancouver';
-          newFormat = 'parenthetical';
-        } else {
-          newStyle = 'apa7';
-          newFormat = 'parenthetical';
-        }
-
-        project.citationStyle = newStyle;
+        const newFormat = formatSelect.value as InBodyFormat;
         project.inBodyFormat = newFormat;
         await this.onSaveSettings();
 
         new ConfirmModal(
           this.app,
-          "Update Citations in Bucket?",
-          `Standard changed to '${formatSelect.selectedOptions[0]?.text}'. Synchronize citations across ${project.name} documents?`,
+          "Update In-Text Citations?",
+          `In-body format changed to '${newFormat}'. Update citations across ${project.name} documents?`,
           "Update Documents",
           false,
           async () => {
@@ -837,14 +826,38 @@ export class CitationManagerView extends ItemView {
               project,
               newFormat,
               this.referencesMap,
-              newStyle,
+              project.citationStyle || this.settings.defaultCitationStyle,
               this.settings.referencesFolder
             );
-            new Notice(`Updated citations across ${mod} document(s).`);
+            new Notice(`Updated in-body format across ${mod} document(s).`);
             await this.refreshData();
           }
         ).open();
       });
+
+      // 3. Footnote Mode Companion Toggle (for Obsidian Footnotes plugin)
+      const fnRow = controlsCard.createDiv({ cls: "citation-format-controls-row" });
+      fnRow.style.marginTop = "6px";
+      const fnToggleLabel = fnRow.createEl("label", { cls: "citation-checkbox-label" });
+      const fnCheckbox = fnToggleLabel.createEl("input", { type: "checkbox" });
+      fnCheckbox.checked = Boolean(project.enableFootnoteMode);
+      fnCheckbox.addEventListener("change", async () => {
+        project.enableFootnoteMode = fnCheckbox.checked;
+        await this.onSaveSettings();
+        const res = await this.projectIndexer.syncFootnotesInRegisteredFiles(
+          project,
+          this.referencesMap,
+          project.citationStyle || this.settings.defaultCitationStyle,
+          this.settings.referencesFolder
+        );
+        if (project.enableFootnoteMode) {
+          new Notice(`Footnote Mode Enabled: synced ${res.updatedFootnotesCount} definition(s).`);
+        } else {
+          new Notice(`Footnote Mode Disabled: cleaned up ${res.removedFootnotesCount} definition(s).`);
+        }
+        await this.refreshData();
+      });
+      fnToggleLabel.createSpan({ text: "Enable Obsidian Footnote Mode ([^citekey])" });
 
       // Resync / Catch-Up Button (Offline redundancy & recovery)
       const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
@@ -1054,13 +1067,14 @@ export class CitationManagerView extends ItemView {
     }
 
     const editor = mdView.editor;
-    const format = project?.inBodyFormat || this.settings.defaultInBodyFormat;
+    const isFootnoteMode = project ? Boolean(project.enableFootnoteMode) : Boolean(this.settings.enableFootnoteMode);
+    const format = isFootnoteMode ? 'footnote' : (project?.inBodyFormat || this.settings.defaultInBodyFormat);
     const inBodyText = CitationEngine.formatInBody(ref, format);
 
     const cursor = editor.getCursor();
     editor.replaceRange(inBodyText, cursor);
 
-    if (format === "footnote") {
+    if (isFootnoteMode) {
       const docText = editor.getValue();
       const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
       const footnoteIndex = existingFnMatches.length + 1;

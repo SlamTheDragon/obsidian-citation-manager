@@ -22,7 +22,7 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
     this.references = references;
     this.project = project;
     this.defaultStyle = project?.citationStyle || defaultStyle;
-    this.selectedFormat = project?.inBodyFormat || defaultFormat;
+    this.selectedFormat = (project && project.enableFootnoteMode) ? 'footnote' : (project?.inBodyFormat || defaultFormat);
     this.setPlaceholder("Search citations (Shift+Click or Shift+Enter for multi-citation)...");
   }
 

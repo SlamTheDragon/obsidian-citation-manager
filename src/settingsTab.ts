@@ -52,16 +52,26 @@ export class CitationManagerSettingTab extends PluginSettingTab {
       .setName('Default In-Body Citation Format')
       .setDesc('How citations are inserted into the body of your active markdown documents.')
       .addDropdown(drop => {
-        drop.addOption('parenthetical', 'Parenthetical (Author et al., Year)');
-        drop.addOption('footnote', 'Markdown Footnote [^citekey]');
-        drop.addOption('narrative', 'Narrative Author et al. (Year)');
-        drop.addOption('citekey', 'Citekey [@citekey]');
-        drop.setValue(this.plugin.settings.defaultInBodyFormat);
+        drop.addOption('parenthetical', 'Parenthetical (Author, Year)');
+        drop.addOption('narrative', 'Narrative Author (Year)');
+        drop.addOption('citekey', 'Pandoc Citekey [@citekey]');
+        drop.setValue(this.plugin.settings.defaultInBodyFormat === 'footnote' ? 'parenthetical' : this.plugin.settings.defaultInBodyFormat);
         drop.onChange(async (value) => {
           this.plugin.settings.defaultInBodyFormat = value as InBodyFormat;
           await this.plugin.saveSettings();
         });
       });
+
+    // Obsidian Footnote Mode
+    new Setting(containerEl)
+      .setName('Enable Obsidian Footnote Mode ([^citekey])')
+      .setDesc('Uses [^citekey] in-text and maintains formatted footnote definitions at note bottom for Obsidian Footnotes plugin support. Automatically converted upon publication export.')
+      .addToggle(toggle => toggle
+        .setValue(this.plugin.settings.enableFootnoteMode)
+        .onChange(async (value) => {
+          this.plugin.settings.enableFootnoteMode = value;
+          await this.plugin.saveSettings();
+        }));
 
     // In-Editor Auto-Suggest
     new Setting(containerEl)
