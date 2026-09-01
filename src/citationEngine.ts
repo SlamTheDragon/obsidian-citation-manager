@@ -30,6 +30,23 @@ export class CitationEngine {
   }
 
   /**
+   * Helper to format given names into initials, supporting hyphenated names (e.g. Jean-Paul -> J.-P.)
+   */
+  private static formatInitials(givenNameStr: string): string {
+    return givenNameStr
+      .trim()
+      .split(/\s+/)
+      .map(part => {
+        if (part.includes("-")) {
+          return part.split("-").map(sub => sub.charAt(0) ? `${sub.charAt(0)}.` : "").join("-");
+        }
+        return part.charAt(0) ? `${part.charAt(0)}.` : "";
+      })
+      .filter(Boolean)
+      .join(" ");
+  }
+
+  /**
    * Formats author names for APA style (e.g., Smith, J. D., & Jones, A. B.)
    */
   static formatAuthorsAPA(authors: string[]): string {
@@ -40,13 +57,19 @@ export class CitationEngine {
       if (clean.includes(",")) {
         const parts = clean.split(",");
         const last = parts[0].trim();
-        const firstInitials = parts.slice(1).join(" ").trim().split(/\s+/).map(n => n.charAt(0) ? `${n.charAt(0)}.` : "").join(" ");
+        const firstInitials = this.formatInitials(parts.slice(1).join(" "));
         return firstInitials ? `${last}, ${firstInitials}` : last;
       } else {
         const parts = clean.split(/\s+/);
         if (parts.length === 1) return parts[0];
+        const lastToken = parts[parts.length - 1].replace(/\./g, "");
+        if (parts.length > 2 && /^(jr|sr|ii|iii|iv|v)$/i.test(lastToken)) {
+          const last = `${parts[parts.length - 2]}, ${parts[parts.length - 1]}`;
+          const initials = this.formatInitials(parts.slice(0, -2).join(" "));
+          return `${last}, ${initials}`;
+        }
         const last = parts[parts.length - 1];
-        const initials = parts.slice(0, -1).map(n => `${n.charAt(0)}.`).join(" ");
+        const initials = this.formatInitials(parts.slice(0, -1).join(" "));
         return `${last}, ${initials}`;
       }
     });
@@ -69,13 +92,19 @@ export class CitationEngine {
       if (clean.includes(",")) {
         const parts = clean.split(",");
         const last = parts[0].trim();
-        const initials = parts.slice(1).join(" ").trim().split(/\s+/).map(n => `${n.charAt(0)}.`).join(" ");
+        const initials = this.formatInitials(parts.slice(1).join(" "));
         return initials ? `${initials} ${last}` : last;
       } else {
         const parts = clean.split(/\s+/);
         if (parts.length === 1) return parts[0];
+        const lastToken = parts[parts.length - 1].replace(/\./g, "");
+        if (parts.length > 2 && /^(jr|sr|ii|iii|iv|v)$/i.test(lastToken)) {
+          const last = `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
+          const initials = this.formatInitials(parts.slice(0, -2).join(" "));
+          return `${initials} ${last}`;
+        }
         const last = parts[parts.length - 1];
-        const initials = parts.slice(0, -1).map(n => `${n.charAt(0)}.`).join(" ");
+        const initials = this.formatInitials(parts.slice(0, -1).join(" "));
         return `${initials} ${last}`;
       }
     });
@@ -420,6 +449,12 @@ export class CitationEngine {
     const clean = authorStr.trim();
     if (clean.includes(",")) return clean.split(",")[0].trim();
     const parts = clean.split(/\s+/);
+    if (parts.length > 1) {
+      const lastToken = parts[parts.length - 1].replace(/\./g, "");
+      if (/^(jr|sr|ii|iii|iv|v)$/i.test(lastToken)) {
+        return `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
+      }
+    }
     return parts[parts.length - 1];
   }
 }
