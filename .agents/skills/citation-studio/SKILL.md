@@ -108,6 +108,23 @@ Document diagnostics and transformations follow a 2-dimensional matrix (**Active
    - Hyphenated first names: `"Jean-Paul Sartre"` $\to$ `"Sartre, J.-P."`
    - Suffixes: `"Martin Luther King Jr."` $\to$ `"King, Jr., M. L."` (APA) / `"King Jr. (1963)"` (Narrative)
 
+### 3.8 Context-Aware Citation Overloading & In-Place Merging (`detectAndOverloadAtCursor`)
+When inserting a citation while the cursor is inside or adjacent to an existing citation:
+* **Pandoc Citekey**: Merges into a single bracket separated by semicolons (`[@Smith2020; @Jones2021]`).
+* **Author-Date (APA 7th, Harvard, Chicago)**: Merges into a single parenthetical sorted alphabetically by author surname (`(Jones & Brown, 2021; Smith, 2020)`).
+* **IEEE Numeric**: Combines indices into a single bracket array (`[1, 2]`).
+* **Vancouver Numeric**: Combines indices into a single parenthesis array (`(1, 2)`).
+* **Footnote Mode ON**: Appends adjacent footnote token immediately after the existing anchor (`[^Smith2020][^Jones2021]`).
+
+### 3.9 Atomic Multi-Citation Group Linting
+The linter treats grouped multi-citations (`[@A; @B]`, `(A, 2020; B, 2021)`, `[1, 2]`, `(1, 2)`) as atomic syntax entities:
+* Registers all participant citekeys into `inBodyKeysInFile` and `referenceUsageMap`.
+* If a format mismatch occurs (e.g. Footnote Mode is ON but note contains `(A, 2020; B, 2021)`), emits a **single unified diagnostic item** with `suggestedFix: [^A][^B]` to replace the entire group atomically without syntax corruption or dropped citations.
+
+### 3.10 Synchronized Cross-Standard Format Propagation
+* **Multi-Style Source Matching**: When switching standards across any of the 7 options (`APA 7`, `APA 7 Narrative`, `IEEE [1]`, `Harvard`, `Chicago`, `Vancouver`, `Pandoc Citekey`), the propagation engine scans all 10 possible source representations (both parenthetical, narrative, numeric, and citekeys) to ensure 100% replacement accuracy.
+* **Bipartite Numeric Mapping (`numericIndexToKeyMap`)**: Pre-scans bottom numeric entries so that numeric tokens (`[1]`, `(1)`) are mapped to library citekeys, preventing false-positive orphan warnings.
+
 ---
 
 ## 4. Verification & Quality Assurance Protocol
@@ -128,15 +145,14 @@ When compiling and testing new builds:
 6. **Presence Check**:
    - Check that `Cited (Nx)` badge increments accurately across footnotes, parentheticals, and narrative citations regardless of Footnote Mode setting.
 
-### 4.2 Automated NIST Combinatorial Test Suite
-Run the automated combinatorial test suite to verify all 263 combinatorial states:
+### 4.2 Automated Verification Suites (558+ Assertions)
+Run all automated test suites:
 ```bash
-npx esbuild scratch/combinatorial_test.ts --bundle --platform=node --external:obsidian --outfile=scratch/combinatorial_test.bundle.js
-node scratch/run_comb.js
+node -e "const Module = require('module'); const orig = Module.prototype.require; Module.prototype.require = function(p) { if (p === 'obsidian') return { requestUrl: async () => ({ status: 200, json: {} }), normalizePath: p => String(p).replace(/\\\\/g, '/'), App: class {}, Plugin: class {}, PluginSettingTab: class {}, ItemView: class {}, Modal: class {}, Notice: class {}, TFile: class {}, TFolder: class {}, MarkdownView: class {}, EditorSuggest: class {}, setIcon: () => {}, Setting: class { setName() { return this; } setDesc() { return this; } addText() { return this; } addToggle() { return this; } addDropdown() { return this; } } }; return orig.apply(this, arguments); }; require('./scratch/test_overloading.bundle.js'); require('./scratch/test_mode_toggle.bundle.js'); require('./scratch/exhaustive_matrix_test.bundle.js'); require('./scratch/combinatorial_test.bundle.js');"
 ```
 * **Coverage Matrix**:
-  - 5 Styles $\times$ 3 Formats $\times$ 5 Author Types = 75 In-Body States
-  - 5 Styles $\times$ 3 Formats $\times$ Multi-Lists = 15 Multi-Citation States
-  - 5 Styles $\times$ 5 Reference Records = 25 Bibliography / Footnote States
-  - 7 Masking Contexts (Code, Display Math, Inline Math, HTML comments, YAML)
-  - All Suffix & Hyphenated Name permutations
+  - All 7 Citation Standards $\times$ In-Body & Bottom Formats
+  - Citation Overloading & In-Place Multi-Citation Merging
+  - Bi-Directional Footnote Mode Transitions
+  - Bipartite Graph Orphan Diagnostic Invariants
+  - Code, Math, and Structural Masking Invariants
