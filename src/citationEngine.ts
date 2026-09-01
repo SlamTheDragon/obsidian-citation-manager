@@ -217,10 +217,37 @@ export class CitationEngine {
   }
 
   /**
+   * Formats author names for Chicago Author-Date style
+   */
+  static formatAuthorsChicago(authors: string[]): string {
+    if (!authors || authors.length === 0) return "Unknown";
+    const toFirstLast = (a: string) => {
+      const clean = a.trim();
+      if (clean.includes(",")) {
+        const parts = clean.split(",");
+        return `${parts.slice(1).join(" ").trim()} ${parts[0].trim()}`.trim();
+      }
+      return clean;
+    };
+    const toLastFirst = (a: string) => {
+      const clean = a.trim();
+      if (clean.includes(",")) return clean;
+      const parts = clean.split(/\s+/);
+      if (parts.length === 1) return parts[0];
+      return `${parts[parts.length - 1]}, ${parts.slice(0, -1).join(" ")}`;
+    };
+
+    if (authors.length === 1) return toLastFirst(authors[0]);
+    if (authors.length === 2) return `${toLastFirst(authors[0])}, and ${toFirstLast(authors[1])}`;
+    if (authors.length === 3) return `${toLastFirst(authors[0])}, ${toFirstLast(authors[1])}, and ${toFirstLast(authors[2])}`;
+    return `${toLastFirst(authors[0])}, et al.`;
+  }
+
+  /**
    * Generates Chicago (Author-Date) Format
    */
   static formatChicago(ref: Partial<ReferenceMetadata>): string {
-    const authors = (ref.authors && ref.authors.length > 0) ? ref.authors[0] : "Unknown";
+    const authors = this.formatAuthorsChicago(ref.authors || []);
     const year = ref.year ? `${ref.year}.` : "n.d.";
     const title = ref.title ? `"${ref.title}."` : "\"Untitled.\"";
 

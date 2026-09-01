@@ -281,17 +281,17 @@ export class PDFImportModal extends Modal {
       });
 
       const keyGroup = metaGrid.createDiv({ cls: "citation-form-group" });
-      keyGroup.createEl("label", { cls: "citation-form-label", text: "Citekey" });
-      const keyInput = keyGroup.createEl("input", {
+      const keyLabelRow = keyGroup.createDiv({ cls: "citation-label-row" });
+      keyLabelRow.createEl("label", { cls: "citation-form-label", text: "Citekey" });
+      keyLabelRow.createSpan({ cls: "citation-form-hint", text: "(Auto-derived)" });
+      this.keyInputEl = keyGroup.createEl("input", {
         type: "text",
-        cls: "citation-form-input",
-        placeholder: "Citekey (Auto-generated)",
-        value: this.ref.citekey
+        cls: "citation-form-input citation-key-readonly",
+        value: this.ref.citekey,
+        readonly: "true",
+        title: "Citekey is automatically derived from author & year"
       });
-      keyInput.addEventListener("input", () => {
-        this.ref.citekey = keyInput.value.replace(/[^a-zA-Z0-9_-]/g, "");
-        this.updatePreviews();
-      });
+      this.keyInputEl.tabIndex = -1;
 
       // Accordion 1: Publication & Venue
       this.createAnimatedAccordion(
@@ -502,6 +502,7 @@ export class PDFImportModal extends Modal {
   }
 
   private authorInputEl: HTMLInputElement | null = null;
+  private keyInputEl: HTMLInputElement | null = null;
 
   private renderAuthorChips(container: HTMLElement) {
     container.empty();
@@ -533,7 +534,7 @@ export class PDFImportModal extends Modal {
       if (!this.authorInputEl) return;
       const val = this.authorInputEl.value.trim();
       if (val) {
-        const parts = val.split(/[\r\n,]+/).map(p => p.trim()).filter(p => p.length > 0);
+        const parts = val.split(/[\r\n;]+/).map(p => p.trim()).filter(p => p.length > 0);
         for (const p of parts) {
           if (!this.ref.authors.includes(p)) {
             this.ref.authors.push(p);
@@ -546,13 +547,9 @@ export class PDFImportModal extends Modal {
     };
 
     this.authorInputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === ",") {
+      if (e.key === "Enter" || e.key === ";") {
         e.preventDefault();
         addAuthor();
-      } else if (e.key === "Backspace" && this.authorInputEl && !this.authorInputEl.value && this.ref.authors.length > 0) {
-        this.ref.authors.pop();
-        this.renderAuthorChips(container);
-        this.updatePreviews();
       }
     });
 
@@ -568,13 +565,14 @@ export class PDFImportModal extends Modal {
   private createAnimatedAccordion(
     parent: HTMLElement,
     sectionId: string,
-    title: string,
+    titleText: string,
     renderBody: (bodyEl: HTMLElement) => void
   ) {
     const card = parent.createDiv({ cls: "citation-modal-accordion-card" });
-
+    
     const header = card.createDiv({ cls: "accordion-header-row" });
-    header.createEl("span", { cls: "accordion-title-text", text: title });
+    header.createSpan({ cls: "accordion-title-text", text: titleText });
+    
     const toggleIcon = header.createSpan({ cls: "accordion-icon-wrap" });
     setIcon(toggleIcon, "chevron-down");
 
@@ -602,6 +600,11 @@ export class PDFImportModal extends Modal {
   }
 
   private updatePreviews() {
+    this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
+    if (this.keyInputEl) {
+      this.keyInputEl.value = this.ref.citekey;
+    }
+
     if (!this.previewEl) return;
     this.previewEl.empty();
     

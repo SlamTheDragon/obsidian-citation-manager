@@ -168,17 +168,17 @@ export class ReferenceEditorModal extends Modal {
     });
 
     const keyGroup = metaGrid.createDiv({ cls: "citation-form-group" });
-    keyGroup.createEl("label", { cls: "citation-form-label", text: "Citekey" });
-    const keyInput = keyGroup.createEl("input", {
+    const keyLabelRow = keyGroup.createDiv({ cls: "citation-label-row" });
+    keyLabelRow.createEl("label", { cls: "citation-form-label", text: "Citekey" });
+    keyLabelRow.createSpan({ cls: "citation-form-hint", text: "(Auto-derived)" });
+    this.keyInputEl = keyGroup.createEl("input", {
       type: "text",
-      cls: "citation-form-input",
-      placeholder: "e.g. Li2026",
-      value: this.ref.citekey
+      cls: "citation-form-input citation-key-readonly",
+      value: this.ref.citekey,
+      readonly: "true",
+      title: "Citekey is automatically derived from author & year"
     });
-    keyInput.addEventListener("input", () => {
-      this.ref.citekey = keyInput.value.replace(/[^a-zA-Z0-9_-]/g, "");
-      this.updatePreviews();
-    });
+    this.keyInputEl.tabIndex = -1;
 
     // 3. ACCORDION 1: PUBLICATION & VENUE
     this.createAnimatedAccordion(
@@ -534,6 +534,7 @@ export class ReferenceEditorModal extends Modal {
   }
 
   private authorInputEl: HTMLInputElement | null = null;
+  private keyInputEl: HTMLInputElement | null = null;
 
   private renderAuthorChips(container: HTMLElement) {
     container.empty();
@@ -641,6 +642,14 @@ export class ReferenceEditorModal extends Modal {
   }
 
   private updatePreviews() {
+    // Re-derive citekey from authors, year, and title if newly created or standard
+    if (this.isNew || !this.originalCitekey) {
+      this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
+      if (this.keyInputEl) {
+        this.keyInputEl.value = this.ref.citekey;
+      }
+    }
+
     if (!this.previewEl) return;
     this.previewEl.empty();
     
