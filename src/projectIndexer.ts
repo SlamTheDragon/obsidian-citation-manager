@@ -238,16 +238,33 @@ export class ProjectIndexer {
     const bracketCitekeyGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
     const citekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;
     const footnoteRegex = /\[\^([a-zA-Z0-9_:\.-]+)\](?!:)/g;
-    const parentheticalRegex = /\(([A-Z][a-zA-Z\s&]+(?:,\s*\d{4}|\s+et\s+al\.,\s*\d{4}))\)/g;
+    const parentheticalGroupRegex = /\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\)/g;
+    const narrativeRegex = /\b([A-Z][a-zA-Z\s&]+(?:\s+et\s+al\.)?)\s+\((19\d{2}|20\d{2})\)/g;
 
     const authorYearIndex = new Map<string, string>();
     for (const [key, ref] of allReferences.entries()) {
       if (ref.authors && ref.authors.length > 0 && ref.year) {
-        const firstAuthor = ref.authors[0].split(',')[0].trim().toLowerCase();
+        const firstAuthor = ref.authors[0].split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
         const y = String(ref.year).trim();
         authorYearIndex.set(`${firstAuthor}_${y}`, key);
+        if (ref.authors.length > 1) {
+          const secondAuthor = ref.authors[1].split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+          authorYearIndex.set(`${firstAuthor}_${secondAuthor}_${y}`, key);
+        }
       }
+      authorYearIndex.set(key.toLowerCase(), key);
     }
+
+    const resolveAuthorYearKey = (authorStr: string, yearStr: string): string | null => {
+      const y = yearStr.trim();
+      const cleanAuthor = authorStr.replace(/\s+et\s+al\./i, "").trim().toLowerCase();
+      const parts = cleanAuthor.split(/[\s,&]+/).filter(Boolean).map(p => p.replace(/[^a-z0-9]/g, ''));
+      if (parts.length === 0) return null;
+      if (parts.length === 1) {
+        return authorYearIndex.get(`${parts[0]}_${y}`) || null;
+      }
+      return authorYearIndex.get(`${parts[0]}_${parts[1]}_${y}`) || authorYearIndex.get(`${parts[0]}_${y}`) || null;
+    };
 
     for (const file of files) {
       try {
@@ -296,7 +313,7 @@ export class ProjectIndexer {
                     });
                   }
                 } else if (targetFormat === 'parenthetical') {
-                  const expected = CitationEngine.formatInBody(ref, 'parenthetical');
+                  const expected = CitationEngine.formatInBody(ref, 'parenthetical', targetStyle);
                   const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
                   if (!dismissed.has(id)) {
                     lintWarnings.push({
@@ -312,7 +329,7 @@ export class ProjectIndexer {
                     });
                   }
                 } else if (targetFormat === 'narrative') {
-                  const expected = CitationEngine.formatInBody(ref, 'narrative');
+                  const expected = CitationEngine.formatInBody(ref, 'narrative', targetStyle);
                   const id = `${file.path}::${lineIdx + 1}::[@${key}]::format_mismatch`;
                   if (!dismissed.has(id)) {
                     lintWarnings.push({
@@ -400,57 +417,95 @@ export class ProjectIndexer {
             }
           }
 
-          // 3. Parenthetical (Author, Year)
-          parentheticalRegex.lastIndex = 0;
-          while ((match = parentheticalRegex.exec(lineText)) !== null) {
-            const raw = match[1];
-            const parts = raw.split(',');
-            if (parts.length >= 2) {
-              const author = parts[0].replace(/\s+et\s+al\./i, "").trim().toLowerCase();
-              const year = parts[parts.length - 1].trim();
-              const matchedKey = authorYearIndex.get(`${author}_${year}`);
-              if (matchedKey && allReferences.has(matchedKey)) {
-                const ref = allReferences.get(matchedKey)!;
-                totalCitationsInFiles++;
-                if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
-                referenceUsageMap[matchedKey].push({
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: lineIdx + 1,
-                  lineContent: displayLine,
-                });
+          // 3. Parenthetical Groups (Author, Year) or (AuthorA, Year; AuthorB, Year)
+          parentheticalGroupRegex.lastIndex = 0;
+          while ((match = parentheticalGroupRegex.exec(lineText)) !== null) {
+            const groupContent = match[1];
+            const entries = groupContent.split(';').map(s => s.trim()).filter(Boolean);
+            for (const entry of entries) {
+              const yearMatch = entry.match(/\b(19\d{2}|20\d{2})\b/);
+              if (yearMatch) {
+                const year = yearMatch[1];
+                const authorPart = entry.slice(0, entry.indexOf(year)).replace(/[,:\(\)]/g, '').trim();
+                const matchedKey = resolveAuthorYearKey(authorPart, year);
+                if (matchedKey && allReferences.has(matchedKey)) {
+                  const ref = allReferences.get(matchedKey)!;
+                  totalCitationsInFiles++;
+                  if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
+                  referenceUsageMap[matchedKey].push({
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                  });
 
-                // Lint check: If in footnote mode or citekey mode
-                if (isFootnoteMode) {
-                  const id = `${file.path}::${lineIdx + 1}::${match[0]}::format_mismatch`;
-                  if (!dismissed.has(id)) {
-                    lintWarnings.push({
-                      id,
-                      filePath: file.path,
-                      fileName: file.basename,
-                      lineNumber: lineIdx + 1,
-                      lineContent: displayLine,
-                      rawCitation: match[0],
-                      suggestedFix: `[^${ref.citekey}]`,
-                      type: 'format_mismatch',
-                      message: `Expected [^${ref.citekey}] in Footnote Mode.`,
-                    });
+                  if (isFootnoteMode) {
+                    const id = `${file.path}::${lineIdx + 1}::(${entry})::format_mismatch`;
+                    if (!dismissed.has(id)) {
+                      lintWarnings.push({
+                        id,
+                        filePath: file.path,
+                        fileName: file.basename,
+                        lineNumber: lineIdx + 1,
+                        lineContent: displayLine,
+                        rawCitation: match[0],
+                        suggestedFix: `[^${ref.citekey}]`,
+                        type: 'format_mismatch',
+                        message: `Expected [^${ref.citekey}] in Footnote Mode.`,
+                      });
+                    }
+                  } else if (targetFormat === 'citekey') {
+                    const id = `${file.path}::${lineIdx + 1}::(${entry})::format_mismatch`;
+                    if (!dismissed.has(id)) {
+                      lintWarnings.push({
+                        id,
+                        filePath: file.path,
+                        fileName: file.basename,
+                        lineNumber: lineIdx + 1,
+                        lineContent: displayLine,
+                        rawCitation: match[0],
+                        suggestedFix: `[@${ref.citekey}]`,
+                        type: 'format_mismatch',
+                        message: `Expected citekey [@${ref.citekey}].`,
+                      });
+                    }
                   }
-                } else if (targetFormat === 'citekey') {
-                  const id = `${file.path}::${lineIdx + 1}::${match[0]}::format_mismatch`;
-                  if (!dismissed.has(id)) {
-                    lintWarnings.push({
-                      id,
-                      filePath: file.path,
-                      fileName: file.basename,
-                      lineNumber: lineIdx + 1,
-                      lineContent: displayLine,
-                      rawCitation: match[0],
-                      suggestedFix: `[@${ref.citekey}]`,
-                      type: 'format_mismatch',
-                      message: `Expected citekey [@${ref.citekey}].`,
-                    });
-                  }
+                }
+              }
+            }
+          }
+
+          // 4. Narrative Citations: Author et al. (Year)
+          narrativeRegex.lastIndex = 0;
+          while ((match = narrativeRegex.exec(lineText)) !== null) {
+            const authorStr = match[1];
+            const yearStr = match[2];
+            const matchedKey = resolveAuthorYearKey(authorStr, yearStr);
+            if (matchedKey && allReferences.has(matchedKey)) {
+              const ref = allReferences.get(matchedKey)!;
+              totalCitationsInFiles++;
+              if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
+              referenceUsageMap[matchedKey].push({
+                filePath: file.path,
+                fileName: file.basename,
+                lineNumber: lineIdx + 1,
+                lineContent: displayLine,
+              });
+
+              if (isFootnoteMode) {
+                const id = `${file.path}::${lineIdx + 1}::${match[0]}::format_mismatch`;
+                if (!dismissed.has(id)) {
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: match[0],
+                    suggestedFix: `[^${ref.citekey}]`,
+                    type: 'format_mismatch',
+                    message: `Expected [^${ref.citekey}] in Footnote Mode.`,
+                  });
                 }
               }
             }
