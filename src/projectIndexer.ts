@@ -662,59 +662,111 @@ export class ProjectIndexer {
   ): Promise<{ updatedFilesCount: number }> {
     let totalUpdated = 0;
     for (const proj of projects) {
-      if (enableFootnoteMode) {
-        // Switch in-text to footnotes and sync definitions
-        const files = this.getProjectFiles(proj, referencesFolder);
-        for (const file of files) {
-          try {
-            let content = await this.app.vault.read(file);
-            let modified = false;
+      const files = this.getProjectFiles(proj, referencesFolder);
+      const style = proj.citationStyle || 'apa7';
+      const targetFormat: InBodyFormat = (proj.inBodyFormat === ('footnote' as any) || !proj.inBodyFormat)
+        ? 'parenthetical'
+        : (proj.inBodyFormat as InBodyFormat);
+
+      for (const file of files) {
+        try {
+          let content = await this.app.vault.read(file);
+          let modified = false;
+
+          if (enableFootnoteMode) {
+            // Transform in-body citations into footnotes [^key]
             for (const [key, ref] of allReferences.entries()) {
-              const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
+              // 1. Citekey [@key]
               const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
               if (citekeyRegex.test(content)) {
                 content = content.replace(citekeyRegex, `[^${key}]`);
                 modified = true;
               }
-              if (parenthetical && content.includes(parenthetical)) {
-                content = content.split(parenthetical).join(`[^${key}]`);
+
+              // 2. Parenthetical & narrative variations across styles
+              const apaParenthetical = CitationEngine.formatInBody(ref, 'parenthetical', 'apa7');
+              const harvardParenthetical = CitationEngine.formatInBody(ref, 'parenthetical', 'harvard');
+              const narrative = CitationEngine.formatInBody(ref, 'narrative', style);
+
+              if (apaParenthetical && content.includes(apaParenthetical)) {
+                content = content.split(apaParenthetical).join(`[^${key}]`);
+                modified = true;
+              }
+              if (harvardParenthetical && content.includes(harvardParenthetical)) {
+                content = content.split(harvardParenthetical).join(`[^${key}]`);
+                modified = true;
+              }
+              if (narrative && content.includes(narrative)) {
+                content = content.split(narrative).join(`[^${key}]`);
                 modified = true;
               }
             }
-            if (modified) {
-              await this.app.vault.modify(file, content);
-              totalUpdated++;
+
+            // 3. Ensure bottom definitions have [^key]: prefix and are styled
+            const footnoteCallRegex = /\[\^([a-zA-Z0-9_:\.-]+)\](?!:)/g;
+            const keysInFile: string[] = [];
+            let match: RegExpExecArray | null;
+            while ((match = footnoteCallRegex.exec(content)) !== null) {
+              if (!keysInFile.includes(match[1])) keysInFile.push(match[1]);
             }
-          } catch {}
-        }
-        await this.syncFootnotesInRegisteredFiles(proj, allReferences, proj.citationStyle || 'apa7', referencesFolder);
-      } else {
-        // Switch in-text to bucket citation standard AND bake out (remove) bottom footnote definitions
-        const targetFormat = proj.inBodyFormat || 'parenthetical';
-        const files = this.getProjectFiles(proj, referencesFolder);
-        for (const file of files) {
-          try {
-            let content = await this.app.vault.read(file);
-            let modified = false;
+
+            let fnIdx = 1;
+            for (const key of keysInFile) {
+              const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
+                r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
+              );
+              if (ref) {
+                const expectedDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIdx);
+                const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
+
+                if (fnDefRegex.test(content)) {
+                  const currentDef = content.match(fnDefRegex)?.[0];
+                  if (currentDef !== expectedDef) {
+                    content = content.replace(fnDefRegex, expectedDef);
+                    modified = true;
+                  }
+                } else {
+                  // Check if there is an un-prefixed reference line matching ref.title
+                  const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                  const plainEntryRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
+                  if (plainEntryRegex.test(content)) {
+                    content = content.replace(plainEntryRegex, expectedDef);
+                    modified = true;
+                  } else {
+                    content = content.trimEnd() + `\n\n${expectedDef}\n`;
+                    modified = true;
+                  }
+                }
+                fnIdx++;
+              }
+            }
+          } else {
+            // Footnote Mode OFF: Transform in-body [^key] -> targetInBody AND bottom [^key]: -> standard reference entry
+            let fnIdx = 1;
             for (const [key, ref] of allReferences.entries()) {
-              const targetInBody = CitationEngine.formatInBody(ref, targetFormat, proj.citationStyle || 'apa7');
+              const targetInBody = CitationEngine.formatInBody(ref, targetFormat, style, fnIdx);
               const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
               if (footnoteCallRegex.test(content)) {
                 content = content.replace(footnoteCallRegex, targetInBody);
                 modified = true;
               }
-              // Transform bottom footnote definition for this key into standard reference (strip [^key]: prefix, retain reference text)
+
+              // Transform bottom definition [^key]: ... into plain reference entry without [^key]: prefix
               const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'gm');
               if (fnDefRegex.test(content)) {
                 content = content.replace(fnDefRegex, '$1');
                 modified = true;
               }
+              fnIdx++;
             }
-            if (modified) {
-              await this.app.vault.modify(file, content);
-              totalUpdated++;
-            }
-          } catch {}
+          }
+
+          if (modified) {
+            await this.app.vault.modify(file, content);
+            totalUpdated++;
+          }
+        } catch (err) {
+          Logger.warn(`Failed propagating footnote mode for ${file.path}:`, err);
         }
       }
     }
