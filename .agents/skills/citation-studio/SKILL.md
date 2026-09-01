@@ -1,4 +1,4 @@
-﻿---
+---
 name: citation-studio
 description: Universal academic citation manager, literature indexer, and bi-directional reference studio for Obsidian and markdown knowledge vaults. Governs automated DOI resolution, PDF binary metadata extraction, tamper-proof Markdown parsing, live footnote sync, multi-standard bibliography generation (APA 7, IEEE, Harvard, Chicago, Vancouver), and publication export pipeline.
 ---
@@ -63,14 +63,34 @@ obsidian-citation-manager/
 * **Absolute Desktop Shell Path Resolution**: On Windows virtual / shortcut drive mappings, resolve disk paths via `path.resolve(basePath, ref.pdfAttachment)` with `electron.shell.openPath` to prevent string truncation.
 * **PDF Binary DOI Verification**: When attaching PDFs, scan the binary for an embedded DOI and compare against `ref.doi` to display Match, Mismatch, or Unknown status badges. Preserve open accordion state on attachment/detachment.
 
-### 3.4 Diagnostic Telemetry & Linter Invariants
+### 3.4 3-Tier Citation Presence Scan Strategy
+Detection of citation presence to count citations towards the manager (`Cited (Nx)`, `referenceUsageMap`, and `totalCitationsInFiles`) follows a strict 3-tier hierarchy across all modes:
+1. **Tier 1: Footnote Identifier (`[^key]`)**: Scans in-body footnote calls `\[\^([a-zA-Z0-9_:\.-]+)\](?!:)` $\to$ matches against library citekeys $\to$ records occurrence in `referenceUsageMap`.
+2. **Tier 2: Footnote Body / Bottom Definition (`[^key]: ...`)**: Scans bottom definitions $\to$ links definition snippet $\to$ if not already recorded from in-body, counts occurrence in `referenceUsageMap`.
+3. **Tier 3: Identifier In-Body Text & Plain Reference Entries**:
+   - Pandoc Citekeys: `[@key]` / `[@key1; @key2]`.
+   - Parenthetical text citations: `(Author, Year)`, `(Author Year)` *(Harvard/Chicago)*, and multi-citations `(AuthorA, Year; AuthorB, Year)` matched via `authorYearIndex`.
+   - Narrative text citations: `Author et al. (Year)` / `Author (Year)`.
+   - Un-prefixed bottom reference entries: Matches note lines against `ref.title`.
+
+### 3.5 Authoritative Converged Linting Matrix
+Document diagnostics and transformations follow a 2-dimensional matrix (**Active Style $\times$ Footnote Mode**):
+
+| Mode State | In-Body Invariant & Fix | Bottom Definition Invariant & Fix |
+| :--- | :--- | :--- |
+| **Footnote Mode ON** | In-body must be `[^key]`. Flag non-footnote tokens (`(Author, Year)`, `[@key]`, `Author (Year)`) $\to$ `suggestedFix: [^key]`. | Must have `[^key]: <Formatted Entry>`. Flag style mismatches $\to$ `suggestedFix: <authoritative definition>`. |
+| **Footnote Mode OFF** | In-body must match bucket standard (e.g. `(Author, Year)` for APA 7, `(Author Year)` for Harvard, `[1]` for IEEE). Flag `[^key]` $\to$ `suggestedFix: targetInBody`. | Must have un-prefixed `<Formatted Entry>`. Flag `[^key]: ` stubs $\to$ `suggestedFix: <Formatted Entry>` (strips prefix, retains 100% reference text). |
+
+### 3.6 Diagnostic Telemetry, Purge, and Linter Invariants
 * **Consolidated Unresolved Incidents**: In-body `[^key]` and bottom definition `[^key]: ...` stubs for an unresolved reference are combined into a single diagnostic item per note.
 * **Complete Resolution Tree**: `FixInconsistenciesModal` must provide:
   1. `[+ Create Entry]`: Pre-populates `ReferenceEditorModal` with citekey and note definition text.
-  2. `[Purge]`: Removes the reference token and footnote definition from the note.
+  2. `[Purge]`: Completely removes the reference token, in-body calls, and full multi-line footnote definition bodies from the note.
   3. `[Dismiss]`: Serializes dismissal to `.references/.cache/dismissed_lints.json`.
 * **Sequential Numeric Footnote Indexing**: IEEE (`[N]`) and Vancouver (`(N)`) footnote checks must calculate the 1-based sequential occurrence index in the document to prevent false-positive style mismatch warnings on nth citations.
-* **Bake on Footnote Mode Disable**: Disabling Footnote Mode converts in-body citations to the bucket's academic standard AND cleanly strips out all bottom footnote definitions. Orphan definitions in non-footnote mode are flagged with empty suggested fix for automated removal.
+* **Bi-Directional Mode Switching**:
+  - Enabling Footnote Mode: Converts all in-body citations to `[^key]` and updates bottom definitions to `[^key]: <Formatted Entry>`.
+  - Disabling Footnote Mode: Converts all in-body `[^key]` to standard format and strips `[^key]: ` prefixes from bottom definitions, retaining 100% of bibliographic text.
 
 ---
 
@@ -86,3 +106,7 @@ When compiling and testing new builds:
    - Verify the modal body scrolls vertically while bottom action buttons remain pinned and visible.
 4. **Linking Check**:
    - Click `+ Link to Bucket` in the bottom status bar and verify the status badge changes to `In <Bucket>` on the **first click**.
+5. **Purge Check**:
+   - Purge an unresolved footnote from a note and verify that both in-body `[^key]` and the bottom definition line are completely removed.
+6. **Presence Check**:
+   - Check that `Cited (Nx)` badge increments accurately across footnotes, parentheticals, and narrative citations regardless of Footnote Mode setting.

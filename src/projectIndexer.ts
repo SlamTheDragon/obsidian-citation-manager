@@ -524,6 +524,19 @@ export class ProjectIndexer {
             r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
           );
           if (ref) {
+            // Count citation presence from footnote body if not already recorded from in-body marker
+            if (!referenceUsageMap[ref.citekey] || referenceUsageMap[ref.citekey].length === 0) {
+              if (!referenceUsageMap[ref.citekey]) referenceUsageMap[ref.citekey] = [];
+              const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+              referenceUsageMap[ref.citekey].push({
+                filePath: file.path,
+                fileName: file.basename,
+                lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                lineContent: currentDefLine,
+              });
+              totalCitationsInFiles++;
+            }
+
             if (!isFootnoteMode) {
               // Footnote mode is OFF: bottom definitions should be formatted without the [^key]: prefix
               const expectedBib = CitationEngine.formatBibliographyEntry(ref, targetStyle, footnoteIndex);
@@ -588,6 +601,23 @@ export class ProjectIndexer {
                   message: `Reference [^${key}] not found in library.`,
                 });
               }
+            }
+          }
+        }
+
+        // 5. Un-prefixed standard reference entries at document bottom (for Standard Mode)
+        for (const [key, ref] of allReferences.entries()) {
+          if (!referenceUsageMap[key] || referenceUsageMap[key].length === 0) {
+            if (ref.title && ref.title.length > 5 && rawContent.includes(ref.title)) {
+              if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
+              const lineIdx = rawLines.findIndex(l => l.includes(ref.title));
+              referenceUsageMap[key].push({
+                filePath: file.path,
+                fileName: file.basename,
+                lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                lineContent: (rawLines[lineIdx] || ref.title).trim(),
+              });
+              totalCitationsInFiles++;
             }
           }
         }

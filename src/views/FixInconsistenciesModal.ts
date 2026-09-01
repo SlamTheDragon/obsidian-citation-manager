@@ -258,12 +258,23 @@ export class FixInconsistenciesModal extends Modal {
           const fileObj = this.app.vault.getAbstractFileByPath(w.filePath);
           if (fileObj instanceof TFile) {
             let content = await this.app.vault.read(fileObj);
-            const key = w.citekey || w.rawCitation.replace(/^\[\^?|\]$/g, '').replace(/^@/, '');
-            // Remove in-body occurrences
-            content = content.replace(new RegExp(`\\[\\^${key}\\]`, 'g'), '');
-            content = content.replace(new RegExp(`\\[@${key}\\]`, 'g'), '');
-            // Remove bottom definition
-            content = content.replace(new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\r?\\n?`, 'gm'), '');
+            const key = (w.citekey || w.rawCitation.replace(/^\[\^?|\]:?.*$/g, '').replace(/^@/, '')).trim();
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            // 1. Remove in-body occurrences: [^key], [@key]
+            content = content.replace(new RegExp(`\\[\\^${escapedKey}\\](?!:)`, 'g'), '');
+            content = content.replace(new RegExp(`\\[@${escapedKey}\\]`, 'g'), '');
+
+            // 2. Remove footnote definition line (including any indented continuation lines)
+            const fnDefRegex = new RegExp(`^\\s*\\[\\^${escapedKey}\\]:.*$(\\r?\\n[ \\t]+.*$)*\\r?\\n?`, 'gm');
+            content = content.replace(fnDefRegex, '');
+
+            // 3. If definitionSnippet is present, also purge matching un-prefixed line if left behind
+            if (w.definitionSnippet && w.definitionSnippet.length > 5) {
+              const escapedSnippet = w.definitionSnippet.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              content = content.replace(new RegExp(`^.*${escapedSnippet}.*$\\r?\\n?`, 'gm'), '');
+            }
+
             await this.app.vault.modify(fileObj, content);
             await this.onRefresh();
             this.warnings = this.warnings.filter(item => item.id !== w.id);
