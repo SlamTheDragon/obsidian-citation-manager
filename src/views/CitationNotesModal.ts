@@ -1,14 +1,17 @@
 import { App, Modal, Notice, setIcon, MarkdownRenderer } from 'obsidian';
 import { ReferenceMetadata } from '../types';
 import { StorageManager } from '../storageManager';
+import { Logger } from '../logger';
 
 export class CitationNotesModal extends Modal {
   private ref: ReferenceMetadata;
   private storageManager: StorageManager;
   private onSave: () => Promise<void>;
   private notesText: string = "";
+  private initialNotesText: string = "";
   private isAbstractOpen: boolean = false;
   private activeTab: 'edit' | 'preview' = 'edit';
+  private isSaving: boolean = false;
 
   constructor(
     app: App,
@@ -25,7 +28,25 @@ export class CitationNotesModal extends Modal {
   async onOpen() {
     this.titleEl.setText(`Research Notes: [${this.ref.citekey}]`);
     this.notesText = await this.storageManager.loadReferenceUserNotes(this.ref.citekey);
+    this.initialNotesText = this.notesText;
     this.renderModal();
+  }
+
+  private async saveNotes(): Promise<void> {
+    if (this.isSaving) return;
+    if (this.notesText === this.initialNotesText) return;
+
+    this.isSaving = true;
+    try {
+      await this.storageManager.saveReferenceUserNotes(this.ref.citekey, this.notesText);
+      this.initialNotesText = this.notesText;
+      await this.onSave();
+    } catch (err: any) {
+      Logger.error(`Failed auto-saving notes for [${this.ref.citekey}]:`, err);
+      new Notice(`Error saving notes: ${err.message}`);
+    } finally {
+      this.isSaving = false;
+    }
   }
 
   private renderModal() {
@@ -115,7 +136,10 @@ export class CitationNotesModal extends Modal {
       toggleBtn.createSpan({ text: " Edit" });
     }
 
-    toggleBtn.addEventListener("click", () => {
+    toggleBtn.addEventListener("click", async () => {
+      if (this.activeTab === 'edit') {
+        await this.saveNotes();
+      }
       this.activeTab = this.activeTab === 'edit' ? 'preview' : 'edit';
       this.renderModal();
     });
@@ -139,6 +163,10 @@ export class CitationNotesModal extends Modal {
         this.notesText = notesArea.value;
       });
 
+      notesArea.addEventListener("blur", async () => {
+        await this.saveNotes();
+      });
+
       setTimeout(() => {
         notesArea.focus();
         notesArea.setSelectionRange(notesArea.value.length, notesArea.value.length);
@@ -149,33 +177,34 @@ export class CitationNotesModal extends Modal {
       MarkdownRenderer.render(this.app, rawText, previewPane, '', this);
     }
 
-    // 4. Modal Buttons Container
+    // 4. Modal Buttons Container (Cancel button removed; auto-save on all exit points)
     const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
 
-    const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });
-    cancelBtn.addEventListener("click", () => this.close());
-
-    const saveBtn = buttonRow.createEl("button", { 
+    const doneBtn = buttonRow.createEl("button", { 
       cls: "mod-cta", 
-      text: "Save Notes" 
+      text: "Done" 
     });
-    saveBtn.addEventListener("click", async () => {
-      saveBtn.disabled = true;
-      saveBtn.setText("Saving...");
+    doneBtn.addEventListener("click", async () => {
+      doneBtn.disabled = true;
+      doneBtn.setText("Saving...");
       try {
-        await this.storageManager.saveReferenceUserNotes(this.ref.citekey, this.notesText);
+        await this.saveNotes();
         new Notice(`Saved notes for [${this.ref.citekey}]`);
-        await this.onSave();
         this.close();
-      } catch (err) {
+      } catch (err: any) {
         new Notice(`Failed saving notes: ${err.message}`);
-        saveBtn.disabled = false;
-        saveBtn.setText("Save Notes");
+        doneBtn.disabled = false;
+        doneBtn.setText("Done");
       }
     });
   }
 
-  onClose() {
+  async onClose() {
+    // Auto-save guard on modal dismiss / backdrop click / ESC key
+    if (this.notesText !== this.initialNotesText) {
+      await this.saveNotes();
+      new Notice(`Saved notes for [${this.ref.citekey}]`);
+    }
     this.contentEl.empty();
   }
 }
