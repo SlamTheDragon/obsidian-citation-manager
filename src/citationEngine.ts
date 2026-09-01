@@ -278,11 +278,11 @@ export class CitationEngine {
     }
 
     if (style === 'ieee') {
-      const indices = refs.map((_, i) => startIndex + i);
+      const indices = Array.isArray(startIndex) ? startIndex : refs.map((_, i) => Number(startIndex) + i);
       return `[${indices.join(', ')}]`;
     }
     if (style === 'vancouver') {
-      const indices = refs.map((_, i) => startIndex + i);
+      const indices = Array.isArray(startIndex) ? startIndex : refs.map((_, i) => Number(startIndex) + i);
       return `(${indices.join(', ')})`;
     }
 

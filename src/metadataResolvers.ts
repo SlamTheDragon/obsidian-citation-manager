@@ -11,7 +11,9 @@ export class MetadataResolvers {
 
     // 1. BibTeX
     if (trimmed.startsWith('@') && trimmed.includes('{')) {
-      return this.parseBibTeX(trimmed);
+      const parsed = this.parseBibTeX(trimmed);
+      if (parsed.length > 0) return parsed[0];
+      throw new Error("Invalid BibTeX format");
     }
 
     // 2. DOI
@@ -392,61 +394,122 @@ export class MetadataResolvers {
   }
 
   /**
-   * Parses Raw BibTeX String into ReferenceMetadata
+   * Parses Raw BibTeX String into ReferenceMetadata array (supports single or multiple entries)
    */
-  static parseBibTeX(bibtex: string): Partial<ReferenceMetadata> {
-    const typeMatch = bibtex.match(/@([a-zA-Z]+)\s*\{\s*([^,]+),/);
-    if (!typeMatch) throw new Error("Invalid BibTeX format");
+  static parseBibTeX(bibtex: string): Partial<ReferenceMetadata>[] {
+    const entries: Partial<ReferenceMetadata>[] = [];
+    const entryRegex = /@([a-zA-Z]+)\s*\{\s*([^,]+),([\s\S]*?)(?=\n@|\n*$)/g;
+    let match: RegExpExecArray | null;
 
-    const rawType = typeMatch[1].toLowerCase();
-    const citekey = typeMatch[2].trim();
+    while ((match = entryRegex.exec(bibtex)) !== null) {
+      const rawType = match[1].toLowerCase();
+      const citekey = match[2].trim();
+      const body = match[3];
 
-    const getField = (field: string): string => {
-      const reg = new RegExp(`${field}\\s*=\\s*[{"](.*?)[}"]`, "i");
-      const match = bibtex.match(reg);
-      return match ? match[1].trim() : "";
-    };
+      const getField = (field: string): string => {
+        const reg = new RegExp(`${field}\\s*=\\s*[{"](.*?)[}"]`, "i");
+        const m = body.match(reg);
+        return m ? m[1].trim() : "";
+      };
 
-    const title = getField("title");
-    const rawAuthors = getField("author");
-    const authors = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(a => a.trim()) : ["Unknown Author"];
-    const year = getField("year") || new Date().getFullYear();
-    const publication = getField("journal") || getField("booktitle") || getField("howpublished") || "";
-    const volume = getField("volume");
-    const issue = getField("number") || getField("issue");
-    const pages = getField("pages");
-    const publisher = getField("publisher");
-    const doi = getField("doi");
-    const url = getField("url");
-    const isbn = getField("isbn");
-    const abstract = getField("abstract");
+      const title = getField("title");
+      const rawAuthors = getField("author");
+      const authors = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(a => a.trim()) : ["Unknown Author"];
+      const year = getField("year") || new Date().getFullYear();
+      const publication = getField("journal") || getField("booktitle") || getField("howpublished") || "";
+      const volume = getField("volume");
+      const issue = getField("number") || getField("issue");
+      const pages = getField("pages");
+      const publisher = getField("publisher");
+      const doi = getField("doi");
+      const url = getField("url");
+      const isbn = getField("isbn");
+      const abstract = getField("abstract");
 
-    let type: ReferenceType = "other";
-    if (rawType === "article") type = "journal";
-    else if (rawType === "inproceedings" || rawType === "conference") type = "conference";
-    else if (rawType === "book" || rawType === "booklet") type = "book";
-    else if (rawType === "misc") type = "webpage";
-    else if (rawType === "techreport") type = "report";
-    else if (rawType === "phdthesis" || rawType === "mastersthesis") type = "thesis";
+      let type: ReferenceType = "other";
+      if (rawType === "article") type = "journal";
+      else if (rawType === "inproceedings" || rawType === "conference") type = "conference";
+      else if (rawType === "book" || rawType === "booklet") type = "book";
+      else if (rawType === "misc") type = "webpage";
+      else if (rawType === "techreport") type = "report";
+      else if (rawType === "phdthesis" || rawType === "mastersthesis") type = "thesis";
 
-    return CitationEngine.populateStyles({
-      citekey,
-      type,
-      title: title || "Untitled",
-      authors,
-      year,
-      publication,
-      volume,
-      issue,
-      pages,
-      publisher,
-      doi,
-      url,
-      isbn,
-      abstract,
-      projects: [],
-      dateAdded: new Date().toISOString(),
-      dateModified: new Date().toISOString(),
-    });
+      entries.push(CitationEngine.populateStyles({
+        citekey,
+        type,
+        title: title || "Untitled",
+        authors,
+        year,
+        publication,
+        volume,
+        issue,
+        pages,
+        publisher,
+        doi,
+        url,
+        isbn,
+        abstract,
+        projects: [],
+        dateAdded: new Date().toISOString(),
+        dateModified: new Date().toISOString(),
+      }));
+    }
+
+    if (entries.length === 0) {
+      const typeMatch = bibtex.match(/@([a-zA-Z]+)\s*\{\s*([^,]+),/);
+      if (typeMatch) {
+        const rawType = typeMatch[1].toLowerCase();
+        const citekey = typeMatch[2].trim();
+        const getField = (field: string): string => {
+          const reg = new RegExp(`${field}\\s*=\\s*[{"](.*?)[}"]`, "i");
+          const m = bibtex.match(reg);
+          return m ? m[1].trim() : "";
+        };
+
+        const title = getField("title");
+        const rawAuthors = getField("author");
+        const authors = rawAuthors ? rawAuthors.split(/\s+and\s+/i).map(a => a.trim()) : ["Unknown Author"];
+        const year = getField("year") || new Date().getFullYear();
+        const publication = getField("journal") || getField("booktitle") || getField("howpublished") || "";
+        const volume = getField("volume");
+        const issue = getField("number") || getField("issue");
+        const pages = getField("pages");
+        const publisher = getField("publisher");
+        const doi = getField("doi");
+        const url = getField("url");
+        const isbn = getField("isbn");
+        const abstract = getField("abstract");
+
+        let type: ReferenceType = "other";
+        if (rawType === "article") type = "journal";
+        else if (rawType === "inproceedings" || rawType === "conference") type = "conference";
+        else if (rawType === "book" || rawType === "booklet") type = "book";
+        else if (rawType === "misc") type = "webpage";
+        else if (rawType === "techreport") type = "report";
+        else if (rawType === "phdthesis" || rawType === "mastersthesis") type = "thesis";
+
+        entries.push(CitationEngine.populateStyles({
+          citekey,
+          type,
+          title: title || "Untitled",
+          authors,
+          year,
+          publication,
+          volume,
+          issue,
+          pages,
+          publisher,
+          doi,
+          url,
+          isbn,
+          abstract,
+          projects: [],
+          dateAdded: new Date().toISOString(),
+          dateModified: new Date().toISOString(),
+        }));
+      }
+    }
+
+    return entries;
   }
 }
