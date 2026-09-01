@@ -272,6 +272,7 @@ export class ProjectIndexer {
         const maskedContent = ProjectIndexer.maskIgnoredMarkdown(rawContent);
         const lines = maskedContent.split('\n');
         const rawLines = rawContent.split('\n');
+        const inBodyKeysInFile = new Set<string>();
 
         lines.forEach((lineText, lineIdx) => {
           let match: RegExpExecArray | null;
@@ -286,8 +287,10 @@ export class ProjectIndexer {
             while ((subMatch = citekeyRegex.exec(groupContent)) !== null) {
               const key = subMatch[1];
               totalCitationsInFiles++;
+              inBodyKeysInFile.add(key.toLowerCase());
               if (allReferences.has(key)) {
                 const ref = allReferences.get(key)!;
+                inBodyKeysInFile.add(ref.citekey.toLowerCase());
                 if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
                 referenceUsageMap[key].push({
                   filePath: file.path,
@@ -370,8 +373,10 @@ export class ProjectIndexer {
           while ((match = footnoteRegex.exec(lineText)) !== null) {
             const key = match[1];
             totalCitationsInFiles++;
+            inBodyKeysInFile.add(key.toLowerCase());
             if (allReferences.has(key)) {
               const ref = allReferences.get(key)!;
+              inBodyKeysInFile.add(ref.citekey.toLowerCase());
               if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
               referenceUsageMap[key].push({
                 filePath: file.path,
@@ -431,6 +436,8 @@ export class ProjectIndexer {
                 if (matchedKey && allReferences.has(matchedKey)) {
                   const ref = allReferences.get(matchedKey)!;
                   totalCitationsInFiles++;
+                  inBodyKeysInFile.add(matchedKey.toLowerCase());
+                  inBodyKeysInFile.add(ref.citekey.toLowerCase());
                   if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
                   referenceUsageMap[matchedKey].push({
                     filePath: file.path,
@@ -484,6 +491,8 @@ export class ProjectIndexer {
             if (matchedKey && allReferences.has(matchedKey)) {
               const ref = allReferences.get(matchedKey)!;
               totalCitationsInFiles++;
+              inBodyKeysInFile.add(matchedKey.toLowerCase());
+              inBodyKeysInFile.add(ref.citekey.toLowerCase());
               if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
               referenceUsageMap[matchedKey].push({
                 filePath: file.path,
@@ -523,6 +532,10 @@ export class ProjectIndexer {
           const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
             r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
           );
+
+          const isCitedInBody = inBodyKeysInFile.has(key.toLowerCase()) || 
+                                (ref ? inBodyKeysInFile.has(ref.citekey.toLowerCase()) : false);
+
           if (ref) {
             // Count citation presence from footnote body if not already recorded from in-body marker
             if (!referenceUsageMap[ref.citekey] || referenceUsageMap[ref.citekey].length === 0) {
@@ -537,7 +550,26 @@ export class ProjectIndexer {
               totalCitationsInFiles++;
             }
 
-            if (!isFootnoteMode) {
+            if (!isCitedInBody) {
+              // Lint condition: citation declared on footnote, but not in markdown body
+              const id = `${file.path}::def::${key}::orphan_definition`;
+              if (!dismissed.has(id)) {
+                const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                lintWarnings.push({
+                  id,
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                  lineContent: currentDefLine,
+                  rawCitation: currentDefLine,
+                  citekey: key,
+                  definitionSnippet: currentDefText,
+                  suggestedFix: "",
+                  type: 'orphan_definition',
+                  message: `Footnote definition [^${key}] declared at bottom, but not cited in markdown body.`,
+                });
+              }
+            } else if (!isFootnoteMode) {
               // Footnote mode is OFF: bottom definitions should be formatted without the [^key]: prefix
               const expectedBib = CitationEngine.formatBibliographyEntry(ref, targetStyle, footnoteIndex);
               const id = `${file.path}::def::${key}::footnote_prefix_in_standard_mode`;
@@ -594,11 +626,14 @@ export class ProjectIndexer {
                   fileName: file.basename,
                   lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
                   lineContent: currentDefLine,
-                  rawCitation: `[^${key}]`,
+                  rawCitation: currentDefLine,
                   citekey: key,
                   definitionSnippet: currentDefText,
-                  type: 'unresolved',
-                  message: `Reference [^${key}] not found in library.`,
+                  suggestedFix: "",
+                  type: isCitedInBody ? 'unresolved' : 'orphan_definition',
+                  message: isCitedInBody 
+                    ? `Reference [^${key}] not found in library.`
+                    : `Footnote definition [^${key}] not in library and not cited in markdown body.`,
                 });
               }
             }

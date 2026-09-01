@@ -112,7 +112,7 @@ export interface LintWarning {
   citekey?: string;
   definitionSnippet?: string;
   suggestedFix?: string;
-  type: 'unresolved' | 'format_mismatch' | 'style_mismatch';
+  type: 'unresolved' | 'format_mismatch' | 'style_mismatch' | 'orphan_definition';
   message: string;
 }
 

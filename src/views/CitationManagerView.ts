@@ -1050,7 +1050,12 @@ export class CitationManagerView extends ItemView {
 
             leftInfo.createEl("code", { text: w.rawCitation });
 
-            const badge = leftInfo.createSpan({ cls: "status-badge-pill", text: w.type === 'format_mismatch' ? "Format" : (w.type === 'style_mismatch' ? "Style" : "Unresolved") });
+            const badgeText = w.type === 'format_mismatch' 
+              ? "Format" 
+              : (w.type === 'style_mismatch' 
+                  ? "Style" 
+                  : (w.type === 'orphan_definition' ? "Orphan" : "Unresolved"));
+            const badge = leftInfo.createSpan({ cls: "status-badge-pill", text: badgeText });
             badge.style.fontSize = "8.5px";
             badge.style.padding = "1px 4px";
 

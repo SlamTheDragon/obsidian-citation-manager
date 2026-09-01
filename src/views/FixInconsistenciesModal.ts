@@ -121,7 +121,7 @@ export class FixInconsistenciesModal extends Modal {
 
         const typeBadge = topFlex.createSpan({ 
           cls: "status-badge-pill", 
-          text: w.type === 'format_mismatch' ? "Format" : "Style" 
+          text: w.type === 'format_mismatch' ? "Format" : (w.type === 'style_mismatch' ? "Style" : "Orphan") 
         });
         typeBadge.style.fontSize = "9px";
         typeBadge.style.padding = "1px 5px";
