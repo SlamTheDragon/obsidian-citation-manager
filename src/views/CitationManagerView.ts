@@ -1230,26 +1230,46 @@ export class CitationManagerView extends ItemView {
     const format: InBodyFormat = (project?.inBodyFormat === ('footnote' as any) || !project?.inBodyFormat)
       ? 'parenthetical'
       : (project.inBodyFormat as InBodyFormat);
-    const inBodyText = isFootnoteMode 
-      ? `[^${ref.citekey}]` 
-      : CitationEngine.formatInBody(ref, format, project?.citationStyle || 'apa7');
+    const style: CitationStyle = project?.citationStyle || 'apa7';
 
     const cursor = editor.getCursor();
-    editor.replaceRange(inBodyText, cursor);
-
+    const lineText = editor.getLine(cursor.line);
     const docText = editor.getValue();
     const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
     const footnoteIndex = existingFnMatches.length + 1;
 
+    const overload = CitationEngine.detectAndOverloadAtCursor(
+      lineText,
+      cursor.ch,
+      [ref],
+      this.referencesMap,
+      style,
+      format,
+      isFootnoteMode,
+      footnoteIndex
+    );
+
+    if (overload.isOverloaded) {
+      editor.replaceRange(
+        overload.replacementText,
+        { line: cursor.line, ch: overload.replaceStartCh },
+        { line: cursor.line, ch: overload.replaceEndCh }
+      );
+    } else {
+      editor.replaceRange(overload.replacementText, cursor);
+    }
+
+    const updatedDocText = editor.getValue();
+
     if (isFootnoteMode) {
       const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
-      if (!fnDefRegex.test(docText)) {
+      if (!fnDefRegex.test(updatedDocText)) {
         const fnDefinition = CitationEngine.formatFootnoteDefinition(
           ref,
-          project?.citationStyle || 'apa7',
+          style,
           footnoteIndex
         );
-        const hasTrailingNewline = docText.endsWith("\n");
+        const hasTrailingNewline = updatedDocText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";
         editor.replaceRange(`${separator}${fnDefinition}\n`, { line: editor.lineCount(), ch: 0 });
       }
@@ -1257,11 +1277,11 @@ export class CitationManagerView extends ItemView {
       // In standard mode, maintain per-file reference list at bottom if not already present
       const bibEntry = CitationEngine.formatBibliographyEntry(
         ref,
-        project?.citationStyle || 'apa7',
+        style,
         footnoteIndex
       );
-      if (!docText.includes(ref.title) && !docText.includes(ref.citekey)) {
-        const hasTrailingNewline = docText.endsWith("\n");
+      if (!updatedDocText.includes(ref.title) && !updatedDocText.includes(ref.citekey)) {
+        const hasTrailingNewline = updatedDocText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";
         editor.replaceRange(`${separator}${bibEntry}\n`, { line: editor.lineCount(), ch: 0 });
       }
@@ -1270,7 +1290,7 @@ export class CitationManagerView extends ItemView {
     editor.focus();
     const elapsed = Math.round(performance.now() - t0);
     this.statusMessage = `[Inserted '${ref.citekey}' in ${elapsed}ms]`;
-    new Notice(`Inserted: ${inBodyText}`);
+    new Notice(`Inserted: ${overload.replacementText}`);
     await this.refreshData();
   }
 

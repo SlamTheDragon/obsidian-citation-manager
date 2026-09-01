@@ -309,7 +309,7 @@ export class CitationEngine {
       return refs.map(r => `[^${r.citekey}]`).join('');
     }
     if (format === 'citekey') {
-      return refs.map(r => `[@${r.citekey}]`).join(' ');
+      return `[@${refs.map(r => r.citekey).join('; @')}]`;
     }
 
     if (format === 'narrative') {
@@ -337,6 +337,141 @@ export class CitationEngine {
       return single.replace(/^\(|\)$/g, '');
     });
     return `(${parts.join('; ')})`;
+  }
+
+  /**
+   * Detects whether the editor cursor is located inside an existing in-body citation
+   * and intelligently overloads/merges the new reference(s) into the existing group.
+   */
+  static detectAndOverloadAtCursor(
+    line: string,
+    cursorCh: number,
+    newRefs: ReferenceMetadata[],
+    allReferences: Map<string, ReferenceMetadata>,
+    style: CitationStyle = 'apa7',
+    format: InBodyFormat | 'footnote' = 'parenthetical',
+    isFootnoteMode: boolean = false,
+    startIndex: number = 1
+  ): {
+    isOverloaded: boolean;
+    replaceStartCh: number;
+    replaceEndCh: number;
+    replacementText: string;
+    allRefsInGroup: ReferenceMetadata[];
+  } {
+    const targetFormat: InBodyFormat | 'footnote' = isFootnoteMode ? 'footnote' : format;
+
+    // 1. Pandoc Citekey Group: [... @key ...]
+    const citeGroupRegex = /\[([^\]]*@[\p{L}\p{N}_:\.-]+[^\]]*)\]/gu;
+    let match: RegExpExecArray | null;
+    while ((match = citeGroupRegex.exec(line)) !== null) {
+      const start = match.index;
+      const end = match.index + match[0].length;
+      if (cursorCh >= start && cursorCh <= end) {
+        const keys = Array.from(match[1].matchAll(/@([\p{L}\p{N}_:\.-]+)/gu)).map(m => m[1]);
+        const existingRefs: ReferenceMetadata[] = [];
+        for (const k of keys) {
+          if (allReferences.has(k)) existingRefs.push(allReferences.get(k)!);
+        }
+        const mergedRefs = [...existingRefs];
+        for (const nr of newRefs) {
+          if (!mergedRefs.some(r => r.citekey === nr.citekey)) mergedRefs.push(nr);
+        }
+        const replacementText = this.formatMultiInBody(mergedRefs, targetFormat, style, startIndex);
+        return { isOverloaded: true, replaceStartCh: start, replaceEndCh: end, replacementText, allRefsInGroup: mergedRefs };
+      }
+    }
+
+    // 2. Parenthetical Author-Date Group: (Smith, 2020) or (Smith, 2020; Jones & Brown, 2021)
+    if (!isFootnoteMode && (style === 'apa7' || style === 'harvard' || style === 'chicago')) {
+      const parenGroupRegex = /\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\)/gu;
+      while ((match = parenGroupRegex.exec(line)) !== null) {
+        const start = match.index;
+        const end = match.index + match[0].length;
+        if (cursorCh >= start && cursorCh <= end) {
+          const entries = match[1].split(';').map(s => s.trim()).filter(Boolean);
+          const existingRefs: ReferenceMetadata[] = [];
+          for (const entry of entries) {
+            const yearMatch = entry.match(/\b(19\d{2}|20\d{2})\b/);
+            if (yearMatch) {
+              const year = yearMatch[1];
+              const authorPart = entry.slice(0, entry.indexOf(year)).replace(/[,:\(\)]/g, '').trim().toLowerCase();
+              const parts = authorPart.split(/[\s,&]+/).filter(Boolean).map(p => p.replace(/[^a-z0-9]/g, ''));
+              for (const r of allReferences.values()) {
+                if (r.year && String(r.year) === year && r.authors && r.authors.length > 0) {
+                  const firstAuthor = this.getLastName(r.authors[0]).toLowerCase().replace(/[^a-z0-9]/g, '');
+                  if (parts.includes(firstAuthor) && !existingRefs.some(ex => ex.citekey === r.citekey)) {
+                    existingRefs.push(r);
+                    break;
+                  }
+                }
+              }
+            }
+          }
+          const mergedRefs = [...existingRefs];
+          for (const nr of newRefs) {
+            if (!mergedRefs.some(r => r.citekey === nr.citekey)) mergedRefs.push(nr);
+          }
+          const replacementText = this.formatMultiInBody(mergedRefs, targetFormat, style, startIndex);
+          return { isOverloaded: true, replaceStartCh: start, replaceEndCh: end, replacementText, allRefsInGroup: mergedRefs };
+        }
+      }
+    }
+
+    // 3. IEEE Numeric Bracket Group: [1] or [1, 2]
+    if (!isFootnoteMode && style === 'ieee') {
+      const ieeeBracketRegex = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
+      while ((match = ieeeBracketRegex.exec(line)) !== null) {
+        const start = match.index;
+        const end = match.index + match[0].length;
+        if (cursorCh >= start && cursorCh <= end) {
+          const existingIndices = match[1].split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+          const newIndices = [...existingIndices];
+          for (let i = 0; i < newRefs.length; i++) {
+            const nextIdx = Math.max(...newIndices, 0) + 1;
+            newIndices.push(nextIdx);
+          }
+          const replacementText = `[${newIndices.join(', ')}]`;
+          return { isOverloaded: true, replaceStartCh: start, replaceEndCh: end, replacementText, allRefsInGroup: newRefs };
+        }
+      }
+    }
+
+    // 4. Vancouver Numeric Paren Group: (1) or (1, 2)
+    if (!isFootnoteMode && style === 'vancouver') {
+      const vancParenRegex = /\((\d+(?:\s*,\s*\d+)*)\)/g;
+      while ((match = vancParenRegex.exec(line)) !== null) {
+        const start = match.index;
+        const end = match.index + match[0].length;
+        if (cursorCh >= start && cursorCh <= end) {
+          const existingIndices = match[1].split(',').map(s => parseInt(s.trim())).filter(n => !isNaN(n));
+          const newIndices = [...existingIndices];
+          for (let i = 0; i < newRefs.length; i++) {
+            const nextIdx = Math.max(...newIndices, 0) + 1;
+            newIndices.push(nextIdx);
+          }
+          const replacementText = `(${newIndices.join(', ')})`;
+          return { isOverloaded: true, replaceStartCh: start, replaceEndCh: end, replacementText, allRefsInGroup: newRefs };
+        }
+      }
+    }
+
+    // 5. Footnote Call: [^key]
+    if (isFootnoteMode || format === 'footnote') {
+      const fnCallRegex = /\[\^([\p{L}\p{N}_:\.-]+)\](?!:)/gu;
+      while ((match = fnCallRegex.exec(line)) !== null) {
+        const start = match.index;
+        const end = match.index + match[0].length;
+        if (cursorCh >= start && cursorCh <= end) {
+          const newFootnotes = newRefs.map(r => `[^${r.citekey}]`).join('');
+          return { isOverloaded: true, replaceStartCh: end, replaceEndCh: end, replacementText: newFootnotes, allRefsInGroup: newRefs };
+        }
+      }
+    }
+
+    // Default: Normal prose insertion
+    const defaultText = this.formatMultiInBody(newRefs, targetFormat, style, startIndex);
+    return { isOverloaded: false, replaceStartCh: cursorCh, replaceEndCh: cursorCh, replacementText: defaultText, allRefsInGroup: newRefs };
   }
 
   /**
