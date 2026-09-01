@@ -277,9 +277,37 @@ export class ProjectIndexer {
       try {
         const rawContent = await this.app.vault.cachedRead(file);
         const maskedContent = ProjectIndexer.maskIgnoredMarkdown(rawContent);
-        const lines = maskedContent.split('\n');
         const rawLines = rawContent.split('\n');
+        const lines = maskedContent.split('\n');
         const inBodyKeysInFile = new Set<string>();
+
+        // Pre-build numeric index mapping for IEEE [N] and Vancouver (N) from bottom reference entries
+        const numericIndexToKeyMap = new Map<number, string>();
+        rawLines.forEach((l) => {
+          const trimmed = l.trim();
+          const ieeeMatch = trimmed.match(/^\s*\[(\d+)\]\s*(.*)$/);
+          if (ieeeMatch) {
+            const num = parseInt(ieeeMatch[1]);
+            const rest = ieeeMatch[2];
+            for (const [k, r] of allReferences.entries()) {
+              if (rest.includes(r.title) || (r.doi && rest.includes(r.doi))) {
+                numericIndexToKeyMap.set(num, k);
+                break;
+              }
+            }
+          }
+          const vancMatch = trimmed.match(/^\s*(\d+)\.\s*(.*)$/);
+          if (vancMatch) {
+            const num = parseInt(vancMatch[1]);
+            const rest = vancMatch[2];
+            for (const [k, r] of allReferences.entries()) {
+              if (rest.includes(r.title) || (r.doi && rest.includes(r.doi))) {
+                numericIndexToKeyMap.set(num, k);
+                break;
+              }
+            }
+          }
+        });
 
         lines.forEach((lineText, lineIdx) => {
           let match: RegExpExecArray | null;
@@ -521,6 +549,53 @@ export class ProjectIndexer {
                     suggestedFix: `[^${ref.citekey}]`,
                     type: 'format_mismatch',
                     message: `Expected [^${ref.citekey}] in Footnote Mode.`,
+                  });
+                }
+              }
+            }
+          }
+
+          // 5. Numeric in-body citations (IEEE [1], [1, 2] or Vancouver (1), (1, 2)) when Footnote Mode is OFF
+          if (!isFootnoteMode && (targetStyle === 'ieee' || targetStyle === 'vancouver')) {
+            // Narrative numeric: Chen et al. [1] or Chen et al. (1)
+            const narrativeNumericRegex = /\b([\p{Lu}][\p{L}\s&]+(?:\s+et\s+al\.)?)\s*(?:\[(\d+)\]|\((\d+)\))/gu;
+            let numMatch: RegExpExecArray | null;
+            while ((numMatch = narrativeNumericRegex.exec(lineText)) !== null) {
+              const numStr = numMatch[2] || numMatch[3];
+              const num = parseInt(numStr);
+              const matchedKey = numericIndexToKeyMap.get(num);
+              if (matchedKey && allReferences.has(matchedKey)) {
+                const ref = allReferences.get(matchedKey)!;
+                totalCitationsInFiles++;
+                inBodyKeysInFile.add(matchedKey.toLowerCase());
+                inBodyKeysInFile.add(ref.citekey.toLowerCase());
+                if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
+                referenceUsageMap[matchedKey].push({
+                  filePath: file.path,
+                  fileName: file.basename,
+                  lineNumber: lineIdx + 1,
+                  lineContent: displayLine,
+                });
+              }
+            }
+
+            // Parenthetical numeric: [1] or [1, 2] or (1) or (1, 2)
+            const numericGroupRegex = targetStyle === 'ieee' ? /\[(\d+(?:\s*,\s*\d+)*)\]/g : /\((\d+(?:\s*,\s*\d+)*)\)/g;
+            while ((numMatch = numericGroupRegex.exec(lineText)) !== null) {
+              const nums = numMatch[1].split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+              for (const num of nums) {
+                const matchedKey = numericIndexToKeyMap.get(num);
+                if (matchedKey && allReferences.has(matchedKey)) {
+                  const ref = allReferences.get(matchedKey)!;
+                  totalCitationsInFiles++;
+                  inBodyKeysInFile.add(matchedKey.toLowerCase());
+                  inBodyKeysInFile.add(ref.citekey.toLowerCase());
+                  if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
+                  referenceUsageMap[matchedKey].push({
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
                   });
                 }
               }
@@ -958,7 +1033,8 @@ export class ProjectIndexer {
     newFormat: InBodyFormat,
     allReferences: Map<string, ReferenceMetadata>,
     style: CitationStyle = 'apa7',
-    referencesFolder: string = ".references"
+    referencesFolder: string = ".references",
+    globalFootnoteMode: boolean = false
   ): Promise<number> {
     const files = this.getProjectFiles(project, referencesFolder);
     let modifiedFiles = 0;
@@ -967,51 +1043,76 @@ export class ProjectIndexer {
       try {
         let content = await this.app.vault.read(file);
         let modified = false;
+        let fnIdx = 1;
 
         for (const [key, ref] of allReferences.entries()) {
-          const targetInBody = CitationEngine.formatInBody(ref, newFormat, style);
-          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical', style);
-          const narrative = CitationEngine.formatInBody(ref, 'narrative', style);
+          const targetInBody = globalFootnoteMode ? `[^${key}]` : CitationEngine.formatInBody(ref, newFormat, style, fnIdx);
+          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical', style, fnIdx);
+          const narrative = CitationEngine.formatInBody(ref, 'narrative', style, fnIdx);
 
           // 1. Citekey format [@key]
           const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
-          if (newFormat !== 'citekey' && citekeyRegex.test(content)) {
+          if ((globalFootnoteMode || newFormat !== 'citekey') && citekeyRegex.test(content)) {
             content = content.replace(citekeyRegex, targetInBody);
             modified = true;
           }
 
           // 2. Footnote call [^key]
           const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-          if (newFormat !== 'footnote' && footnoteCallRegex.test(content)) {
+          if (!globalFootnoteMode && footnoteCallRegex.test(content)) {
             content = content.replace(footnoteCallRegex, targetInBody);
             modified = true;
           }
 
           // 3. Parenthetical format (Author, Year)
-          if (newFormat !== 'parenthetical' && parenthetical && content.includes(parenthetical)) {
+          if ((globalFootnoteMode || newFormat !== 'parenthetical') && parenthetical && content.includes(parenthetical)) {
             content = content.split(parenthetical).join(targetInBody);
             modified = true;
           }
 
           // 4. Narrative format Author (Year)
-          if (newFormat !== 'narrative' && narrative && content.includes(narrative)) {
+          if ((globalFootnoteMode || newFormat !== 'narrative') && narrative && content.includes(narrative)) {
             content = content.split(narrative).join(targetInBody);
             modified = true;
           }
 
-          // Transform existing footnote definitions to the new style
-          const fnDef = CitationEngine.formatFootnoteDefinition(ref, style);
-          const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
-          if (fnDefRegex.test(content)) {
-            const currentDef = content.match(fnDefRegex)?.[0];
-            if (currentDef !== fnDef) {
-              content = content.replace(fnDefRegex, fnDef);
-              modified = true;
+          // Transform bottom definitions / bibliography entries to the new style
+          if (globalFootnoteMode) {
+            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIdx);
+            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
+            if (fnDefRegex.test(content)) {
+              const currentDef = content.match(fnDefRegex)?.[0];
+              if (currentDef !== fnDef) {
+                content = content.replace(fnDefRegex, fnDef);
+                modified = true;
+              }
+            } else if (content.includes(`[^${key}]`) || modified) {
+              // Check if un-prefixed line exists
+              const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
+              if (plainRegex.test(content)) {
+                content = content.replace(plainRegex, fnDef);
+                modified = true;
+              }
             }
-          } else if (project.enableFootnoteMode && (content.includes(`[^${key}]`) || modified)) {
-            content = content.trimEnd() + `\n\n${fnDef}\n`;
-            modified = true;
+          } else {
+            // Standard mode: update bottom reference line to un-prefixed target style
+            const expectedBib = CitationEngine.formatBibliographyEntry(ref, style, fnIdx);
+            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'm');
+            if (fnDefRegex.test(content)) {
+              content = content.replace(fnDefRegex, expectedBib);
+              modified = true;
+            } else if (ref.title && ref.title.length > 5 && content.includes(ref.title)) {
+              const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+              const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
+              const currentLine = content.match(plainRegex)?.[0];
+              if (currentLine && currentLine.trim() !== expectedBib.trim()) {
+                content = content.replace(plainRegex, expectedBib);
+                modified = true;
+              }
+            }
           }
+          fnIdx++;
         }
 
         if (modified) {

@@ -858,7 +858,8 @@ export class CitationManagerView extends ItemView {
               newFormat,
               this.referencesMap,
               newStyle,
-              this.settings.referencesFolder
+              this.settings.referencesFolder,
+              this.settings.enableFootnoteMode
             );
             new Notice(`Updated citations across ${mod} document(s).`);
             await this.refreshData();
