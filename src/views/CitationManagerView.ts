@@ -356,8 +356,12 @@ export class CitationManagerView extends ItemView {
                 projects: project && project.id !== ALL_PROJECTS_ID ? [project.id] : (resolved.projects || [])
               },
               async (newRef) => {
+                if (project && project.id !== ALL_PROJECTS_ID && !newRef.projects.includes(project.id)) {
+                  newRef.projects.push(project.id);
+                }
                 await this.storageManager.saveReference(newRef);
                 this.searchQuery = "";
+                this.currentSubpanel = 'citations';
                 new Notice(`Added citation [${newRef.citekey}]`);
                 await this.refreshData();
               },

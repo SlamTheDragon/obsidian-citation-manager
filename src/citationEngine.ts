@@ -5,9 +5,10 @@ export class CitationEngine {
    * Generates a clean, deterministic citekey based on first author and year (e.g. Smith2024)
    */
   static generateCitekey(authors: string[], year: number | string, title?: string): string {
-    let authorPart = "Unknown";
-    if (authors && authors.length > 0) {
-      const first = authors[0].trim();
+    let authorPart = "";
+    const validAuthors = (authors || []).map(a => a ? a.trim() : "").filter(a => a.length > 0 && !/^unknown/i.test(a));
+    if (validAuthors.length > 0) {
+      const first = validAuthors[0];
       if (first.includes(",")) {
         authorPart = first.split(",")[0].trim();
       } else {
@@ -18,11 +19,16 @@ export class CitationEngine {
       const words = title.replace(/[^a-zA-Z0-9\s]/g, "").split(/\s+/).filter(w => w.length > 2);
       if (words.length > 0) {
         authorPart = words[0];
+      } else {
+        authorPart = "Ref";
       }
+    } else {
+      authorPart = "Unknown";
     }
 
     // Clean special characters
     authorPart = authorPart.replace(/[^a-zA-Z0-9]/g, "");
+    if (!authorPart) authorPart = "Ref";
     authorPart = authorPart.charAt(0).toUpperCase() + authorPart.slice(1);
 
     const yearStr = year ? String(year).replace(/[^0-9]/g, "").slice(-4) : new Date().getFullYear().toString();

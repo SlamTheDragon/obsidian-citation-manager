@@ -88,7 +88,12 @@ export class ReferenceEditorModal extends Modal {
       fetchBtn.setText("Fetching...");
       try {
         const fetched = await MetadataResolvers.detectAndResolve(val);
-        this.ref = { ...this.ref, ...fetched } as ReferenceMetadata;
+        const currentProjects = this.ref.projects ? [...this.ref.projects] : [];
+        this.ref = { 
+          ...this.ref, 
+          ...fetched,
+          projects: currentProjects.length > 0 ? currentProjects : (fetched.projects || [])
+        } as ReferenceMetadata;
         new Notice("Metadata successfully fetched!");
         this.renderModal();
       } catch (e: any) {
@@ -128,7 +133,7 @@ export class ReferenceEditorModal extends Modal {
     const authorGroup = coreCard.createDiv({ cls: "citation-form-group" });
     const authorLabelRow = authorGroup.createDiv({ cls: "citation-label-row" });
     authorLabelRow.createEl("label", { cls: "citation-form-label", text: "Authors" });
-    authorLabelRow.createSpan({ cls: "citation-form-hint", text: "(Press Enter or comma to add author)" });
+    authorLabelRow.createSpan({ cls: "citation-form-hint", text: "(Press Enter or semicolon ; to add author)" });
     
     const authorContainer = authorGroup.createDiv({ cls: "author-chips-input-container" });
     this.renderAuthorChips(authorContainer);
@@ -488,11 +493,29 @@ export class ReferenceEditorModal extends Modal {
       text: this.isNew ? "Create Citation" : "Save Citation" 
     });
     saveBtn.addEventListener("click", async () => {
+      // Auto-commit any pending author input
+      if (this.authorInputEl && this.authorInputEl.value.trim()) {
+        const parts = this.authorInputEl.value.trim().split(/[\r\n;]+/).map(p => p.trim()).filter(p => p.length > 0);
+        for (const p of parts) {
+          if (!this.ref.authors.includes(p)) {
+            this.ref.authors.push(p);
+          }
+        }
+        this.authorInputEl.value = "";
+      }
+
+      // Filter out 'Unknown' / 'Unknown Author' if real authors exist
+      if (this.ref.authors.length > 1) {
+        this.ref.authors = this.ref.authors.filter(a => a && a.trim() && !/^unknown/i.test(a.trim()));
+      }
+
       if (!this.ref.title.trim()) {
         new Notice("Title is required.");
         return;
       }
-      if (!this.ref.citekey.trim()) {
+
+      // If citekey is empty OR if new and citekey was an auto-fallback (like Unknown2026, Web2026, Untitled2026)
+      if (!this.ref.citekey.trim() || (this.isNew && /^unknown|web|untitled/i.test(this.ref.citekey))) {
         this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
       }
 
@@ -509,6 +532,8 @@ export class ReferenceEditorModal extends Modal {
       }
     });
   }
+
+  private authorInputEl: HTMLInputElement | null = null;
 
   private renderAuthorChips(container: HTMLElement) {
     container.empty();
@@ -530,44 +555,45 @@ export class ReferenceEditorModal extends Modal {
       });
     }
 
-    const authorInput = chipsWrap.createEl("input", {
+    this.authorInputEl = chipsWrap.createEl("input", {
       type: "text",
       placeholder: this.ref.authors.length === 0 ? "e.g. Li, Ziheng 'Leo'" : "+ Add author...",
       cls: "author-chip-inline-input"
     });
 
     const addAuthor = () => {
-      const val = authorInput.value.trim();
+      if (!this.authorInputEl) return;
+      const val = this.authorInputEl.value.trim();
       if (val) {
-        const parts = val.split(/[\r\n,]+/).map(p => p.trim()).filter(p => p.length > 0);
+        const parts = val.split(/[\r\n;]+/).map(p => p.trim()).filter(p => p.length > 0);
         for (const p of parts) {
           if (!this.ref.authors.includes(p)) {
             this.ref.authors.push(p);
           }
         }
-        authorInput.value = "";
+        this.authorInputEl.value = "";
         this.renderAuthorChips(container);
         this.updatePreviews();
       }
     };
 
-    authorInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" || e.key === ",") {
+    this.authorInputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === ";") {
         e.preventDefault();
         addAuthor();
-      } else if (e.key === "Backspace" && !authorInput.value && this.ref.authors.length > 0) {
+      } else if (e.key === "Backspace" && this.authorInputEl && !this.authorInputEl.value && this.ref.authors.length > 0) {
         this.ref.authors.pop();
         this.renderAuthorChips(container);
         this.updatePreviews();
       }
     });
 
-    authorInput.addEventListener("blur", () => {
+    this.authorInputEl.addEventListener("blur", () => {
       addAuthor();
     });
 
     container.addEventListener("click", () => {
-      authorInput.focus();
+      this.authorInputEl?.focus();
     });
   }
 

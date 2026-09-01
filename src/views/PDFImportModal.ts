@@ -450,13 +450,28 @@ export class PDFImportModal extends Modal {
           await this.storageManager.saveReference(targetRef);
           new Notice(`Attached PDF to [${targetRef.citekey}]!`);
         } else {
+          // Auto-commit any pending author input
+          if (this.authorInputEl && this.authorInputEl.value.trim()) {
+            const parts = this.authorInputEl.value.trim().split(/[\r\n,]+/).map(p => p.trim()).filter(p => p.length > 0);
+            for (const p of parts) {
+              if (!this.ref.authors.includes(p)) {
+                this.ref.authors.push(p);
+              }
+            }
+            this.authorInputEl.value = "";
+          }
+
+          if (this.ref.authors.length > 1) {
+            this.ref.authors = this.ref.authors.filter(a => a && a.trim() && !/^unknown/i.test(a.trim()));
+          }
+
           if (!this.ref.title.trim()) {
             this.ref.title = this.pdfFile.name.replace(/\.pdf$/i, "");
           }
           if (this.ref.authors.length === 0) {
             this.ref.authors = ["Unknown Author"];
           }
-          if (!this.ref.citekey.trim()) {
+          if (!this.ref.citekey.trim() || (/^unknown|web|untitled/i.test(this.ref.citekey))) {
             this.ref.citekey = CitationEngine.generateCitekey(this.ref.authors, this.ref.year, this.ref.title);
           }
 
@@ -481,6 +496,8 @@ export class PDFImportModal extends Modal {
     });
   }
 
+  private authorInputEl: HTMLInputElement | null = null;
+
   private renderAuthorChips(container: HTMLElement) {
     container.empty();
     const chipsWrap = container.createDiv({ cls: "author-chips-wrap" });
@@ -501,14 +518,15 @@ export class PDFImportModal extends Modal {
       });
     }
 
-    const authorInput = chipsWrap.createEl("input", {
+    this.authorInputEl = chipsWrap.createEl("input", {
       type: "text",
       placeholder: this.ref.authors.length === 0 ? "e.g. Li, Ziheng 'Leo'" : "+ Add author...",
       cls: "author-chip-inline-input"
     });
 
     const addAuthor = () => {
-      const val = authorInput.value.trim();
+      if (!this.authorInputEl) return;
+      const val = this.authorInputEl.value.trim();
       if (val) {
         const parts = val.split(/[\r\n,]+/).map(p => p.trim()).filter(p => p.length > 0);
         for (const p of parts) {
@@ -516,29 +534,29 @@ export class PDFImportModal extends Modal {
             this.ref.authors.push(p);
           }
         }
-        authorInput.value = "";
+        this.authorInputEl.value = "";
         this.renderAuthorChips(container);
         this.updatePreviews();
       }
     };
 
-    authorInput.addEventListener("keydown", (e) => {
+    this.authorInputEl.addEventListener("keydown", (e) => {
       if (e.key === "Enter" || e.key === ",") {
         e.preventDefault();
         addAuthor();
-      } else if (e.key === "Backspace" && !authorInput.value && this.ref.authors.length > 0) {
+      } else if (e.key === "Backspace" && this.authorInputEl && !this.authorInputEl.value && this.ref.authors.length > 0) {
         this.ref.authors.pop();
         this.renderAuthorChips(container);
         this.updatePreviews();
       }
     });
 
-    authorInput.addEventListener("blur", () => {
+    this.authorInputEl.addEventListener("blur", () => {
       addAuthor();
     });
 
     container.addEventListener("click", () => {
-      authorInput.focus();
+      this.authorInputEl?.focus();
     });
   }
 
