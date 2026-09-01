@@ -331,15 +331,11 @@ export class ExportPublicationModal extends Modal {
       }
     }
 
-    // Sort citekeys alphabetically if Author-Date
+    // Sort citekeys with comprehensive multi-tier CSL logic (Author -> Co-authors -> Year -> Title)
     if (this.selectedStyle === 'apa7' || this.selectedStyle === 'harvard' || this.selectedStyle === 'chicago') {
-      usedCitekeys.sort((a, b) => {
-        const refA = this.allReferences.get(a);
-        const refB = this.allReferences.get(b);
-        const nameA = refA?.authors?.[0] || a;
-        const nameB = refB?.authors?.[0] || b;
-        return nameA.localeCompare(nameB);
-      });
+      const refObjs = usedCitekeys.map(k => this.allReferences.get(k)).filter(Boolean) as ReferenceMetadata[];
+      const sorted = CitationEngine.sortReferences(refObjs, this.selectedStyle);
+      usedCitekeys.splice(0, usedCitekeys.length, ...sorted.map(r => r.citekey));
     }
 
     const localIndexMap = new Map<string, number>();

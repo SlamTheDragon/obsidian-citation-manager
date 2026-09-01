@@ -384,12 +384,14 @@ export class CitationEngine {
 
     const authors = ref.authors || [];
     let authorText = "Unknown";
-    if (authors.length === 1) {
-      authorText = this.getLastName(authors[0]);
-    } else if (authors.length === 2) {
-      authorText = `${this.getLastName(authors[0])} & ${this.getLastName(authors[1])}`;
-    } else if (authors.length > 2) {
-      authorText = `${this.getLastName(authors[0])} et al.`;
+    const lastNames = authors.map(a => this.getLastName(a)).filter(Boolean);
+
+    if (lastNames.length === 1) {
+      authorText = lastNames[0];
+    } else if (lastNames.length === 2) {
+      authorText = `${lastNames[0]} & ${lastNames[1]}`;
+    } else if (lastNames.length > 2) {
+      authorText = `${lastNames[0]} et al.`;
     }
 
     if (style === 'ieee') {
@@ -448,11 +450,7 @@ export class CitationEngine {
       return `(${indices.join(', ')})`;
     }
 
-    const sorted = [...refs].sort((a, b) => {
-      const authorA = a.authors?.[0] || a.citekey;
-      const authorB = b.authors?.[0] || b.citekey;
-      return authorA.localeCompare(authorB);
-    });
+    const sorted = this.sortReferences(refs, style);
     const parts = sorted.map(r => {
       const single = this.formatInBody(r, 'parenthetical', style);
       return single.replace(/^\(|\)$/g, '');

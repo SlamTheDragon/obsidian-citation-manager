@@ -872,15 +872,18 @@ export class ProjectIndexer {
     const origParenthetical = CitationEngine.formatInBody(originalRef, 'parenthetical');
     const newParenthetical = CitationEngine.formatInBody(updatedRef, 'parenthetical');
 
+    const origNarrative = CitationEngine.formatInBody(originalRef, 'narrative');
+    const newNarrative = CitationEngine.formatInBody(updatedRef, 'narrative');
+
     for (const file of files) {
       try {
         let content = await this.app.vault.read(file);
         let modified = false;
 
         if (origKey !== newKey) {
-          const citekeyRegex = new RegExp(`\\[@${origKey}\\]`, 'g');
-          if (citekeyRegex.test(content)) {
-            content = content.replace(citekeyRegex, `[@${newKey}]`);
+          const atCitekeyRegex = new RegExp(`@${origKey}\\b`, 'g');
+          if (atCitekeyRegex.test(content)) {
+            content = content.replace(atCitekeyRegex, `@${newKey}`);
             modified = true;
           }
 
@@ -907,6 +910,11 @@ export class ProjectIndexer {
 
         if (origParenthetical !== newParenthetical && content.includes(origParenthetical)) {
           content = content.split(origParenthetical).join(newParenthetical);
+          modified = true;
+        }
+
+        if (origNarrative !== newNarrative && content.includes(origNarrative)) {
+          content = content.split(origNarrative).join(newNarrative);
           modified = true;
         }
 
