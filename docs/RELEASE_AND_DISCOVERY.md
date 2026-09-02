@@ -6,23 +6,23 @@ This guide gives the steps to publish releases and submit **Citation Manager** t
 
 ## 1. Plugin Discovery Architecture
 
-The Obsidian plugin discovery and update system uses three synchronized root files:
+The Obsidian plugin discovery and update system uses three synchronized configuration files:
 
-1. **`manifest.json`**: Contains the plugin ID, name, current version, minimum supported Obsidian version, and device flags.
+1. **`public/manifest.json`**: Contains the plugin ID, name, current version, minimum supported Obsidian version, and device flags.
 2. **`versions.json`**: Maps each published plugin version to its required `minAppVersion`. Obsidian uses this file to make sure users receive compatible updates:
    ```json
    {
      "1.0.0": "0.15.0"
    }
    ```
-3. **`package.json`**: Keeps npm package version metadata in sync with `manifest.json`.
+3. **`package.json`**: Keeps npm package version metadata in sync with `public/manifest.json`.
 
 ---
 
 ## 2. Automated Version Bumping & Release
 
 ### Step 1: Bump Version
-Run one of these commands to increment the version across `package.json`, `manifest.json`, and `versions.json`:
+Run one of these commands to increment the version across `package.json`, `public/manifest.json`, and `versions.json`:
 
 ```bash
 # For bugfixes (1.0.0 -> 1.0.1)

@@ -53,4 +53,5 @@ bun run build
 1. **Zero Unicode Emojis**: Do not add Unicode emojis into UI buttons, status messages, notices, or logs. Use Lucide SVG icons (`setIcon(el, 'icon-name')`).
 2. **CSL Compliance**: Add unit tests in `tests/` for any formatting change to APA 7, IEEE, Harvard, Chicago, or Vancouver.
 3. **Markdown Storage**: Do not store citation metadata in binary files or external formats.
-4. **Pull Requests**: Make sure all 26 test suites pass (`bun run test:all`) before you submit pull requests.
+4. **Static Assets**: Put static plugin assets (`manifest.json`, `styles.css`) in `public/`.
+5. **Pull Requests**: Make sure all 26 test suites pass (`bun run test:all`) before you submit pull requests.

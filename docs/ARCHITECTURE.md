@@ -100,3 +100,14 @@ stateDiagram-v2
 1. **Zero Unicode Emojis**: Use Lucide SVG icons exclusively in UI views, notices, modals, and logs.
 2. **Safe Footnote Mode**: Convert references between `[^citekey]` callouts and standard citation tokens without data loss.
 3. **Single Source of Truth**: Treat metadata in `.references/*.md` as the authoritative record.
+
+---
+
+## 5. Source Tree Layout & Build Packaging
+
+The repository isolates source code and static assets from generated release artifacts:
+
+- **`src/`**: Contains TypeScript source files.
+- **`public/`**: Stores static assets (`public/manifest.json` and `public/styles.css`). This keeps the root directory clean.
+- **`dist/`**: Holds generated release artifacts (`main.js`, `manifest.json`, `styles.css`). The `.gitignore` file excludes `dist/` from version control.
+- **Dynamic Online Bundling**: GitHub Actions compiles TypeScript online, copies `public/` assets to `dist/`, and publishes the release bundle to GitHub Releases.
