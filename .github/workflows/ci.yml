@@ -1,0 +1,42 @@
+name: CI Test & Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-and-build:
+    name: Run Test Suites & Verify Build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install --frozen-lockfile || bun install
+
+      - name: Run All Automated Test Suites (26 Suites)
+        run: bun run test:all
+
+      - name: Package Production Release Assets
+        run: bun run package
+
+      - name: Verify Release Artifacts Integrity
+        run: |
+          test -s dist/main.js || { echo "Error: dist/main.js is missing or empty"; exit 1; }
+          test -s dist/manifest.json || { echo "Error: dist/manifest.json is missing or empty"; exit 1; }
+          test -s dist/styles.css || { echo "Error: dist/styles.css is missing or empty"; exit 1; }
+          echo "All release artifacts verified in dist/!"

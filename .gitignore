@@ -1,4 +1,7 @@
 node_modules/
 main.js
-styles.css
+dist/
+*.zip
+.references/
 .DS_Store
+

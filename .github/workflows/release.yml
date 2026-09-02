@@ -1,0 +1,56 @@
+name: Release Plugin
+
+on:
+  push:
+    tags:
+      - 'v*'
+      - '[0-9]+.[0-9]+.[0-9]+'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build, Package & Publish Release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install Dependencies
+        run: bun install
+
+      - name: Run Test Suites
+        run: bun run test:all
+
+      - name: Package Release
+        run: bun run package
+
+      - name: Create Release Archive
+        run: |
+          cd dist
+          zip -r ../citation-manager.zip main.js manifest.json styles.css
+          cd ..
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/main.js
+            dist/manifest.json
+            dist/styles.css
+            citation-manager.zip
+          draft: false
+          prerelease: false
+          generate_release_notes: true

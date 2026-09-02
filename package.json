@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
+    "package": "node scripts/package.mjs",
     "test": "bun --preload ./tests/obsidian_mock.ts ./tests/run_all_tests.ts",
     "test:all": "bun --preload ./tests/obsidian_mock.ts ./tests/run_all_tests.ts"
   },
