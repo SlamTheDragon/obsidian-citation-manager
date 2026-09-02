@@ -57,6 +57,21 @@ assert(typeof CitationEngine.generateBibTeX === 'function', "CitationEngine.gene
 assert(typeof CitationEngine.sortReferences === 'function', "CitationEngine.sortReferences exists");
 assert(typeof CitationEngine.generateBibliography === 'function', "CitationEngine.generateBibliography exists");
 assert(typeof CitationEngine.populateStyles === 'function', "CitationEngine.populateStyles exists");
+assert(typeof CitationEngine.detectAndOverloadAtCursor === 'function', "CitationEngine.detectAndOverloadAtCursor exists");
+assert(typeof CitationEngine.computeOverloadedCitation === 'function', "CitationEngine.computeOverloadedCitation exists");
+
+// Test detectAndOverloadAtCursor execution directly
+const overloadTest = CitationEngine.detectAndOverloadAtCursor(
+  "Here is some text ",
+  18,
+  [sampleRef],
+  new Map([[sampleRef.citekey, sampleRef]]),
+  'apa7',
+  'parenthetical',
+  false,
+  1
+);
+assert(overloadTest.replacementText === "(Vaswani et al., 2017)", "CitationEngine.detectAndOverloadAtCursor formats standard citation correctly");
 
 // 2. TEST ProjectIndexer & Indexing Submodules
 assert(typeof ProjectIndexer.cleanExportFrontmatter === 'function', "ProjectIndexer.cleanExportFrontmatter exists");

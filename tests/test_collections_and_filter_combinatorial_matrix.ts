@@ -66,24 +66,18 @@ function filterEngine(
   searchQuery: string
 ): ReferenceMetadata[] {
   return allRefs.filter(ref => {
-    // 1. Project Scope
-    if (activeProject && activeProject.id !== ALL_PROJECTS_ID) {
-      const inProject = ref.projects && (ref.projects.includes(activeProject.id) || ref.projects.includes(activeProject.name));
-      if (!inProject) return false;
-    }
-
-    // 2. Collections (Union of selected collections)
+    // 1. Collections (Union of selected collections)
     if (selectedCols.size > 0) {
       const refColId = ref.collectionId || DEFAULT_COLLECTION_ID;
       if (!selectedCols.has(refColId)) return false;
     }
 
-    // 3. Types (Union of selected types)
+    // 2. Types (Union of selected types)
     if (selectedTypes.size > 0) {
       if (!selectedTypes.has(ref.type)) return false;
     }
 
-    // 4. Search Query
+    // 3. Search Query
     if (searchQuery) {
       const q = searchQuery.toLowerCase();
       const match = ref.title.toLowerCase().includes(q) ||
@@ -110,56 +104,46 @@ function powerSet<T>(array: T[]): T[][] {
 
 const colSubsets = powerSet(collectionIds).map(arr => new Set(arr)); // 8 subsets
 const typeSubsets = powerSet(typesList).map(arr => new Set(arr));     // 8 subsets
-const projectScopes = [null, proj1, proj2];                           // 3 scopes
 const searchQueries = ["", "Alpha", "Smith"];                         // 3 search modes
 
 let combinationalStatesTested = 0;
 
 for (const colSet of colSubsets) {
   for (const typeSet of typeSubsets) {
-    for (const projScope of projectScopes) {
-      for (const query of searchQueries) {
-        const filtered = filterEngine(references, projScope, colSet, typeSet, query);
-        combinationalStatesTested++;
+    for (const query of searchQueries) {
+      const filtered = filterEngine(references, null, colSet, typeSet, query);
+      combinationalStatesTested++;
 
-        // Invariant 1: No result should violate project scope
-        if (projScope && projScope.id !== ALL_PROJECTS_ID) {
-          for (const r of filtered) {
-            assert(r.projects.includes(projScope.id), `Project scope respected for ${r.citekey}`);
-          }
+      // Invariant 1: No result should violate collection filter
+      if (colSet.size > 0) {
+        for (const r of filtered) {
+          const actualCol = r.collectionId || DEFAULT_COLLECTION_ID;
+          assert(colSet.has(actualCol), `Collection filter respected for ${r.citekey}`);
         }
+      }
 
-        // Invariant 2: No result should violate collection filter
-        if (colSet.size > 0) {
-          for (const r of filtered) {
-            const actualCol = r.collectionId || DEFAULT_COLLECTION_ID;
-            assert(colSet.has(actualCol), `Collection filter respected for ${r.citekey}`);
-          }
+      // Invariant 2: No result should violate type filter
+      if (typeSet.size > 0) {
+        for (const r of filtered) {
+          assert(typeSet.has(r.type), `Type filter respected for ${r.citekey}`);
         }
+      }
 
-        // Invariant 3: No result should violate type filter
-        if (typeSet.size > 0) {
-          for (const r of filtered) {
-            assert(typeSet.has(r.type), `Type filter respected for ${r.citekey}`);
-          }
-        }
-
-        // Invariant 4: No result should violate search query
-        if (query) {
-          const q = query.toLowerCase();
-          for (const r of filtered) {
-            const match = r.title.toLowerCase().includes(q) ||
-                          r.citekey.toLowerCase().includes(q) ||
-                          (r.authors || []).some(a => a.toLowerCase().includes(q));
-            assert(match, `Search query respected for ${r.citekey}`);
-          }
+      // Invariant 3: No result should violate search query
+      if (query) {
+        const q = query.toLowerCase();
+        for (const r of filtered) {
+          const match = r.title.toLowerCase().includes(q) ||
+                        r.citekey.toLowerCase().includes(q) ||
+                        (r.authors || []).some(a => a.toLowerCase().includes(q));
+          assert(match, `Search query respected for ${r.citekey}`);
         }
       }
     }
   }
 }
 
-assert(combinationalStatesTested === 8 * 8 * 3 * 3, `Executed all ${combinationalStatesTested} combinational filtering states`);
+assert(combinationalStatesTested === 8 * 8 * 3, `Executed all ${combinationalStatesTested} combinational filtering states`);
 
 // -----------------------------------------------------------------------------
 // 3. SUBPANEL FINITE STATE MACHINE (FSM) TRANSITIONS

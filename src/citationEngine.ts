@@ -93,6 +93,19 @@ export class CitationEngine {
     return lines.join('\n\n');
   }
 
+  static detectAndOverloadAtCursor(
+    line: string,
+    cursorCh: number,
+    newRefs: ReferenceMetadata[],
+    allReferences: Map<string, ReferenceMetadata>,
+    style: CitationStyle = 'apa7',
+    targetFormat: InBodyFormat = 'parenthetical',
+    isFootnoteMode: boolean = false,
+    startIndex: number = 1
+  ): { isOverloaded: boolean; replaceStartCh: number; replaceEndCh: number; replacementText: string; allRefsInGroup: ReferenceMetadata[] } {
+    return this.computeOverloadedCitation(line, cursorCh, newRefs, targetFormat, style, isFootnoteMode, allReferences, startIndex);
+  }
+
   static computeOverloadedCitation(
     line: string,
     cursorCh: number,

@@ -1557,11 +1557,6 @@ export class CitationManagerView extends ItemView {
   private getFilteredReferences(project: ProjectRecord | null): ReferenceMetadata[] {
     const all = Array.from(this.referencesMap.values());
     return all.filter(ref => {
-      if (project && project.id !== ALL_PROJECTS_ID) {
-        const inProject = ref.projects && (ref.projects.includes(project.id) || ref.projects.includes(project.name));
-        if (!inProject) return false;
-      }
-
       // Filter by Collection(s)
       if (this.selectedCollectionFilters.size > 0) {
         const refColId = ref.collectionId || DEFAULT_COLLECTION_ID;

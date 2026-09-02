@@ -100,7 +100,6 @@ export interface CitationManagerSettings {
   projects: ProjectRecord[];
   collections: CitationCollection[];
   activeProjectId: string; // "ALL" or specific project id
-  activeCollectionId?: string; // "ALL" or specific collection id
   enableEditorSuggest: boolean;
   blockDeletionIfInUse: boolean;
   debugMode: boolean;
@@ -116,7 +115,6 @@ export const DEFAULT_SETTINGS: CitationManagerSettings = {
   projects: [],
   collections: [DEFAULT_COLLECTION],
   activeProjectId: ALL_PROJECTS_ID,
-  activeCollectionId: "ALL",
   enableEditorSuggest: true,
   blockDeletionIfInUse: true,
   debugMode: false,
