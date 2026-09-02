@@ -1005,4 +1005,27 @@ export class ProjectIndexer {
   ): string {
     return FormatPropagator.generateBibliography(project, allReferences, style, onlyCited, stats);
   }
+
+  static cleanExportFrontmatter(content: string): string {
+    return FormatPropagator.cleanExportFrontmatter(content);
+  }
+
+  async compileProjectCorpus(
+    project: ProjectRecord,
+    allReferences: Map<string, ReferenceMetadata>,
+    style: CitationStyle = 'apa7',
+    publicationFolder: string = 'publication',
+    referencesFolder: string = '.references'
+  ): Promise<{ compiledFilesCount: number; totalCitationsCount: number; bibliographyPath: string }> {
+    return FormatPropagator.compileProjectCorpus(
+      this.app,
+      (p, r) => this.getProjectFiles(p, r),
+      project,
+      allReferences,
+      style,
+      publicationFolder,
+      referencesFolder
+    );
+  }
+
 }
