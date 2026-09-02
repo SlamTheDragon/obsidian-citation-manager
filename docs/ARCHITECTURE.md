@@ -1,12 +1,12 @@
 # Obsidian Citation Manager — Architecture & Subsystems
 
-This document provides a deep technical overview of the architecture, module decomposition, data flow, and invariant contracts governing the **Obsidian Citation Manager** plugin.
+This document describes the software architecture, module layout, data flow, and design rules for the **Obsidian Citation Manager** plugin.
 
 ---
 
 ## 1. System Decomposition & Module Layering
 
-The plugin is structured into distinct, modular functional layers:
+The plugin contains five modular layers:
 
 ```
 +-------------------------------------------------------------------------+
@@ -41,44 +41,44 @@ The plugin is structured into distinct, modular functional layers:
 ## 2. Core Subsystem Responsibilities
 
 ### A. CSL Formatting Engine (`src/csl/`)
-* **Pure Functional Formatting**: Independent formatters implement authoritative academic style manuals without side effects:
+- **Functional Formatters**: Formatters implement academic style manuals:
   - `apa7Formatter.ts`: APA 7th Edition (Author, Year) in-body and bibliography.
   - `ieeeFormatter.ts`: IEEE numeric bracket [1] indexing and citation lists.
   - `harvardFormatter.ts`: Harvard (Author Year) parenthetical without comma between author and year.
   - `chicagoFormatter.ts`: Chicago 17th Edition Author-Date format.
   - `vancouverFormatter.ts`: Vancouver numeric parenthesis (1) indexing.
-* **Name & Case Normalizer (`nameParser.ts`)**: Splits compound surnames (e.g. "van der Waals", "de Silva"), normalizes title casing, and parses BibTeX author lists.
-* **Compound In-Body Merging**: Coalesces adjacent citations into sorted academic groups:
+- **Name Parser (`nameParser.ts`)**: Splits compound surnames (such as "van der Waals" or "de Silva"), normalizes title casing, and parses BibTeX author lists.
+- **Compound Merging**: Merges adjacent citations into sorted groups:
   - APA 7: `(Carter et al., 2026; Li, 2024; Norman, 2013)`
   - IEEE: `[1, 3, 5]`
   - Vancouver: `(1, 3, 5)`
 
 ### B. Metadata Resolvers (`src/resolvers/`)
-* **CrossRef / DOI Resolver**: Normalizes raw DOI strings into canonical HTTPS URLs and queries CrossRef for high-fidelity JSON metadata.
-* **arXiv Resolver**: Queries the arXiv Atom API, extracting authors, summary, publication date, and associated DOI.
-* **OpenLibrary ISBN Resolver**: Queries OpenLibrary Books API for academic book metadata, publishers, and publication years.
-* **PDF Stream Scanner**: Scans local PDF binary headers via regex pattern matching across uncompressed text streams to automatically extract embedded DOIs.
+- **CrossRef DOI Resolver**: Converts raw DOI strings into HTTPS URLs and queries CrossRef for metadata.
+- **arXiv Resolver**: Queries the arXiv Atom API to get authors, summaries, publication dates, and associated DOIs.
+- **OpenLibrary ISBN Resolver**: Queries OpenLibrary Books API for book metadata, publishers, and publication years.
+- **PDF Stream Scanner**: Scans PDF binary headers with regex patterns to extract embedded DOIs.
 
-### C. Storage & Persistence Layer (`src/storageManager.ts`)
-* **Local-First Markdown Notes**: Every citation is serialized as an individual Markdown note in `.references/<citekey>.md`.
-* **YAML Frontmatter Mapping**: Metadata fields (`title`, `authors`, `year`, `doi`, `projects`, etc.) are serialized to YAML frontmatter.
-* **Note Boundary Governance**: User literature notes and annotations are strictly wrapped inside `<!--NOTE_START-->` and `<!--NOTE_END-->` comments, preventing metadata sync operations from corrupting human-written notes.
-* **Cache Management**: Fast non-blocking storage in `.references/.cache/collections.json` and `.references/.cache/dismissed_lints.json`.
+### C. Storage and Persistence (`src/storageManager.ts`)
+- **Local Markdown Notes**: Stores each reference as a Markdown note in `.references/<citekey>.md`.
+- **YAML Frontmatter**: Saves metadata fields (`title`, `authors`, `year`, `doi`, `projects`) into note frontmatter.
+- **Note Boundaries**: Wraps user notes inside `<!--NOTE_START-->` and `<!--NOTE_END-->` tags. This prevents metadata updates from changing user notes.
+- **Cache Storage**: Saves quick cache data in `.references/.cache/collections.json` and `.references/.cache/dismissed_lints.json`.
 
 ### D. Project Indexer & Corpus Compiler (`src/projectIndexer.ts`)
-* **Cross-Document Telemetry**: Scans all registered notes in an active Bucket to compute citation frequencies, active references, and unused citations.
-* **Sequential Numeric Indexing**: Assigns sequential indices (`[1..N]` for IEEE, `(1..N)` for Vancouver) governed strictly by appearance order across linked notes in a Bucket.
-* **Corpus Batch Export**: Produces sanitized publication notes with footnote-to-token conversion and compiles master bibliographies.
+- **Document Telemetry**: Scans linked notes in a bucket to compute citation counts and identify unused references.
+- **Numeric Indexing**: Computes sequential numbers (`[1..N]` for IEEE, `(1..N)` for Vancouver) based on citation order across linked notes.
+- **Corpus Batch Export**: Converts footnotes to citations, cleans frontmatter, and creates master bibliographies.
 
 ### E. Diagnostic Linter Engine (`src/lintEngine.ts`)
-* **Automated Rule Evaluation**: Compares in-text citations against the active bucket's citation standard, flagging format mismatches, unlinked citekeys, and orphan footnote definitions.
-* **Levenshtein Distance Matching**: Recommends near-match citekeys for typographical errors in document drafts.
+- **Rule Verification**: Compares in-text citations against the active bucket standard. Flags format errors, missing citekeys, and orphan definitions.
+- **Fuzzy Search**: Uses Levenshtein distance to recommend corrections for mistyped citekeys.
 
 ---
 
-## 3. Finite State Machine (FSM) in Side Panel View
+## 3. Finite State Machine in Side Panel View
 
-The side panel UI operates as a deterministic finite state machine with 5 core views:
+The side panel UI uses a finite state machine with five primary views:
 
 ```mermaid
 stateDiagram-v2
@@ -97,6 +97,6 @@ stateDiagram-v2
 
 ## 4. Invariant Contracts
 
-1. **Zero Unicode Emojis**: User interfaces, notification notices, logs, and generated notes MUST use Lucide SVG icons exclusively.
-2. **Non-Destructive Footnote Mode**: Toggling Footnote Mode converts references safely between `[^citekey]` callouts and standard tokens without data loss.
-3. **Single Source of Truth**: Reference metadata in `.references/*.md` is the authoritative data source.
+1. **Zero Unicode Emojis**: Use Lucide SVG icons exclusively in UI views, notices, modals, and logs.
+2. **Safe Footnote Mode**: Convert references between `[^citekey]` callouts and standard citation tokens without data loss.
+3. **Single Source of Truth**: Treat metadata in `.references/*.md` as the authoritative record.
