@@ -9,7 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ## [1.0.1] - 2026-09-03
 
 ### Added
-- **Citation Library Ingestion**: Support for batch importing literature library files directly via BibTeX (`.bib`), RIS (`.ris`), and EndNote XML (`.xml`) in the Add Citation panel and modal.
+- **Multi-Format Citation Library Ingestion**: Support for batch importing literature library files and raw snippets via BibTeX (`.bib`), RIS (`.ris`), EndNote Tagged / Refer (`.enw`), EndNote XML (`.xml`), and plain formatted citation strings (ACM Ref, APA 7, IEEE) in the Add Citation panel and modal.
+- **Valid `file:///` Local PDF Protocol Routing**: Formatted local PDF paths as valid `file:///` URIs, enabling direct loading in Surfing tabs without `ERR_NAME_NOT_RESOLVED (-105)` errors.
+- **Conditional PDF Action Button**: Restored dedicated `PDF` action button in the primary left card group beside `Notes`, visible conditionally when a reference has an attached PDF.
+- **Library Import Island Styling**: Redesigned library import modal with consistent island card hierarchy, responsive dropzone, and rich preview badges.
 - **Export Panel State Preservation**: Automatic persistence of Citation Standard, Output Folder path, Compilation Scope (`local` vs `global`), Clean Footnotes, and Append References toggles in project settings and global plugin state.
 - **Surfing PDF Integration**: Direct opening of attached literature PDFs in active Surfing browser tabs with automatic fallback to Obsidian's default PDF viewer.
 - **Per-File Diagnostic Scoping**: Scoped diagnostic warning IDs (`filePath::line::rawCitation::type`) to ensure masking in one note does not silence issues in other notes.
@@ -28,6 +31,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 ### Fixed
 - Fixed autocomplete suggestion capitalization in Footnote Mode and standard styles to eliminate false-positive lint warnings.
 - Resolved TypeScript compiler type-check issues in test runners and mock environments.
+- Corrected dot-folder PDF resolution in `.references/attachments/` bypassing Obsidian's internal hidden-file mask.
+
+### Planned for [1.0.2]
+- Modal form field sequence and layout unification across `PDFImportModal`, `ReferenceEditorModal`, and metadata resolvers.
 
 ---
 
