@@ -10,7 +10,7 @@ export class FixInconsistenciesModal extends Modal {
   private selectedIds: Set<string>;
   private storageManager: StorageManager;
   private onApplyFixes: (selectedWarnings: LintWarning[]) => Promise<void>;
-  private onRefresh: () => Promise<void>;
+  private onRefresh: () => Promise<LintWarning[] | void>;
   private activeSeverityFilter: 'all' | 'error' | 'warning' | 'info' = 'all';
 
   constructor(
@@ -18,7 +18,7 @@ export class FixInconsistenciesModal extends Modal {
     warnings: LintWarning[],
     storageManager: StorageManager,
     onApplyFixes: (selectedWarnings: LintWarning[]) => Promise<void>,
-    onRefresh: () => Promise<void>
+    onRefresh: () => Promise<LintWarning[] | void>
   ) {
     super(app);
     this.warnings = warnings;
@@ -30,6 +30,15 @@ export class FixInconsistenciesModal extends Modal {
 
   onOpen() {
     this.titleEl.setText('Citation Diagnostics & Corrections');
+    this.renderModal();
+  }
+
+  private async refreshWarningsFromParent() {
+    const fresh = await this.onRefresh();
+    if (Array.isArray(fresh)) {
+      this.warnings = fresh;
+      this.selectedIds = new Set(this.warnings.filter(w => w.suggestedFix !== undefined).map(w => w.id));
+    }
     this.renderModal();
   }
 
@@ -160,9 +169,8 @@ export class FixInconsistenciesModal extends Modal {
       dismissBtn.addEventListener('click', async (e) => {
         e.stopPropagation();
         await this.storageManager.saveDismissedLint(w.id);
-        this.warnings = this.warnings.filter(item => item.id !== w.id);
-        this.renderModal();
         new Notice('Issue dismissed.');
+        await this.refreshWarningsFromParent();
       });
 
       // Header Click Toggle Accordion
@@ -219,10 +227,8 @@ export class FixInconsistenciesModal extends Modal {
             applySingleBtn.disabled = true;
             applySingleBtn.setText('Applying...');
             await LintEngine.applyLintFix(this.app, w);
-            this.warnings = this.warnings.filter(item => item.id !== w.id);
-            await this.onRefresh();
-            this.renderModal();
             new Notice('Fix applied successfully.');
+            await this.refreshWarningsFromParent();
           });
         }
 
@@ -246,10 +252,8 @@ export class FixInconsistenciesModal extends Modal {
               },
               async (newRef) => {
                 await this.storageManager.saveReference(newRef);
-                await this.onRefresh();
-                this.warnings = this.warnings.filter(item => item.id !== w.id);
-                this.renderModal();
                 new Notice(`Created reference entry [${newRef.citekey}]`);
+                await this.refreshWarningsFromParent();
               },
               true
             ).open();
@@ -263,10 +267,8 @@ export class FixInconsistenciesModal extends Modal {
           purgeBtn.title = 'Remove this token and definition from note';
           purgeBtn.addEventListener('click', async () => {
             await LintEngine.applyLintFix(this.app, w, { label: 'Purge', action: 'purge' });
-            await this.onRefresh();
-            this.warnings = this.warnings.filter(item => item.id !== w.id);
-            this.renderModal();
             new Notice(`Purged reference from ${w.fileName}`);
+            await this.refreshWarningsFromParent();
           });
         }
 
@@ -275,9 +277,8 @@ export class FixInconsistenciesModal extends Modal {
         dismissRowBtn.style.padding = '3px 8px';
         dismissRowBtn.addEventListener('click', async () => {
           await this.storageManager.saveDismissedLint(w.id);
-          this.warnings = this.warnings.filter(item => item.id !== w.id);
-          this.renderModal();
           new Notice('Issue dismissed.');
+          await this.refreshWarningsFromParent();
         });
       }
     }
@@ -296,10 +297,8 @@ export class FixInconsistenciesModal extends Modal {
         batchApplyBtn.setText('Applying...');
         const toApply = this.warnings.filter(w => this.selectedIds.has(w.id));
         await LintEngine.batchApplyFixes(this.app, toApply);
-        this.warnings = this.warnings.filter(w => !this.selectedIds.has(w.id));
-        await this.onRefresh();
-        this.renderModal();
         new Notice('Applied selected fixes.');
+        await this.refreshWarningsFromParent();
       });
     }
 

@@ -4,6 +4,7 @@ import { StorageManager } from '../storageManager';
 import { ProjectIndexer } from '../projectIndexer';
 import { MetadataResolvers } from '../metadataResolvers';
 import { CitationEngine } from '../citationEngine';
+import { LintEngine } from '../lintEngine';
 import { ReferenceEditorModal } from './ReferenceEditorModal';
 import { UsageLocationsModal } from './UsageLocationsModal';
 import { PDFImportModal } from './PDFImportModal';
@@ -29,6 +30,7 @@ export class CitationManagerView extends ItemView {
   private stats: ProjectHealthStats | null = null;
   private dismissedLints: Set<string> = new Set();
   private statsActiveTab: 'docs' | 'diagnostics' = 'docs';
+  private openDiagnosticsIds: Set<string> = new Set();
   private searchQuery: string = "";
   private selectedTypeFilter: string = "all";
   private currentSubpanel: ActiveSubpanel = 'citations';
@@ -701,7 +703,7 @@ export class CitationManagerView extends ItemView {
     // Format & Style Controls Card (if in project)
     if (project) {
       const controlsCard = wrapper.createDiv({ cls: "citation-card" });
-      controlsCard.createEl("h5", { text: `Bucket Settings: ${project.name}` });
+      controlsCard.createEl("h5", { text: "Bucket Settings: " + project.name });
 
       const row = controlsCard.createDiv({ cls: "citation-format-controls-row" });
 
@@ -764,7 +766,7 @@ export class CitationManagerView extends ItemView {
         new ConfirmModal(
           this.app,
           "Update Citations in Bucket?",
-          `Standard changed to '${formatSelect.selectedOptions[0]?.text}'. Synchronize citations across ${project.name} documents?`,
+          "Standard changed to '" + formatSelect.selectedOptions[0]?.text + "'. Synchronize citations across " + project.name + " documents?",
           "Update Documents",
           false,
           async () => {
@@ -776,13 +778,13 @@ export class CitationManagerView extends ItemView {
               this.settings.referencesFolder,
               this.settings.enableFootnoteMode
             );
-            new Notice(`Updated citations across ${mod} document(s).`);
+            new Notice("Updated citations across " + mod + " document(s).");
             await this.refreshData();
           }
         ).open();
       });
 
-      // Resync / Catch-Up Button (Offline redundancy & recovery)
+      // Resync / Catch-Up Button
       const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
       setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
       syncBtn.createSpan({ text: " Resync & Catch Up Bucket Notes" });
@@ -796,7 +798,7 @@ export class CitationManagerView extends ItemView {
           project.citationStyle || this.settings.defaultCitationStyle,
           this.settings.referencesFolder
         );
-        new Notice(`Resynced ${res.updatedFootnotesCount} definition(s) across ${res.updatedFilesCount} document(s).`);
+        new Notice("Resynced " + res.updatedFootnotesCount + " definition(s) across " + res.updatedFilesCount + " document(s).");
         syncBtn.disabled = false;
         await this.refreshData();
       });
@@ -807,7 +809,7 @@ export class CitationManagerView extends ItemView {
       const statsGrid = wrapper.createDiv({ cls: "citation-stats-grid" });
 
       const createStatCard = (label: string, val: number, extraCls: string = "") => {
-        const c = statsGrid.createDiv({ cls: `stat-card ${extraCls}` });
+        const c = statsGrid.createDiv({ cls: "stat-card " + extraCls });
         c.createDiv({ cls: "stat-val", text: String(val) });
         c.createDiv({ cls: "stat-label", text: label });
       };
@@ -825,9 +827,9 @@ export class CitationManagerView extends ItemView {
       // Header area
       const headerArea = hybridCard.createDiv({ cls: "citation-card-header-flex" });
       if (this.statsActiveTab === 'docs') {
-        headerArea.createEl("h5", { text: `Linked Documents (${fileCount})` });
+        headerArea.createEl("h5", { text: "Linked Documents (" + fileCount + ")" });
       } else {
-        headerArea.createEl("h5", { text: `Citation Diagnostics (${warningCount})` });
+        headerArea.createEl("h5", { text: "Citation Diagnostics (" + warningCount + ")" });
       }
 
       // Content area
@@ -865,16 +867,15 @@ export class CitationManagerView extends ItemView {
           contentBody.createEl("p", { cls: "citation-card-muted-text", text: "No documents linked to this bucket yet. Open a note to link it via the bottom bar." });
         }
       } else {
-        // Tab 2: Citation Diagnostics / Warnings List
+        // Tab 2: Citation Diagnostics Accordion List
         if (warningCount > 0) {
-          // Full-width Warning CTA button consuming horizontal space
           const fixRow = contentBody.createDiv({ cls: "citation-fix-fullwidth-row" });
           fixRow.style.marginBottom = "8px";
           fixRow.style.width = "100%";
 
           const fixBtn = fixRow.createEl("button", { 
             cls: "citation-warn-cta-btn full-width-btn", 
-            text: `Fix All Inconsistencies (${warningCount})` 
+            text: "Fix All Inconsistencies (" + warningCount + ")" 
           });
           fixBtn.style.width = "100%";
           fixBtn.style.display = "block";
@@ -894,100 +895,174 @@ export class CitationManagerView extends ItemView {
               this.stats!.lintWarnings,
               this.storageManager,
               async (selected) => {
-                let fixedCount = 0;
-                const fileGroup = new Map<string, typeof selected>();
-                for (const item of selected) {
-                  if (!fileGroup.has(item.filePath)) fileGroup.set(item.filePath, []);
-                  fileGroup.get(item.filePath)!.push(item);
-                }
-
-                for (const [filePath, items] of fileGroup.entries()) {
-                  const fileObj = this.app.vault.getAbstractFileByPath(filePath);
-                  if (fileObj instanceof TFile) {
-                    let content = await this.app.vault.read(fileObj);
-                    for (const item of items) {
-                      if (item.suggestedFix !== undefined) {
-                        if (item.suggestedFix === "") {
-                          // Strip orphan definition line
-                          const escapedRaw = item.rawCitation.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                          content = content.replace(new RegExp(`^.*${escapedRaw}.*$\\r?\\n?`, 'gm'), '');
-                          fixedCount++;
-                        } else {
-                          content = content.replace(item.rawCitation, item.suggestedFix);
-                          fixedCount++;
-                          // If converting in-body footnote [^key] to in-body format, convert bottom footnote definition to standard reference entry (strip [^key]: prefix, keep reference text)
-                          if (item.rawCitation.startsWith('[^') && !item.rawCitation.includes(':') && !item.suggestedFix.startsWith('[^')) {
-                            const key = item.citekey || item.rawCitation.replace(/^\[\^?|\]$/g, '');
-                            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'gm');
-                            if (fnDefRegex.test(content)) {
-                              content = content.replace(fnDefRegex, '$1');
-                            }
-                          }
-                        }
-                      }
-                    }
-                    await this.app.vault.modify(fileObj, content);
-                  }
-                }
-
-                new Notice(`Applied ${fixedCount} citation fix(es) across ${fileGroup.size} note(s).`);
+                await LintEngine.batchApplyFixes(this.app, selected);
                 await this.refreshData();
               },
               async () => {
                 await this.refreshData();
+                return this.stats?.lintWarnings || [];
               }
             ).open();
           });
 
-          // Diagnostics item list
-          const fileList = contentBody.createEl("ul", { cls: "citation-registered-files-list" });
-          for (const w of this.stats.lintWarnings.slice(0, 15)) {
-            const li = fileList.createEl("li");
-            li.style.flexDirection = "column";
-            li.style.alignItems = "stretch";
-            li.style.gap = "2px";
-            li.style.padding = "4px 6px";
+          // Simplified Diagnostic Accordion List in Side Panel
+          const accordionList = contentBody.createDiv({ cls: "citation-lint-accordion-list" });
+          accordionList.style.maxHeight = "40vh";
 
-            const topFlex = li.createDiv();
-            topFlex.style.display = "flex";
-            topFlex.style.alignItems = "center";
-            topFlex.style.justifyContent = "space-between";
+          for (const w of this.stats.lintWarnings) {
+            const isOpen = this.openDiagnosticsIds.has(w.id);
+            const item = accordionList.createDiv({ cls: "citation-lint-accordion-item " + (isOpen ? "open" : "") });
 
-            const leftInfo = topFlex.createDiv();
-            leftInfo.style.display = "flex";
-            leftInfo.style.alignItems = "center";
-            leftInfo.style.gap = "6px";
+            // State 1: Collapsed / State 2: Expanded Header
+            const header = item.createDiv({ cls: "lint-accordion-header" });
 
-            const fileLink = leftInfo.createSpan({ cls: "file-name", text: `${w.fileName}:${w.lineNumber}` });
-            fileLink.addEventListener("click", () => {
+            // Left: [>] [Severity Icon] [Short Title]
+            const hLeft = header.createDiv({ cls: "lint-header-left" });
+            const chevronSpan = hLeft.createSpan({ cls: "lint-chevron-icon" });
+            setIcon(chevronSpan, isOpen ? "chevron-down" : "chevron-right");
+
+            const sev = w.severity || (w.type === 'unresolved' ? 'error' : (w.type === 'compounded_order_mismatch' ? 'info' : 'warning'));
+            const sevBadge = hLeft.createSpan({ cls: "lint-severity-badge severity-" + sev });
+            if (sev === 'error') {
+              setIcon(sevBadge, "alert-circle");
+            } else if (sev === 'info') {
+              setIcon(sevBadge, "info");
+            } else {
+              setIcon(sevBadge, "alert-triangle");
+            }
+
+            const shortTitle = w.shortTitle || (w.type === 'format_mismatch' ? 'Format Mismatch' : (w.type === 'style_mismatch' ? 'Style Mismatch' : (w.type === 'orphan_definition' ? 'Orphan Definition' : 'Unresolved Reference')));
+            hLeft.createSpan({ cls: "lint-short-title", text: shortTitle });
+
+            // Right: [File:Line] [Dismiss (Trash) Icon]
+            const hRight = header.createDiv({ cls: "lint-header-right" });
+
+            const fileBadge = hRight.createSpan({ cls: "lint-file-badge", text: w.fileName + ":" + w.lineNumber });
+            fileBadge.title = "Click to open file in workspace leaf";
+            fileBadge.addEventListener("click", (e) => {
+              e.stopPropagation();
               const f = this.app.vault.getAbstractFileByPath(w.filePath);
               if (f instanceof TFile) this.app.workspace.getLeaf().openFile(f);
             });
 
-            leftInfo.createEl("code", { text: w.rawCitation });
-
-            const badgeText = w.type === 'format_mismatch' 
-              ? "Format" 
-              : (w.type === 'style_mismatch' 
-                  ? "Style" 
-                  : (w.type === 'orphan_definition' ? "Orphan" : "Unresolved"));
-            const badge = leftInfo.createSpan({ cls: "status-badge-pill", text: badgeText });
-            badge.style.fontSize = "8.5px";
-            badge.style.padding = "1px 4px";
-
-            const dismissBtn = topFlex.createEl("button", { cls: "file-remove-btn", title: "Dismiss this warning" });
-            dismissBtn.setText("×");
+            const dismissBtn = hRight.createEl("button", { cls: "lint-header-dismiss-btn", title: "Dismiss this warning" });
+            setIcon(dismissBtn, "trash-2");
             dismissBtn.addEventListener("click", async (e) => {
               e.stopPropagation();
               await this.storageManager.saveDismissedLint(w.id);
               this.dismissedLints.add(w.id);
-              new Notice("Warning dismissed.");
+              new Notice("Issue dismissed.");
               await this.refreshData();
             });
 
-            const descRow = li.createDiv({ cls: "status-hint" });
-            descRow.style.fontSize = "9.5px";
-            descRow.setText(w.message);
+            // Click header to toggle accordion expansion
+            header.addEventListener("click", () => {
+              if (this.openDiagnosticsIds.has(w.id)) {
+                this.openDiagnosticsIds.delete(w.id);
+              } else {
+                this.openDiagnosticsIds.add(w.id);
+              }
+              this.renderUI();
+            });
+
+            // State 2: Expanded Body
+            if (isOpen) {
+              const body = item.createDiv({ cls: "lint-accordion-body" });
+
+              // Explanation Box
+              const explBox = body.createDiv({ cls: "lint-explanation-box" });
+              explBox.createSpan({ text: w.explanation || w.message });
+
+              // Proposed Correction Preview
+              if (w.suggestedFix !== undefined || w.definitionSnippet) {
+                const solBox = body.createDiv({ cls: "lint-solution-box" });
+                solBox.createDiv({ cls: "lint-solution-label", text: "Proposed Correction:" });
+
+                const diffWrap = solBox.createDiv({ cls: "lint-diff-preview" });
+                if (w.rawCitation) {
+                  const oldEl = diffWrap.createSpan({ cls: "diff-old" });
+                  oldEl.style.color = "var(--text-error, #ef4444)";
+                  oldEl.style.textDecoration = "line-through";
+                  oldEl.createEl("code", { text: w.rawCitation });
+                  diffWrap.createSpan({ text: "  →  ", cls: "diff-arrow" });
+                }
+
+                const newEl = diffWrap.createSpan({ cls: "diff-new" });
+                newEl.style.fontWeight = "600";
+                if (w.suggestedFix === "") {
+                  newEl.style.color = "var(--text-warning, #eab308)";
+                  newEl.createEl("em", { text: "(Remove uncited orphan definition)" });
+                } else {
+                  newEl.style.color = "var(--text-success, #22c55e)";
+                  newEl.createEl("code", { text: w.suggestedFix || "" });
+                }
+              }
+
+              // Actions Row
+              const actionsRow = body.createDiv({ cls: "lint-actions-row" });
+
+              if (w.suggestedFix !== undefined) {
+                const applyBtn = actionsRow.createEl("button", { cls: "mod-cta citation-mini-btn", text: "Fix" });
+                applyBtn.style.width = "auto";
+                applyBtn.style.padding = "2px 8px";
+                applyBtn.addEventListener("click", async () => {
+                  applyBtn.disabled = true;
+                  applyBtn.setText("Fixing...");
+                  await LintEngine.applyLintFix(this.app, w);
+                  new Notice("Fix applied.");
+                  await this.refreshData();
+                });
+              }
+
+              if (w.type === 'unresolved' || w.type === 'author_typo_fuzzy') {
+                const createBtn = actionsRow.createEl("button", { cls: "citation-mini-btn", text: "+ Create" });
+                createBtn.style.width = "auto";
+                createBtn.style.padding = "2px 8px";
+                createBtn.style.background = "var(--interactive-accent)";
+                createBtn.style.color = "var(--text-on-accent)";
+                createBtn.addEventListener("click", () => {
+                  const key = w.citekey || w.rawCitation.replace(/^\[\^?|\]$/g, '').replace(/^@/, '');
+                  new ReferenceEditorModal(
+                    this.app,
+                    {
+                      citekey: key,
+                      title: w.definitionSnippet || ("Reference " + key),
+                      authors: ['Author'],
+                      year: new Date().getFullYear(),
+                      type: 'journal',
+                      projects: project && project.id !== ALL_PROJECTS_ID ? [project.id] : []
+                    },
+                    async (newRef) => {
+                      await this.storageManager.saveReference(newRef);
+                      new Notice("Created reference [" + newRef.citekey + "]");
+                      await this.refreshData();
+                    },
+                    true
+                  ).open();
+                });
+              }
+
+              if (w.type === 'orphan_definition' || w.type === 'unresolved') {
+                const purgeBtn = actionsRow.createEl("button", { cls: "citation-mini-btn btn-danger", text: "Purge" });
+                purgeBtn.style.width = "auto";
+                purgeBtn.style.padding = "2px 8px";
+                purgeBtn.addEventListener("click", async () => {
+                  await LintEngine.applyLintFix(this.app, w, { label: 'Purge', action: 'purge' });
+                  new Notice("Purged reference from " + w.fileName);
+                  await this.refreshData();
+                });
+              }
+
+              const dismissRowBtn = actionsRow.createEl("button", { cls: "citation-mini-btn", text: "Dismiss" });
+              dismissRowBtn.style.width = "auto";
+              dismissRowBtn.style.padding = "2px 8px";
+              dismissRowBtn.addEventListener("click", async () => {
+                await this.storageManager.saveDismissedLint(w.id);
+                this.dismissedLints.add(w.id);
+                new Notice("Issue dismissed.");
+                await this.refreshData();
+              });
+            }
           }
         } else {
           const isAll = (project?.id === ALL_PROJECTS_ID || !project || project.id === '__ALL_PROJECTS__' || project.name === 'All References' || project.name === 'All Citations');
@@ -1002,7 +1077,7 @@ export class CitationManagerView extends ItemView {
       const tabBar = hybridCard.createDiv({ cls: "citation-bottom-tab-bar" });
 
       const docsTabBtn = tabBar.createEl("button", { 
-        cls: `citation-bottom-tab-btn ${this.statsActiveTab === 'docs' ? 'active' : ''}` 
+        cls: "citation-bottom-tab-btn " + (this.statsActiveTab === 'docs' ? 'active' : '') 
       });
       docsTabBtn.createSpan({ text: "Linked Docs" });
       docsTabBtn.createSpan({ cls: "tab-badge", text: String(fileCount) });
@@ -1012,7 +1087,7 @@ export class CitationManagerView extends ItemView {
       });
 
       const diagTabBtn = tabBar.createEl("button", { 
-        cls: `citation-bottom-tab-btn ${this.statsActiveTab === 'diagnostics' ? 'active' : ''} ${warningCount > 0 ? 'has-warnings' : ''}` 
+        cls: "citation-bottom-tab-btn " + (this.statsActiveTab === 'diagnostics' ? 'active' : '') + " " + (warningCount > 0 ? "has-warnings" : "") 
       });
       diagTabBtn.createSpan({ text: "Diagnostics" });
       diagTabBtn.createSpan({ cls: "tab-badge", text: String(warningCount) });
