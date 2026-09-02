@@ -31,11 +31,17 @@ jobs:
       - name: Install Dependencies
         run: bun install
 
+      - name: Typecheck TypeScript
+        run: bun x tsc --noEmit
+
       - name: Run Test Suites
         run: bun run test:all
 
       - name: Package Release
         run: bun run package
+
+      - name: Extract Release Notes from CHANGELOG.md
+        run: node scripts/extract-release-notes.mjs
 
       - name: Create Release Archive
         run: |
@@ -46,6 +52,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
+          body_path: dist/RELEASE_NOTES.md
           files: |
             dist/main.js
             dist/manifest.json
