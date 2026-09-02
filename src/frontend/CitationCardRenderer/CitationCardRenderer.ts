@@ -69,8 +69,25 @@ export class CitationCardRenderer {
     }
   }
 
+  public static getLocalFileUrl(app: App, relativeOrFullPath: string): string {
+    let absPath = relativeOrFullPath;
+    if (typeof (app.vault.adapter as any).getBasePath === 'function') {
+      const basePath = (app.vault.adapter as any).getBasePath();
+      if (basePath && !absPath.toLowerCase().startsWith(basePath.toLowerCase().replace(/\\/g, '/'))) {
+        absPath = `${basePath}/${absPath}`;
+      }
+    }
+    // Normalize slashes
+    let normalized = absPath.replace(/\\/g, '/').replace(/\/+/g, '/');
+    if (/^[a-zA-Z]:\//.test(normalized)) {
+      normalized = '/' + normalized;
+    }
+    return 'file://' + encodeURI(normalized);
+  }
+
   public static async openAttachedPDF(app: App, ref: ReferenceMetadata, referencesFolder: string) {
-    const rawAttachment = (ref.pdfAttachment || '').trim();
+    if (!ref.pdfAttachment || !ref.pdfAttachment.trim()) return;
+    const rawAttachment = ref.pdfAttachment.trim();
     const citekey = ref.citekey;
     const pathsToTry = [
       rawAttachment ? normalizePath(rawAttachment) : '',
@@ -95,20 +112,14 @@ export class CitationCardRenderer {
       return;
     }
 
-    try {
-      // Get resource URL (e.g. app://... or file:///...)
-      let resourceUrl = '';
-      if (typeof (app.vault.adapter as any).getResourcePath === 'function') {
-        resourceUrl = (app.vault.adapter as any).getResourcePath(resolvedPath);
-      } else if (targetFile && typeof app.vault.getResourcePath === 'function') {
-        resourceUrl = app.vault.getResourcePath(targetFile);
-      }
+    const fileUrl = CitationCardRenderer.getLocalFileUrl(app, resolvedPath);
 
-      // 1. Surfing Community Plugin Integration
+    try {
+      // 1. Surfing Community Plugin Integration with valid file:/// URL
       const surfingPlugin = (app as any).plugins?.plugins?.['surfing'];
-      if (surfingPlugin && resourceUrl) {
+      if (surfingPlugin) {
         if (typeof surfingPlugin.openUrl === 'function') {
-          surfingPlugin.openUrl(resourceUrl);
+          surfingPlugin.openUrl(fileUrl);
           return;
         }
         const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
@@ -116,14 +127,14 @@ export class CitationCardRenderer {
           await leaf.setViewState({
             type: 'surfing-view',
             active: true,
-            state: { url: resourceUrl }
+            state: { url: fileUrl }
           });
           app.workspace.revealLeaf(leaf);
           return;
         }
       }
 
-      // 2. Obsidian Native Tab Leaf
+      // 2. Obsidian Native Tab Leaf (if indexed as TFile)
       if (targetFile) {
         const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
         if (leaf) {
@@ -133,21 +144,19 @@ export class CitationCardRenderer {
         }
       }
 
-      // 3. Open via system default app or Electron shell
+      // 3. Native Default App (Electron / OS default viewer)
       if (typeof (app as any).openWithDefaultApp === 'function') {
         (app as any).openWithDefaultApp(resolvedPath);
         return;
       }
 
-      if (resourceUrl) {
-        window.open(resourceUrl, '_blank');
-        return;
-      }
-
-      new Notice(`Opened PDF for [${ref.citekey}]`);
+      // 4. Browser / Window Open Fallback
+      window.open(fileUrl, '_blank');
     } catch (err: any) {
       if (typeof (app as any).openWithDefaultApp === 'function' && resolvedPath) {
         (app as any).openWithDefaultApp(resolvedPath);
+      } else {
+        window.open(fileUrl, '_blank');
       }
     }
   }
@@ -270,7 +279,7 @@ export class CitationCardRenderer {
     const actionsLeft = actionsRow.createDiv({ cls: 'citation-card-actions-left' });
     const actionsRight = actionsRow.createDiv({ cls: 'citation-card-actions-right' });
 
-    // 1. Left Group: Primary Authoring Actions (Insert, Notes, PDF, Edit)
+    // 1. Left Group: Primary Authoring Actions (Insert, Notes, PDF (conditional), Edit)
     // Insert Button
     const insertBtn = actionsLeft.createEl('button', { cls: 'citation-card-btn mod-cta', title: 'Insert Citation at Cursor' });
     setIcon(insertBtn.createSpan({ cls: 'btn-icon' }), 'quote-glyph');
@@ -294,36 +303,19 @@ export class CitationCardRenderer {
       }).open();
     });
 
-    // PDF Button (Situated beside Notes button in Left Group)
-    const pdfBtn = actionsLeft.createEl('button', {
-      cls: 'citation-card-btn ' + (ref.pdfAttachment ? 'has-pdf' : ''),
-      title: ref.pdfAttachment ? 'Open Attached PDF Document' : 'Attach PDF File'
-    });
-    setIcon(pdfBtn.createSpan({ cls: 'btn-icon' }), 'file-text');
-    pdfBtn.createSpan({ text: 'PDF' });
-    pdfBtn.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      if (ref.pdfAttachment) {
+    // PDF Button (Appears beside Notes ONLY IF the user has imported/attached a PDF for this citation)
+    if (ref.pdfAttachment && ref.pdfAttachment.trim().length > 0) {
+      const pdfBtn = actionsLeft.createEl('button', {
+        cls: 'citation-card-btn has-pdf',
+        title: 'Open Attached PDF Document'
+      });
+      setIcon(pdfBtn.createSpan({ cls: 'btn-icon' }), 'file-text');
+      pdfBtn.createSpan({ text: 'PDF' });
+      pdfBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
         await CitationCardRenderer.openAttachedPDF(app, ref, settings.referencesFolder);
-      } else {
-        const input = document.createElement('input');
-        input.type = 'file';
-        input.accept = '.pdf';
-        input.style.display = 'none';
-        input.onchange = async () => {
-          if (input.files && input.files.length > 0) {
-            const file = input.files[0];
-            const buffer = await file.arrayBuffer();
-            const pdfPath = await storageManager.savePDFAttachment(ref.citekey, buffer);
-            ref.pdfAttachment = pdfPath;
-            await storageManager.saveReference(ref);
-            new Notice(`Attached PDF to [${ref.citekey}]!`);
-            await onRefresh();
-          }
-        };
-        input.click();
-      }
-    });
+      });
+    }
 
     // Edit Button
     const editBtn = actionsLeft.createEl('button', { cls: 'citation-card-btn', title: 'Edit Reference Metadata' });

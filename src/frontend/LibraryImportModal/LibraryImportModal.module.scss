@@ -1,9 +1,140 @@
-// Library Import Modal Styles
+// Library Import Modal Styles & Island Hierarchy
+.citation-modal-content-unified {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 4px 0 12px 0;
+}
+
+.citation-modal-section-card {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 0.15s ease;
+
+  &:hover {
+    border-color: var(--background-modifier-border-hover);
+  }
+
+  .section-card-title {
+    font-size: var(--font-ui-medium, 14px);
+    font-weight: 600;
+    color: var(--text-normal);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .section-card-desc {
+    font-size: var(--font-ui-smaller, 12px);
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+}
+
+.citation-drop-zone-spacious-full {
+  border: 2px dashed var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 20px 16px;
+  text-align: center;
+  background: var(--background-primary);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  transition: all 0.15s ease;
+
+  &:hover, &.drag-over {
+    border-color: var(--interactive-accent);
+    background: rgba(var(--interactive-accent-rgb, 59, 130, 246), 0.05);
+  }
+
+  .drop-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--interactive-accent);
+    margin-bottom: 4px;
+
+    svg {
+      width: 28px;
+      height: 28px;
+    }
+  }
+
+  .drop-text-primary {
+    font-size: var(--font-ui-small, 13px);
+    font-weight: 600;
+    color: var(--text-normal);
+  }
+
+  .drop-text-secondary {
+    font-size: var(--font-ui-smaller, 11px);
+    color: var(--text-muted);
+  }
+}
+
 .citation-import-preview-list {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  background-color: var(--background-secondary);
+  background-color: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
   border-radius: var(--radius-s);
-  padding: 6px;
+  padding: 8px 10px;
+  max-height: 160px;
+  overflow-y: auto;
+
+  .citation-preview-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    border-radius: var(--radius-s);
+    font-size: 12px;
+    border-bottom: 1px solid var(--background-modifier-border);
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background: var(--background-secondary-alt);
+    }
+
+    .preview-citekey-badge {
+      font-family: var(--font-monospace);
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-accent);
+      background: rgba(var(--interactive-accent-rgb, 59, 130, 246), 0.12);
+      padding: 1px 5px;
+      border-radius: var(--radius-s);
+      white-space: nowrap;
+    }
+
+    .preview-type-badge {
+      font-size: 9px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: var(--text-muted);
+      background: var(--background-modifier-border);
+      padding: 1px 4px;
+      border-radius: 3px;
+    }
+
+    .preview-text {
+      flex: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--text-normal);
+    }
+  }
 }

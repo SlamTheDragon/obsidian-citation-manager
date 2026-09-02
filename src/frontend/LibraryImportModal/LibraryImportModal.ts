@@ -200,15 +200,24 @@ export class LibraryImportModal extends Modal {
       importBtn.setText(`Import ${this.parsedReferences.length} Citations`);
 
       for (const ref of this.parsedReferences.slice(0, 50)) {
-        const item = previewList.createDiv({ cls: 'citation-diagnostic-row' });
-        item.style.padding = '4px 8px';
-        item.style.fontSize = '12px';
-        item.style.borderBottom = '1px solid var(--background-modifier-border)';
+        const item = previewList.createDiv({ cls: 'citation-preview-item' });
+
+        const typeBadge = item.createSpan({
+          cls: 'preview-type-badge',
+          text: (ref.type || 'ref').toUpperCase()
+        });
+
+        const keyBadge = item.createSpan({
+          cls: 'preview-citekey-badge',
+          text: ref.citekey || 'Auto'
+        });
 
         const authorStr = ref.authors && ref.authors.length > 0 ? ref.authors[0] : 'Unknown';
         const yearStr = ref.year ? ` (${ref.year})` : '';
-        item.createEl('strong', { text: `[${ref.citekey || 'Auto'}] ` });
-        item.createSpan({ text: `${authorStr}${yearStr} — ${ref.title || 'Untitled'}` });
+        item.createSpan({
+          cls: 'preview-text',
+          text: `${authorStr}${yearStr} — ${ref.title || 'Untitled'}`
+        });
       }
 
       if (this.parsedReferences.length > 50) {

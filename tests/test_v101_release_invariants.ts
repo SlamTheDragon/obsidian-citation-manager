@@ -46,6 +46,9 @@ const mockApp: any = {
           if (k.startsWith(path)) files.push(k);
         }
         return { files, folders: [] };
+      },
+      getBasePath() {
+        return "G:/.shortcut-targets-by-id/1KzQrYkpxXhOtOkGJQIWYD76vThVypZOR/Heavy Pilots";
       }
     },
     getAbstractFileByPath(path: string) {
@@ -89,7 +92,7 @@ async function runInvariantTests() {
   assert(typeof (storage as any).loadSerializedSettings === 'undefined', "StorageManager does not export loadSerializedSettings");
   assert(typeof (storage as any).saveSerializedSettings === 'undefined', "StorageManager does not export saveSerializedSettings");
 
-  // 2. Surfing PDF Open Integration
+  // 2. Surfing PDF Open Integration with valid file:/// URL
   const refWithPdf: ReferenceMetadata = {
     citekey: "Vaswani2017",
     title: "Attention Is All You Need",
@@ -105,8 +108,8 @@ async function runInvariantTests() {
 
   await CitationCardRenderer.openAttachedPDF(mockApp as any, refWithPdf, ".references");
   assert(
-    mockApp.plugins.plugins['surfing'].openUrlCalledWith === "app://local/.references/attachments/Vaswani2017.pdf",
-    "openAttachedPDF successfully routed attached PDF to Surfing plugin openUrl"
+    mockApp.plugins.plugins['surfing'].openUrlCalledWith === "file:///G:/.shortcut-targets-by-id/1KzQrYkpxXhOtOkGJQIWYD76vThVypZOR/Heavy%20Pilots/.references/attachments/Vaswani2017.pdf",
+    "openAttachedPDF successfully routed attached PDF to Surfing plugin openUrl with valid file:/// URI"
   );
 
   // Fallback test when Surfing is disabled
