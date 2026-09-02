@@ -5,6 +5,7 @@ mock.module('obsidian', () => ({
   normalizePath: (p: string) => p.replace(/\\/g, '/'),
   Notice: class { constructor(public msg: string) {} },
   TFile: class { path: string = ''; basename: string = ''; },
+  TFolder: class { path: string = ''; children: any[] = []; },
   ItemView: class {},
   WorkspaceLeaf: class {},
   MarkdownView: class {},
@@ -12,6 +13,7 @@ mock.module('obsidian', () => ({
     render: async () => {}
   },
   Modal: class {},
+  FuzzySuggestModal: class { constructor(public app: any) {} setPlaceholder() {} },
   Setting: class {
     setName(n: string) { return this; }
     setDesc(d: string) { return this; }

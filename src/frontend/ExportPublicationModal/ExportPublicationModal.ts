@@ -43,6 +43,7 @@ export class ExportPublicationModal extends Modal {
   private projectIndexer: ProjectIndexer;
   private settings: CitationManagerSettings;
   private targetFile: TFile | null;
+  private onSaveSettings?: () => Promise<void>;
 
   private selectedStyle: CitationStyle = 'apa7';
   private bibScope: 'local' | 'global' = 'local';
@@ -56,7 +57,8 @@ export class ExportPublicationModal extends Modal {
     allReferences: Map<string, ReferenceMetadata>,
     projectIndexer: ProjectIndexer,
     settings: CitationManagerSettings,
-    targetFile: TFile | null = null
+    targetFile: TFile | null = null,
+    onSaveSettings?: () => Promise<void>
   ) {
     super(app);
     this.project = project;
@@ -64,8 +66,9 @@ export class ExportPublicationModal extends Modal {
     this.projectIndexer = projectIndexer;
     this.settings = settings;
     this.targetFile = targetFile || app.workspace.getActiveFile();
+    this.onSaveSettings = onSaveSettings;
 
-    const saved = project?.exportSettings;
+    const saved = project?.exportSettings || settings.lastExportSettings;
     if (saved) {
       if (saved.style) this.selectedStyle = saved.style;
       if (saved.scope) this.bibScope = saved.scope;
@@ -78,16 +81,21 @@ export class ExportPublicationModal extends Modal {
     }
   }
 
-  private persistProjectState() {
+  private async persistProjectState() {
+    const exportState = {
+      style: this.selectedStyle,
+      scope: this.bibScope,
+      cleanFootnotes: this.cleanFootnotes,
+      appendBib: this.appendBib,
+      outputFolder: this.outputFolder,
+    };
     if (this.project) {
-      this.project.exportSettings = {
-        style: this.selectedStyle,
-        scope: this.bibScope,
-        cleanFootnotes: this.cleanFootnotes,
-        appendBib: this.appendBib,
-        outputFolder: this.outputFolder,
-      };
+      this.project.exportSettings = exportState;
       this.project.publicationFolder = this.outputFolder;
+    }
+    this.settings.lastExportSettings = exportState;
+    if (this.onSaveSettings) {
+      await this.onSaveSettings();
     }
   }
 
@@ -112,9 +120,9 @@ export class ExportPublicationModal extends Modal {
         drop.addOption("chicago", "Chicago (Author Year)");
         drop.addOption("vancouver", "Vancouver (1)");
         drop.setValue(this.selectedStyle);
-        drop.onChange(val => { 
+        drop.onChange(async val => { 
           this.selectedStyle = val as CitationStyle; 
-          this.persistProjectState();
+          await this.persistProjectState();
         });
       });
 
@@ -124,9 +132,9 @@ export class ExportPublicationModal extends Modal {
       .addText(text => {
         text.setPlaceholder("publication");
         text.setValue(this.outputFolder);
-        text.onChange(val => {
+        text.onChange(async val => {
           this.outputFolder = normalizePath(val.trim() || 'publication');
-          this.persistProjectState();
+          await this.persistProjectState();
           this.renderActions(actionsContainer);
         });
       })
@@ -134,10 +142,10 @@ export class ExportPublicationModal extends Modal {
         btn.setButtonText("Browse...");
         btn.setTooltip("Select destination folder from vault");
         btn.onClick(() => {
-          new FolderPickerModal(this.app, (folder) => {
+          new FolderPickerModal(this.app, async (folder) => {
             const folderPath = folder.path === "/" ? "publication" : folder.path;
             this.outputFolder = normalizePath(folderPath);
-            this.persistProjectState();
+            await this.persistProjectState();
             this.onOpen();
           }).open();
         });
@@ -152,9 +160,9 @@ export class ExportPublicationModal extends Modal {
           drop.addOption("global", `Global (${this.project.name} Project Corpus)`);
         }
         drop.setValue(this.bibScope);
-        drop.onChange(val => {
+        drop.onChange(async val => {
           this.bibScope = val as 'local' | 'global';
-          this.persistProjectState();
+          await this.persistProjectState();
           this.renderActions(actionsContainer);
         });
       });
@@ -164,9 +172,9 @@ export class ExportPublicationModal extends Modal {
       .setDesc("Remove raw [^citekey]: ... definitions from note bottom.")
       .addToggle(toggle => {
         toggle.setValue(this.cleanFootnotes);
-        toggle.onChange(val => { 
+        toggle.onChange(async val => { 
           this.cleanFootnotes = val; 
-          this.persistProjectState();
+          await this.persistProjectState();
         });
       });
 
@@ -237,7 +245,10 @@ export class ExportPublicationModal extends Modal {
         .setDesc("Embed formatted bibliography section at the bottom of the exported copy.")
         .addToggle(toggle => {
           toggle.setValue(this.appendBib);
-          toggle.onChange(val => { this.appendBib = val; });
+          toggle.onChange(async val => { 
+            this.appendBib = val; 
+            await this.persistProjectState();
+          });
         });
 
       // 1. Export Clean Copy (Safe)

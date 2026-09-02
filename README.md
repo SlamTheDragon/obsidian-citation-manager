@@ -125,13 +125,13 @@ flowchart LR
 
 | Command | Default Shortcut | Description |
 | :--- | :--- | :--- |
-| `Citation Manager: Open Panel` | `Alt + C` | Opens the Citation Studio sidebar view. |
-| `Citation Manager: Insert Citation` | `Ctrl/Cmd + Shift + I` | Opens the search and insert modal. |
-| `Citation Manager: Quick Add Citation` | — | Opens the quick identifier resolution prompt. |
-| `Citation Manager: Link File to Bucket` | — | Links the active document to the active bucket. |
-| `Citation Manager: Generate Bibliography` | — | Shows the bibliography modal for the active bucket. |
-| `Citation Manager: Resync Notes in Bucket` | — | Verifies and syncs footnote definitions. |
-| `Citation Manager: Export for Publication` | — | Opens the publication export modal. |
+| `Citation Manager: Open Panel` | - | Opens the Citation Studio sidebar view. |
+| `Citation Manager: Insert Citation` | - | Opens the search and insert modal. |
+| `Citation Manager: Quick Add Citation` | - | Opens the quick identifier resolution prompt. |
+| `Citation Manager: Link File to Bucket` | - | Links the active document to the active bucket. |
+| `Citation Manager: Generate Bibliography` | - | Shows the bibliography modal for the active bucket. |
+| `Citation Manager: Resync Notes in Bucket` | - | Verifies and syncs footnote definitions. |
+| `Citation Manager: Export for Publication` | - | Opens the publication export modal. |
 
 ---
 

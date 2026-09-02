@@ -973,6 +973,24 @@ export class CitationManagerView extends ItemView {
 
     // 1. Export Action Card (Situated at the Top Above the Monospace Preview)
     const exportCard = wrapper.createDiv({ cls: "citation-card" });
+
+    // Standard Selection Row
+    const standardRow = exportCard.createDiv({ cls: "citation-format-controls-row" });
+    standardRow.style.marginBottom = "8px";
+    const stdWrap = standardRow.createDiv({ cls: "format-control-item" });
+    stdWrap.createSpan({ cls: "control-label", text: "Citation Standard:" });
+    const stdSelect = stdWrap.createEl("select", { cls: "dropdown mini-dropdown" });
+    stdSelect.createEl("option", { value: "apa7", text: "APA 7th Edition" });
+    stdSelect.createEl("option", { value: "ieee", text: "IEEE" });
+    stdSelect.createEl("option", { value: "harvard", text: "Harvard" });
+    stdSelect.createEl("option", { value: "chicago", text: "Chicago" });
+    stdSelect.createEl("option", { value: "vancouver", text: "Vancouver" });
+    stdSelect.value = this.bibSelectedStyle || project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
+    stdSelect.addEventListener("change", () => {
+      this.bibSelectedStyle = stdSelect.value as CitationStyle;
+      previewBox.setText(this.getFormattedBib(project));
+    });
+
     const btnRow = exportCard.createDiv({ cls: "citation-export-actions-row" });
 
     // Copy to Clipboard
@@ -1016,7 +1034,11 @@ export class CitationManagerView extends ItemView {
         project,
         this.referencesMap,
         this.projectIndexer,
-        this.settings
+        this.settings,
+        this.lastActiveMarkdownView?.file || this.app.workspace.getActiveFile(),
+        async () => {
+          await this.onSaveSettings();
+        }
       ).open();
     });
 
@@ -1026,7 +1048,7 @@ export class CitationManagerView extends ItemView {
   }
 
   private getFormattedBib(project: ProjectRecord | null): string {
-    const style = project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
+    const style = this.bibSelectedStyle || project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
     const virtualProj: ProjectRecord = (project && project.id !== ALL_PROJECTS_ID) ? project : {
       id: ALL_PROJECTS_ID,
       name: "All Citations",

@@ -83,7 +83,8 @@ export default class CitationManagerPlugin extends Plugin {
                 refsMap,
                 this.projectIndexer,
                 this.settings,
-                view.file
+                view.file,
+                () => this.saveSettings()
               ).open();
             });
         });
@@ -258,7 +259,9 @@ export default class CitationManagerPlugin extends Plugin {
           this.getActiveProject(),
           refsMap,
           this.projectIndexer,
-          this.settings
+          this.settings,
+          this.app.workspace.getActiveFile(),
+          () => this.saveSettings()
         ).open();
       },
     });
