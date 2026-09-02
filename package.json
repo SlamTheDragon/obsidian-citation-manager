@@ -1,7 +1,7 @@
 {
   "name": "obsidian-citation-manager",
   "version": "1.0.0",
-  "description": "Project-centric reference manager, live citation indexer, linter, and bibliography studio with .references folder integration for Obsidian.",
+  "description": "Project-centric reference manager, live citation indexer, linter, and bibliography studio with local store folder integration for Obsidian.",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
@@ -23,7 +23,7 @@
     "zotero",
     "crossref"
   ],
-  "author": "Antigravity",
+  "author": "SlamTheDragon",
   "license": "MIT",
   "devDependencies": {
     "@types/node": "^22.0.0",

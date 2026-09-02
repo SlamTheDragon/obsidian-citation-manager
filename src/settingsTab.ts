@@ -1,4 +1,4 @@
-import { App, PluginSettingTab, Setting, normalizePath } from 'obsidian';
+import { App, PluginSettingTab, Setting, normalizePath, Notice } from 'obsidian';
 import CitationManagerPlugin from './main';
 import { CitationStyle, InBodyFormat } from './types';
 import { Logger } from './logger';

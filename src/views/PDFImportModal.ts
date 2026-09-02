@@ -292,7 +292,7 @@ export class PDFImportModal extends Modal {
         type: "text",
         cls: "citation-form-input citation-key-readonly",
         value: this.ref.citekey,
-        readonly: "true",
+        attr: { readonly: "true" },
         title: "Citekey is automatically derived from author & year"
       });
       this.keyInputEl.tabIndex = -1;
@@ -333,7 +333,7 @@ export class PDFImportModal extends Modal {
           
           const volGroup = vipGrid.createDiv({ cls: "citation-form-group" });
           volGroup.createEl("label", { cls: "citation-form-label", text: "Volume" });
-          const volInput = volGroup.createEl("input", {
+          const volInput = vipGrid.createEl("input", {
             type: "text",
             cls: "citation-form-input",
             placeholder: "Vol",
@@ -343,7 +343,7 @@ export class PDFImportModal extends Modal {
 
           const issueGroup = vipGrid.createDiv({ cls: "citation-form-group" });
           issueGroup.createEl("label", { cls: "citation-form-label", text: "Issue" });
-          const issueInput = issueGroup.createEl("input", {
+          const issueInput = vipGrid.createEl("input", {
             type: "text",
             cls: "citation-form-input",
             placeholder: "Issue",
@@ -353,7 +353,7 @@ export class PDFImportModal extends Modal {
 
           const pagesGroup = vipGrid.createDiv({ cls: "citation-form-group" });
           pagesGroup.createEl("label", { cls: "citation-form-label", text: "Pages" });
-          const pagesInput = pagesGroup.createEl("input", {
+          const pagesInput = vipGrid.createEl("input", {
             type: "text",
             cls: "citation-form-input",
             placeholder: "Pages",
@@ -381,7 +381,7 @@ export class PDFImportModal extends Modal {
         (body) => {
           const doiGroup = body.createDiv({ cls: "citation-form-group" });
           doiGroup.createEl("label", { cls: "citation-form-label", text: "DOI" });
-          const doiInput = doiGroup.createEl("input", {
+          const doiInput = body.createEl("input", {
             type: "text",
             cls: "citation-form-input",
             placeholder: "10.xxxx/yyyy",
@@ -391,7 +391,7 @@ export class PDFImportModal extends Modal {
 
           const urlGroup = body.createDiv({ cls: "citation-form-group" });
           urlGroup.createEl("label", { cls: "citation-form-label", text: "URL" });
-          const urlInput = urlGroup.createEl("input", {
+          const urlInput = body.createEl("input", {
             type: "text",
             cls: "citation-form-input",
             placeholder: "https://...",
@@ -462,8 +462,7 @@ export class PDFImportModal extends Modal {
           absGroup.createEl("label", { cls: "citation-form-label", text: "Abstract or Synthesis Notes" });
           const absArea = absGroup.createEl("textarea", { 
             cls: "citation-form-textarea", 
-            rows: 5, 
-            placeholder: "Paper abstract or notes..." 
+            attr: { rows: "5", placeholder: "Paper abstract or notes..." } 
           });
           absArea.value = this.ref.abstract || "";
           absArea.addEventListener("input", () => {

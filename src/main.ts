@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice, MarkdownView, Menu, Editor, TFile } from 'obsidian';
+import { Plugin, WorkspaceLeaf, Notice, MarkdownView, Menu, Editor, TFile, normalizePath } from 'obsidian';
 import { CitationManagerSettings, DEFAULT_SETTINGS, ALL_PROJECTS_ID } from './types';
 import { StorageManager } from './storageManager';
 import { ProjectIndexer } from './projectIndexer';
@@ -13,9 +13,9 @@ import { MetadataResolvers } from './metadataResolvers';
 import { Logger } from './logger';
 
 export default class CitationManagerPlugin extends Plugin {
-  settings: CitationManagerSettings;
-  storageManager: StorageManager;
-  projectIndexer: ProjectIndexer;
+  declare settings: CitationManagerSettings;
+  storageManager!: StorageManager;
+  projectIndexer!: ProjectIndexer;
 
   async onload() {
     await this.loadSettings();

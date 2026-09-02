@@ -495,7 +495,7 @@ export class FormatPropagator {
     // 2. Resolve Multi-Citation / Single-Citation Parentheticals (e.g. (Smith, 2020; Jones, 2021))
     const parenGroupRegex = /\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\)/gu;
     result = result.replace(parenGroupRegex, (fullMatch, groupInner) => {
-      const entries = groupInner.split(';').map(s => s.trim()).filter(Boolean);
+      const entries = groupInner.split(';').map((s: string) => s.trim()).filter(Boolean);
       const matchedRefs: ReferenceMetadata[] = [];
 
       for (const entry of entries) {
@@ -503,7 +503,7 @@ export class FormatPropagator {
         if (yearMatch) {
           const year = yearMatch[1];
           const authorPart = entry.slice(0, entry.indexOf(year)).replace(/[,:\(\)]/g, '').trim().toLowerCase();
-          const parts = authorPart.split(/[\s,&]+/).filter(Boolean).map(p => p.replace(/[^a-z0-9]/g, ''));
+          const parts = authorPart.split(/[\s,&]+/).filter(Boolean).map((p: string) => p.replace(/[^a-z0-9]/g, ''));
           for (const r of allReferences.values()) {
             if (r.year && String(r.year) === year && r.authors && r.authors.length > 0) {
               const firstAuthor = r.authors[0].split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');

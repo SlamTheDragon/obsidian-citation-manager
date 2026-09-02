@@ -48,8 +48,8 @@ export class CitationEngine {
     return CSLFormatters.formatInBody(ref, format, style, index);
   }
 
-  static formatMultiInBody(refs: ReferenceMetadata[], format: InBodyFormat = 'parenthetical', style: CitationStyle = 'apa7'): string {
-    return CSLFormatters.formatMultiInBody(refs, format, style);
+  static formatMultiInBody(refs: ReferenceMetadata[], format: InBodyFormat | 'footnote' = 'parenthetical', style: CitationStyle = 'apa7', startIndex: number | number[] = 1): string {
+    return CSLFormatters.formatMultiInBody(refs, format, style, startIndex);
   }
 
   static sortReferences(refs: ReferenceMetadata[], style: CitationStyle = 'apa7'): ReferenceMetadata[] {

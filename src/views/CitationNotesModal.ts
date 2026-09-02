@@ -174,7 +174,7 @@ export class CitationNotesModal extends Modal {
     } else {
       const previewPane = editorContainer.createDiv({ cls: "citation-notes-preview-pane markdown-rendered" });
       const rawText = this.notesText.trim() || "*No notes written yet.*";
-      MarkdownRenderer.render(this.app, rawText, previewPane, '', this);
+      MarkdownRenderer.render(this.app, rawText, previewPane, '', this as any);
     }
 
     // 4. Modal Buttons Container (Cancel button removed; auto-save on all exit points)

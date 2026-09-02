@@ -979,7 +979,7 @@ export class CitationManagerView extends ItemView {
     dropZone.createDiv({ cls: "drop-text-primary", text: "Drag & Drop PDF document here" });
     dropZone.createDiv({ cls: "drop-text-secondary", text: "or click anywhere in this box to browse files" });
 
-    const fileInput = dropZone.createEl("input", { type: "file", accept: ".pdf" });
+    const fileInput = dropZone.createEl("input", { type: "file", attr: { accept: ".pdf" } });
     fileInput.style.display = "none";
 
     dropZone.addEventListener("click", () => fileInput.click());

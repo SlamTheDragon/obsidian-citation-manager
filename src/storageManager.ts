@@ -337,7 +337,7 @@ export class StorageManager {
       const citekey = parsed.citekey || fallbackCitekey;
       const authors = Array.isArray(parsed.authors)
         ? parsed.authors
-        : (typeof parsed.authors === "string" ? parsed.authors.split(",").map(a => a.trim()) : ["Unknown"]);
+        : (typeof parsed.authors === "string" ? parsed.authors.split(",").map((a: string) => a.trim()) : ["Unknown"]);
 
       let abstract = parsed.abstract;
       if (!abstract) {

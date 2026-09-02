@@ -13,7 +13,7 @@ export type ReferenceType =
 
 export type CitationStyle = 'apa7' | 'ieee' | 'harvard' | 'chicago' | 'vancouver';
 
-export type InBodyFormat = 'parenthetical' | 'narrative' | 'citekey';
+export type InBodyFormat = 'parenthetical' | 'narrative' | 'citekey' | 'pandoc' | 'footnote';
 
 export interface ReferenceMetadata {
   citekey: string;
@@ -28,6 +28,8 @@ export interface ReferenceMetadata {
   pages?: string;
   publisher?: string;
   doi?: string;
+  arxivId?: string;
+  arxiv?: string;
   url?: string;
   isbn?: string;
   issn?: string;
@@ -44,9 +46,10 @@ export interface ReferenceMetadata {
   chicago?: string;
   vancouver?: string;
   bibtex?: string;
+  rawBibTeX?: string;
   userNotes?: string;
-  dateAdded: string;
-  dateModified: string;
+  dateAdded?: string;
+  dateModified?: string;
 }
 
 export interface CitationCollection {
@@ -86,6 +89,7 @@ export interface ProjectRecord {
   referenceIds: string[];    // Citekeys belonging to this project
   citationStyle?: CitationStyle;
   inBodyFormat?: InBodyFormat;
+  enableFootnoteMode?: boolean;
   publicationFolder?: string;
   exportSettings?: ProjectExportSettings;
   created: string;
@@ -125,8 +129,8 @@ export interface CitationOccurrence {
   fileName: string;
   lineNumber: number;
   lineContent: string;
-  citekey: string;
-  rawCitation: string;
+  citekey?: string;
+  rawCitation?: string;
 }
 
 export type LintSeverity = 'error' | 'warning' | 'info';
@@ -173,7 +177,7 @@ export interface ProjectHealthStats {
   totalCitationsInFiles: number;
   usedReferencesCount: number;
   unusedReferencesCount: number;
-  unresolvedCitations: { citekey: string; file: string; line: number; rawCitation: string }[];
+  unresolvedCitations: { citekey?: string; file: string; line: number; rawCitation: string }[];
   referenceUsageMap: Record<string, CitationOccurrence[]>;
   lintWarnings: LintWarning[];
 }

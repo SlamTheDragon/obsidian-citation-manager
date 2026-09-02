@@ -179,7 +179,7 @@ export class ReferenceEditorModal extends Modal {
       type: "text",
       cls: "citation-form-input citation-key-readonly",
       value: this.ref.citekey,
-      readonly: "true",
+      attr: { readonly: "true" },
       title: "Citekey is automatically derived from author & year"
     });
     this.keyInputEl.tabIndex = -1;
@@ -372,8 +372,7 @@ export class ReferenceEditorModal extends Modal {
         absGroup.createEl("label", { cls: "citation-form-label", text: "Abstract or Synthesis Notes" });
         const absArea = absGroup.createEl("textarea", { 
           cls: "citation-form-textarea", 
-          rows: 5, 
-          placeholder: "Paper abstract or literature synthesis notes..." 
+          attr: { rows: "5", placeholder: "Paper abstract or literature synthesis notes..." } 
         });
         absArea.value = this.ref.abstract || "";
         absArea.addEventListener("input", () => {
