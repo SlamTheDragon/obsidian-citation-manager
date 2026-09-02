@@ -23,10 +23,49 @@ export class BibTeXResolver {
       else type = 'other';
 
       const fields: Record<string, string> = {};
-      const fieldRegex = /([a-zA-Z_]+)\s*=\s*[{|"]([\s\S]*?)[}|"]/g;
+      const fieldStartRegex = /([a-zA-Z_]+)\s*=\s*/g;
       let fMatch: RegExpExecArray | null;
-      while ((fMatch = fieldRegex.exec(body)) !== null) {
-        fields[fMatch[1].toLowerCase()] = fMatch[2].replace(/\s+/g, ' ').trim();
+      while ((fMatch = fieldStartRegex.exec(body)) !== null) {
+        const fieldName = fMatch[1].toLowerCase();
+        let pos = fieldStartRegex.lastIndex;
+        if (pos >= body.length) break;
+
+        let val = '';
+        const startChar = body[pos];
+        if (startChar === '{') {
+          let depth = 1;
+          pos++;
+          const startVal = pos;
+          while (pos < body.length && depth > 0) {
+            if (body[pos] === '{') depth++;
+            else if (body[pos] === '}') depth--;
+            pos++;
+          }
+          val = body.slice(startVal, depth === 0 ? pos - 1 : pos);
+          fieldStartRegex.lastIndex = pos;
+        } else if (startChar === '"') {
+          pos++;
+          const startVal = pos;
+          while (pos < body.length && body[pos] !== '"') {
+            if (body[pos] === '\\') pos++;
+            pos++;
+          }
+          val = body.slice(startVal, pos);
+          fieldStartRegex.lastIndex = pos + 1;
+        } else {
+          const tokenMatch = body.slice(pos).match(/^([^\s,}\n]+)/);
+          if (tokenMatch) {
+            val = tokenMatch[1];
+            fieldStartRegex.lastIndex = pos + val.length;
+          }
+        }
+
+        const cleanedVal = val
+          .replace(/\\['"`^~=.]\{?([a-zA-Z])\}?/g, '$1')
+          .replace(/\{([^{}]+)\}/g, '$1')
+          .replace(/\s+/g, ' ')
+          .trim();
+        fields[fieldName] = cleanedVal;
       }
 
       let authors: string[] = [];

@@ -37,6 +37,8 @@ export class BibTeXGenerator {
     if (ref.issue) lines.push('  number = {' + ref.issue + '},');
     if (ref.pages) lines.push('  pages = {' + ref.pages + '},');
     if (ref.doi) lines.push('  doi = {' + ref.doi + '},');
+    if (ref.issn) lines.push('  issn = {' + ref.issn + '},');
+    if (ref.isbn) lines.push('  isbn = {' + ref.isbn + '},');
     if (ref.url) lines.push('  url = {' + ref.url + '},');
     if (ref.duration) lines.push('  note = {Duration: ' + ref.duration + '},');
     lines.push('}');

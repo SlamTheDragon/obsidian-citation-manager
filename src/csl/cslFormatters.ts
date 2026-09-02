@@ -387,7 +387,13 @@ export class CSLFormatters {
     if (lastNames.length === 1) {
       authorText = lastNames[0];
     } else if (lastNames.length === 2) {
-      authorText = `${lastNames[0]} & ${lastNames[1]}`;
+      if (format === 'narrative' || style === 'harvard' || style === 'chicago') {
+        authorText = `${lastNames[0]} and ${lastNames[1]}`;
+      } else {
+        authorText = `${lastNames[0]} & ${lastNames[1]}`;
+      }
+    } else if (lastNames.length === 3 && style === 'chicago') {
+      authorText = `${lastNames[0]}, ${lastNames[1]}, and ${lastNames[2]}`;
     } else if (lastNames.length > 2) {
       authorText = `${lastNames[0]} et al.`;
     }

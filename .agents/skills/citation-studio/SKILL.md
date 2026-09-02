@@ -19,29 +19,57 @@ description: Universal academic citation manager, literature indexer, and bi-dir
 ```
 obsidian-citation-manager/
 ├── src/
-│   ├── types.ts                # TypeScript interfaces (ReferenceMetadata, ProjectRecord, ProjectExportSettings)
-│   ├── logger.ts               # Ring-buffered in-memory execution logger
-│   ├── storageManager.ts       # Vault adapter I/O (.references/*.md, attachments/*.pdf, settings.json)
-│   ├── projectIndexer.ts       # Scoped document parsing, code-block masking, frontmatter cleaner, corpus compiler
-│   ├── citationEngine.ts       # CSL formatters (APA 7, IEEE, Harvard, Chicago, Vancouver, multi-citation formatters)
-│   ├── metadataResolvers.ts    # Multi-API resolver (CrossRef, DataCite, SemanticScholar, arXiv, BibTeX)
-│   ├── editorSuggest.ts        # Obsidian native autocomplete trigger ([@query, \cite{query)
-│   ├── settingsTab.ts          # Vault configuration tab
-│   ├── main.ts                 # Plugin lifecycle, file watchers, commands, context menus
+│   ├── types.ts                     # TypeScript interfaces (ReferenceMetadata, ProjectRecord, ProjectExportSettings)
+│   ├── logger.ts                    # Ring-buffered in-memory execution logger
+│   ├── storageManager.ts            # Vault adapter I/O (.references/*.md, attachments/*.pdf, settings.json)
+│   ├── projectIndexer.ts            # High-level Facade for document indexing & corpus management
+│   ├── citationEngine.ts            # High-level Facade for CSL formatting & bibliography generation
+│   ├── metadataResolvers.ts         # High-level Facade for multi-identifier metadata resolution
+│   ├── lintEngine.ts                # Diagnostic linter engine, Levenshtein distance & fuzzy remediation
+│   ├── editorSuggest.ts             # Obsidian native autocomplete trigger ([@query, \cite{query)
+│   ├── settingsTab.ts               # Vault configuration tab
+│   ├── main.ts                      # Plugin lifecycle, file watchers, commands, context menus
+│   ├── csl/                         # CSL Sub-package
+│   │   ├── cslFormatters.ts         # Style formatting engines (APA 7, IEEE, Harvard, Chicago, Vancouver, Video)
+│   │   ├── cslSorter.ts             # Multi-tier academic reference sorting
+│   │   └── bibtexGenerator.ts       # BibTeX serializer with ISSN/ISBN/DOI/abstract support
+│   ├── indexing/                    # Indexing & Propagation Sub-package
+│   │   ├── formatPropagator.ts      # Multi-document format propagation, footnote sync & corpus export
+│   │   ├── markdownMasker.ts        # AST code, math, comment & frontmatter masking
+│   │   └── pdfScanner.ts            # Binary stream DOI & arXiv scanner
+│   ├── resolvers/                   # Identifiers Resolvers Sub-package
+│   │   ├── doiResolver.ts           # CrossRef / DataCite / SemanticScholar resolver
+│   │   ├── arxivResolver.ts         # arXiv API & DOI resolver
+│   │   ├── isbnResolver.ts          # OpenLibrary book metadata resolver
+│   │   ├── urlResolver.ts           # OpenGraph / YouTube / Webpage metadata scraper
+│   │   └── bibtexResolver.ts        # Balanced-brace BibTeX parser with LaTeX accent cleaning
 │   └── views/
-│       ├── CitationManagerView.ts   # Main sidebar view (Header, Search Island, Cards, Footer Island)
+│       ├── components/              # View Subcomponents
+│       │   └── CitationCardRenderer.ts # Card & chip UI renderer
+│       ├── CitationManagerView.ts   # Main sidebar view (Header, Search Island, Cards, Health/Stats Diagnostics Accordion)
 │       ├── ReferenceEditorModal.ts  # Add/Edit citation modal with interactive author chips & PDF dropzone
 │       ├── InsertCitationModal.ts   # Multi-citation suggest modal with format dropdown & chips
 │       ├── ExportPublicationModal.ts# Publication export modal with vault folder picker
-│       ├── FixInconsistenciesModal.ts# Linter correction decision tree & batch fix modal
+│       ├── FixInconsistenciesModal.ts# Live-refreshing linter decision tree & batch fix modal
 │       ├── PDFImportModal.ts        # Drag & drop PDF importer with binary DOI extraction
 │       ├── BibliographyModal.ts     # Standalone bibliography generator with clipboard/note export
 │       ├── UsageLocationsModal.ts   # Deletion guard & occurrence inspector
 │       ├── PromptModal.ts           # Native autofocus prompt dialog
 │       └── ConfirmModal.ts          # Native destructive confirmation dialog
-├── styles.css                  # Unified minimal styling (responsive flexbox, zero layout shift)
-└── esbuild.config.mjs          # Bun/Node production bundling pipeline
+├── tests/                           # 20 In-Repo Automated Test Suites (750+ Assertions)
+│   ├── obsidian_mock.ts             # Mock Obsidian API harness
+│   ├── run_all_tests.ts             # Master test suite runner (`bun run test:all`)
+│   └── ...                          # Domain-specific verification suites
+├── styles.css                       # Unified minimal styling (responsive flexbox, zero layout shift)
+└── esbuild.config.mjs               # Bun/Node production bundling pipeline
 ```
+
+### 2.1 Architectural Invariants & Coding Guardrails
+1. **Facade 100% Signature Invariant**: When decomposing monolithic engines into sub-packages, ALL existing public static and instance methods on facade classes (`CitationEngine`, `ProjectIndexer`, `MetadataResolvers`) must be strictly preserved and delegate to submodules. Never delete or rename methods (e.g., `compileProjectCorpus`, `cleanExportFrontmatter`, `generateBibTeX`) to prevent runtime call failures across views and modals.
+2. **Native Tool Editing Constraint**: Always use native tools (`replace_file_content`, `write_to_file`) directly instead of creating intermediate scratch Node scripts when modifying codebase files.
+3. **Strict Zero-Emoji Policy**: Enforced across all UI views, status notices, modals, logs, and artifacts. Use Lucide SVG icons exclusively (`setIcon(el, "...")`).
+4. **Obsidian Vault Adapter Directory Creation**: Use `app.vault.adapter.mkdir(pubDir)` for custom publication and export directory creation to prevent vault path collisions.
+
 
 ---
 
@@ -89,9 +117,17 @@ Document diagnostics and transformations follow a 2-dimensional matrix (**Active
 | **Footnote Mode OFF** | In-body must match bucket standard (e.g. `(Author, Year)` for APA 7, `(Author Year)` for Harvard, `[1]` for IEEE). Flag `[^key]` $\to$ `suggestedFix: targetInBody`. | Must have un-prefixed `<Formatted Entry>`. Flag `[^key]: ` stubs $\to$ `suggestedFix: <Formatted Entry>` (strips prefix, retains 100% reference text). |
 | **Orphan Definition (Both Modes)** | N/A (Missing in-body call) | Flag unreferenced bottom definition line $\to$ Badge: **`Orphan`**, `suggestedFix: ""` (1-click removal). |
 
-### 3.6 Diagnostic Telemetry, Purge, and Linter Invariants
-* **Consolidated Unresolved Incidents**: In-body `[^key]` and bottom definition `[^key]: ...` stubs for an unresolved reference are combined into a single diagnostic item per note.
-* **Complete Resolution Tree**: `FixInconsistenciesModal` must provide:
+### 3.6 Diagnostic Accordion UI Standard & Reactive Linter Invariants
+* **Side Panel & Modal Accordion UI Standard**:
+  Diagnostics rendered in `FixInconsistenciesModal.ts` and `CitationManagerView.ts` (Health & Stats Subpanel $\to$ Diagnostics tab) must follow the standardized 2-state accordion format:
+  - **State 1 (Collapsed)**: `[>] [Severity Icon] [Short Title] [File:Line] [Dismiss (Trash) Button]`
+  - **State 2 (Expanded)**: `[v] [Severity Icon] [Short Title] [File:Line] [Dismiss (Trash) Button]`
+    - Explanation box (`w.explanation || w.message`)
+    - Proposed Solution / Diff Preview: `diff-old` $\to$ `diff-new`
+    - Contextual Action Buttons: `[Apply Fix]`, `[+ Create Entry]`, `[Purge]`, `[Dismiss]`, `[Inspect]`
+* **Live Reactive Refresh Invariant**:
+  Any diagnostic remediation action (`Apply Fix`, `Batch Apply`, `+ Create Entry`, `Purge`, `Dismiss`) inside `FixInconsistenciesModal` must trigger an asynchronous re-index through `refreshWarningsFromParent()` and update the modal's warning list dynamically in-place without closing or re-opening the modal.
+* **Complete Resolution Tree**:
   1. `[+ Create Entry]`: Pre-populates `ReferenceEditorModal` with citekey and note definition text.
   2. `[Purge]`: Completely removes the reference token, in-body calls, and full multi-line footnote definition bodies from the note.
   3. `[Dismiss]`: Serializes dismissal to `.references/.cache/dismissed_lints.json`.
@@ -107,6 +143,9 @@ Document diagnostics and transformations follow a 2-dimensional matrix (**Active
 2. **Compound Names & Suffix Parsing**:
    - Hyphenated first names: `"Jean-Paul Sartre"` $\to$ `"Sartre, J.-P."`
    - Suffixes: `"Martin Luther King Jr."` $\to$ `"King, Jr., M. L."` (APA) / `"King Jr. (1963)"` (Narrative)
+3. **Multi-Author Narrative vs. Parenthetical Conjunctions**:
+   - APA 7: Parenthetical uses `&` `(Smith & Jones, 2024)`, Narrative uses `and` `Smith and Jones (2024)`.
+   - Chicago & Harvard: Always use `and` `(Smith and Jones 2024)` / `(Smith, Jones, and Brown 2024)`.
 
 ### 3.8 Context-Aware Citation Overloading & In-Place Merging (`detectAndOverloadAtCursor`)
 When inserting a citation while the cursor is inside or adjacent to an existing citation:
@@ -145,14 +184,29 @@ When compiling and testing new builds:
 6. **Presence Check**:
    - Check that `Cited (Nx)` badge increments accurately across footnotes, parentheticals, and narrative citations regardless of Footnote Mode setting.
 
-### 4.2 Automated Verification Suites (558+ Assertions)
-Run all automated test suites:
+### 4.2 In-Repo Automated Verification Matrix (20 Suites, 750+ Assertions)
+All automated verification suites are stored in `tests/` and run natively:
 ```bash
-node -e "const Module = require('module'); const orig = Module.prototype.require; Module.prototype.require = function(p) { if (p === 'obsidian') return { requestUrl: async () => ({ status: 200, json: {} }), normalizePath: p => String(p).replace(/\\\\/g, '/'), App: class {}, Plugin: class {}, PluginSettingTab: class {}, ItemView: class {}, Modal: class {}, Notice: class {}, TFile: class {}, TFolder: class {}, MarkdownView: class {}, EditorSuggest: class {}, setIcon: () => {}, Setting: class { setName() { return this; } setDesc() { return this; } addText() { return this; } addToggle() { return this; } addDropdown() { return this; } } }; return orig.apply(this, arguments); }; require('./scratch/test_overloading.bundle.js'); require('./scratch/test_mode_toggle.bundle.js'); require('./scratch/exhaustive_matrix_test.bundle.js'); require('./scratch/combinatorial_test.bundle.js');"
+bun run test:all
 ```
 * **Coverage Matrix**:
-  - All 7 Citation Standards $\times$ In-Body & Bottom Formats
-  - Citation Overloading & In-Place Multi-Citation Merging
-  - Bi-Directional Footnote Mode Transitions
-  - Bipartite Graph Orphan Diagnostic Invariants
-  - Code, Math, and Structural Masking Invariants
+  - `test_all_functions.ts`: 100% Public Method Availability & Sub-Package Integrity
+  - `test_corpus_export_simulation.ts`: Multi-Document Corpus Export & Frontmatter Sanitization
+  - `cross_check_commit_51c6d39.ts`: Commit 51c6d39 Behavioral Parity Check
+  - `test_procedural_linting_and_accordion_engine.ts`: Accordion Decision Trees & Levenshtein Distances
+  - `test_linting_engine_cross_state_trees.ts`: Cross-State Diagnostic Permutations
+  - `test_complete_propagation_integrity.ts`: Footnote & In-Body Multi-Author Standard Propagation
+  - `test_video_and_recurring_authors.ts`: Video Citations & Recurring Author Sorting
+  - `test_citation_notes.ts`: Markdown Notes `<!--NOTE_START-->` Persistence & Auto-Save Guards
+  - `test_author_propagation_and_citekey.ts`: Author Name Parsing & Dynamic Citekey Calculations
+  - `test_abstract_and_datatypes.ts`: Abstract & YAML Frontmatter Synchronization
+  - `test_stateful_add_entry.ts`: Citation Bucket State Retention & Add Entry Flow
+  - `test_export_sanitization.ts`: Bracket Overloading & Markdown Sanitization
+  - `test_overloading.ts`: In-Place Compounded Citation Merging at Cursor
+  - `test_mode_toggle.ts`: Bi-Directional Footnote Mode Transitions Across 7 Standards
+  - `test_propagation.ts`: Cross-Standard Vault In-Body Migrations
+  - `exhaustive_matrix_test.ts`: 100-Iteration Combinatorial Permutation State Trees
+  - `precedence_test.ts`: Footnote Mode Precedence & Standard Authority
+  - `bx_mutation_test.ts`: Bidirectional Transformation & Mutation Testing
+  - `combinatorial_test.ts`: NIST CIT Interaction Testing (75 Configurations)
+  - `test_corpus_sources_propagation.ts`: Multi-Source Corpus Resolver & Video/PDF Attachment Propagation
