@@ -526,9 +526,16 @@ export class CitationManagerView extends ItemView {
         ? `${cleanNotes.slice(0, previewLength)}...` 
         : cleanNotes;
 
-      accBody.createDiv({ 
+      const snippetEl = accBody.createDiv({ 
         cls: "citation-card-note-snippet-text", 
         text: `${previewText}`
+      });
+      snippetEl.title = "Click to open literature notes editor";
+      snippetEl.style.cursor = "pointer";
+      snippetEl.addEventListener("click", () => {
+        new CitationNotesModal(this.app, ref, this.storageManager, async () => {
+          await this.refreshData();
+        }).open();
       });
 
       let isOpen = false;
