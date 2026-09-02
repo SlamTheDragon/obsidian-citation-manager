@@ -136,6 +136,7 @@ export type LintWarningType =
   | 'format_mismatch' 
   | 'style_mismatch' 
   | 'orphan_definition'
+  | 'missing_footnote_definition'
   | 'author_typo_fuzzy'
   | 'tampered_definition'
   | 'numeric_order_mismatch'

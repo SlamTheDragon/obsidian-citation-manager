@@ -255,6 +255,14 @@ export class ProjectIndexer {
           }
         });
 
+        const definedFootnotesMap = new Map<string, { fullLine: string; text: string; lineIdx: number }>();
+        rawLines.forEach((l, idx) => {
+          const m = l.match(/^\s*\[\^([\p{L}\p{N}_:\.-]+)\]:\s*(.*)$/u);
+          if (m) {
+            definedFootnotesMap.set(m[1].toLowerCase(), { fullLine: l.trim(), text: m[2].trim(), lineIdx: idx });
+          }
+        });
+
         lines.forEach((lineText, lineIdx) => {
           let match: RegExpExecArray | null;
           const displayLine = (rawLines[lineIdx] || lineText).trim();
@@ -422,7 +430,33 @@ export class ProjectIndexer {
               if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
               referenceUsageMap[key].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
 
-              if (!isFootnoteMode) {
+              if (isFootnoteMode) {
+                if (!definedFootnotesMap.has(key.toLowerCase()) && !definedFootnotesMap.has(ref.citekey.toLowerCase())) {
+                  const id = file.path + '::' + (lineIdx + 1) + '::[^' + key + ']::missing_definition';
+                  if (!dismissed.has(id)) {
+                    const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, 1);
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: '[^' + key + ']',
+                      citekey: ref.citekey,
+                      suggestedFix: expectedDef,
+                      severity: 'error',
+                      shortTitle: 'Missing Footnote Definition',
+                      explanation: 'Footnote callout [^' + key + '] is cited in body text, but has no corresponding definition [^' + key + ']: at the bottom of the note.',
+                      fixOptions: [
+                        { label: 'Append Footnote Definition', action: 'replace', replacementText: expectedDef },
+                        { label: 'Dismiss', action: 'dismiss' }
+                      ],
+                      type: 'missing_footnote_definition',
+                      message: 'Footnote [^' + key + '] is missing its footnote definition at the bottom of the file.',
+                    });
+                  }
+                }
+              } else {
                 const expected = CitationEngine.formatInBody(ref, targetFormat, targetStyle);
                 const id = file.path + '::' + (lineIdx + 1) + '::[^' + key + ']::format_mismatch';
                 if (!dismissed.has(id)) {

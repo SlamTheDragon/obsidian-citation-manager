@@ -1614,11 +1614,11 @@ export class CitationManagerView extends ItemView {
     }
 
     const editor = mdView.editor;
-    const isFootnoteMode = Boolean(this.settings.enableFootnoteMode);
-    const format: InBodyFormat = (project?.inBodyFormat === ('footnote' as any) || !project?.inBodyFormat)
-      ? 'parenthetical'
-      : (project.inBodyFormat as InBodyFormat);
-    const style: CitationStyle = project?.citationStyle || 'apa7';
+    const isFootnoteMode = Boolean(this.settings.enableFootnoteMode) || project?.inBodyFormat === ('footnote' as any);
+    const style: CitationStyle = project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
+    const format: InBodyFormat = isFootnoteMode
+      ? ('footnote' as any)
+      : (project?.inBodyFormat || this.settings.defaultInBodyFormat || 'parenthetical');
 
     const cursor = editor.getCursor();
     const lineText = editor.getLine(cursor.line) || "";
@@ -1649,9 +1649,8 @@ export class CitationManagerView extends ItemView {
       editor.setCursor({ line: cursor.line, ch: cursor.ch + overload.replacementText.length });
     }
 
-    const updatedDocText = editor.getValue();
-
     if (isFootnoteMode) {
+      const updatedDocText = editor.getValue();
       const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
       if (!fnDefRegex.test(updatedDocText)) {
         const fnDefinition = CitationEngine.formatFootnoteDefinition(
@@ -1662,18 +1661,6 @@ export class CitationManagerView extends ItemView {
         const hasTrailingNewline = updatedDocText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";
         editor.replaceRange(`${separator}${fnDefinition}\n`, { line: editor.lineCount(), ch: 0 });
-      }
-    } else {
-      // In standard mode, maintain per-file reference list at bottom if not already present
-      const bibEntry = CitationEngine.formatBibliographyEntry(
-        ref,
-        style,
-        footnoteIndex
-      );
-      if (!updatedDocText.includes(ref.title) && !updatedDocText.includes(ref.citekey)) {
-        const hasTrailingNewline = updatedDocText.endsWith("\n");
-        const separator = hasTrailingNewline ? "\n" : "\n\n";
-        editor.replaceRange(`${separator}${bibEntry}\n`, { line: editor.lineCount(), ch: 0 });
       }
     }
 

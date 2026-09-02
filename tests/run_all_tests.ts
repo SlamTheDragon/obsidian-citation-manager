@@ -1,8 +1,8 @@
-// Master Test Runner executing all 24 test suites in repository
+// Master Test Runner executing all 26 test suites in repository
 import './obsidian_mock';
 
 console.log("================================================================================");
-console.log("  EXECUTING ALL REPOSITORY TEST SUITES (24 SUITES)                           ");
+console.log("  EXECUTING ALL REPOSITORY TEST SUITES (26 SUITES)                           ");
 console.log("================================================================================");
 
 import './bx_mutation_test';
@@ -29,3 +29,5 @@ import './test_universal_compiler_edge_cases';
 import './test_citation_groups_and_collections';
 import './test_invariants_and_zero_emoji_audit';
 import './test_collections_and_filter_combinatorial_matrix';
+import './test_insertion_and_cross_reference_linting';
+import './test_all_insertion_entry_points';

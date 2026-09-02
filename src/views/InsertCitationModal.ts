@@ -182,8 +182,9 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
       return;
     }
 
+    const editor = activeView.editor;
     const cursor = editor.getCursor();
-    const lineText = editor.getLine(cursor.line);
+    const lineText = editor.getLine(cursor.line) || "";
     const allRefsMap = new Map<string, ReferenceMetadata>(this.references.map(r => [r.citekey, r]));
     const isFootnoteMode = (this.selectedFormat === 'footnote');
 
@@ -208,14 +209,15 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
         { line: cursor.line, ch: overload.replaceStartCh },
         { line: cursor.line, ch: overload.replaceEndCh }
       );
+      editor.setCursor({ line: cursor.line, ch: overload.replaceStartCh + overload.replacementText.length });
     } else {
       editor.replaceRange(overload.replacementText, cursor);
+      editor.setCursor({ line: cursor.line, ch: cursor.ch + overload.replacementText.length });
     }
-
-    const updatedDocText = editor.getValue();
 
     // If footnote format, ensure all footnote definitions are added
     if (isFootnoteMode) {
+      const updatedDocText = editor.getValue();
       const newDefs: string[] = [];
 
       for (const ref of refs) {
@@ -231,22 +233,9 @@ export class InsertCitationModal extends FuzzySuggestModal<ReferenceMetadata> {
         const separator = hasTrailingNewline ? "\n" : "\n\n";
         editor.replaceRange(`${separator}${newDefs.join("\n")}\n`, { line: editor.lineCount(), ch: 0 });
       }
-    } else {
-      // In standard mode, maintain per-file reference entries at bottom if not present
-      const newBibs: string[] = [];
-      for (const ref of refs) {
-        if (!updatedDocText.includes(ref.title) && !updatedDocText.includes(ref.citekey)) {
-          const bibEntry = CitationEngine.formatBibliographyEntry(ref, this.defaultStyle, footnoteIndex++);
-          newBibs.push(bibEntry);
-        }
-      }
-      if (newBibs.length > 0) {
-        const hasTrailingNewline = updatedDocText.endsWith("\n");
-        const separator = hasTrailingNewline ? "\n" : "\n\n";
-        editor.replaceRange(`${separator}${newBibs.join("\n")}\n`, { line: editor.lineCount(), ch: 0 });
-      }
     }
 
+    editor.focus();
     new Notice(`Inserted: ${overload.replacementText}`);
   }
 }

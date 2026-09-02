@@ -81,7 +81,16 @@ export class LintEngine {
 
     let modified = false;
 
-    if (action === 'replace' && warning.rawCitation) {
+    if (warning.type === 'missing_footnote_definition' && replacement) {
+      const key = (warning.citekey || warning.rawCitation.replace(/^[\[\^]?|\]:?.*$/g, '')).trim();
+      const fnDefRegex = new RegExp('^\\s*\\[\\^' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]:', 'm');
+      if (!fnDefRegex.test(content)) {
+        const hasTrailingNewline = content.endsWith("\n");
+        const separator = hasTrailingNewline ? "\n" : "\n\n";
+        content = content + separator + replacement + "\n";
+        modified = true;
+      }
+    } else if (action === 'replace' && warning.rawCitation) {
       if (content.includes(warning.rawCitation)) {
         content = content.replace(warning.rawCitation, replacement);
         modified = true;
@@ -133,7 +142,16 @@ export class LintEngine {
           let modified = false;
 
           for (const w of fileWarnings) {
-            if (w.suggestedFix !== undefined && w.rawCitation && content.includes(w.rawCitation)) {
+            if (w.type === 'missing_footnote_definition' && w.suggestedFix) {
+              const key = (w.citekey || w.rawCitation.replace(/^[\[\^]?|\]:?.*$/g, '')).trim();
+              const fnDefRegex = new RegExp('^\\s*\\[\\^' + key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\]:', 'm');
+              if (!fnDefRegex.test(content)) {
+                const hasTrailingNewline = content.endsWith("\n");
+                const separator = hasTrailingNewline ? "\n" : "\n\n";
+                content = content + separator + w.suggestedFix + "\n";
+                modified = true;
+              }
+            } else if (w.suggestedFix !== undefined && w.rawCitation && content.includes(w.rawCitation)) {
               content = content.replace(w.rawCitation, w.suggestedFix);
               modified = true;
             } else if (w.type === 'orphan_definition' && w.rawCitation) {

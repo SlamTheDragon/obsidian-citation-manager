@@ -1,0 +1,275 @@
+﻿import { CitationEngine } from '../src/citationEngine';
+import { CSLFormatters } from '../src/csl/cslFormatters';
+import { ReferenceMetadata, ProjectRecord, CitationStyle, InBodyFormat } from '../src/types';
+
+console.log("================================================================================");
+console.log("  TESTING CITATION INSERTION & FORMATTING ACROSS ALL ENTRY POINTS               ");
+console.log("================================================================================");
+
+let passCount = 0;
+function assert(cond: boolean, msg: string) {
+  if (!cond) {
+    console.error(`[FAIL] ${msg}`);
+    process.exit(1);
+  } else {
+    console.log(`[PASS] ${msg}`);
+    passCount++;
+  }
+}
+
+const refA: ReferenceMetadata = {
+  citekey: "Vaswani2017",
+  title: "Attention Is All You Need",
+  authors: ["Vaswani, Ashish", "Shazeer, Noam", "Parmar, Niki"],
+  year: 2017,
+  publication: "NeurIPS",
+  type: "conference",
+  projects: ["nlp"]
+};
+
+const refB: ReferenceMetadata = {
+  citekey: "Smith2020",
+  title: "Neural Vision Models",
+  authors: ["Smith, John", "Doe, Jane"],
+  year: 2020,
+  publication: "CVPR",
+  type: "conference",
+  projects: ["vision"]
+};
+
+const refC: ReferenceMetadata = {
+  citekey: "Jones2021",
+  title: "Reinforcement Learning Overview",
+  authors: ["Jones, Robert"],
+  year: 2021,
+  publication: "Nature",
+  type: "journal",
+  projects: ["rl"]
+};
+
+const allRefsMap = new Map<string, ReferenceMetadata>([
+  [refA.citekey, refA],
+  [refB.citekey, refB],
+  [refC.citekey, refC],
+]);
+
+// -----------------------------------------------------------------------------
+// ENTRY POINT 1: SIDE PANEL CARD [INSERT] BUTTON SIMULATION
+// -----------------------------------------------------------------------------
+interface MockEditor {
+  content: string;
+  cursor: { line: number; ch: number };
+  getLine(line: number): string;
+  getValue(): string;
+  lineCount(): number;
+  replaceRange(replacement: string, from: { line: number; ch: number }, to?: { line: number; ch: number }): void;
+  setCursor(pos: { line: number; ch: number }): void;
+}
+
+function createMockEditor(initialText: string, cursorCh: number = 0, cursorLine: number = 0): MockEditor {
+  return {
+    content: initialText,
+    cursor: { line: cursorLine, ch: cursorCh },
+    getLine(l: number) {
+      return this.content.split('\n')[l] || '';
+    },
+    getValue() {
+      return this.content;
+    },
+    lineCount() {
+      return this.content.split('\n').length;
+    },
+    replaceRange(replacement: string, from: { line: number; ch: number }, to?: { line: number; ch: number }) {
+      const curLines = this.content.split('\n');
+      if (from.line >= curLines.length) {
+        this.content = this.content + replacement;
+        return;
+      }
+      const targetLine = curLines[from.line] || '';
+      const endCh = to ? to.ch : from.ch;
+      const before = targetLine.slice(0, from.ch);
+      const after = targetLine.slice(endCh);
+      curLines[from.line] = before + replacement + after;
+      this.content = curLines.join('\n');
+    },
+    setCursor(pos: { line: number; ch: number }) {
+      this.cursor = pos;
+    }
+  };
+}
+
+function simulateSidePanelInsert(
+  editor: MockEditor,
+  ref: ReferenceMetadata,
+  style: CitationStyle = 'apa7',
+  format: InBodyFormat = 'parenthetical',
+  isFootnoteMode: boolean = false
+) {
+  const cursor = editor.cursor;
+  const lineText = editor.getLine(cursor.line);
+  const docText = editor.getValue();
+  const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
+  const footnoteIndex = existingFnMatches.length + 1;
+
+  const overload = CitationEngine.detectAndOverloadAtCursor(
+    lineText,
+    cursor.ch,
+    [ref],
+    allRefsMap,
+    style,
+    format,
+    isFootnoteMode,
+    footnoteIndex
+  );
+
+  if (overload.isOverloaded) {
+    editor.replaceRange(
+      overload.replacementText,
+      { line: cursor.line, ch: overload.replaceStartCh },
+      { line: cursor.line, ch: overload.replaceEndCh }
+    );
+    editor.setCursor({ line: cursor.line, ch: overload.replaceStartCh + overload.replacementText.length });
+  } else {
+    editor.replaceRange(overload.replacementText, cursor);
+    editor.setCursor({ line: cursor.line, ch: cursor.ch + overload.replacementText.length });
+  }
+
+  if (isFootnoteMode) {
+    const updatedDocText = editor.getValue();
+    const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
+    if (!fnDefRegex.test(updatedDocText)) {
+      const fnDefinition = CitationEngine.formatFootnoteDefinition(ref, style, footnoteIndex);
+      const hasTrailingNewline = updatedDocText.endsWith("\n");
+      const separator = hasTrailingNewline ? "\n" : "\n\n";
+      const lineCount = editor.lineCount();
+      editor.replaceRange(`${separator}${fnDefinition}\n`, { line: lineCount, ch: 0 });
+    }
+  }
+}
+
+// 1.1 Standard APA 7 Insertion
+let ed = createMockEditor("As discussed in ", 16);
+simulateSidePanelInsert(ed, refA, 'apa7', 'parenthetical', false);
+assert(ed.getValue() === "As discussed in (Vaswani et al., 2017)", "Side panel APA 7 parenthetical insertion");
+
+// 1.2 Standard IEEE Numerical Insertion
+ed = createMockEditor("The transformer architecture ", 29);
+simulateSidePanelInsert(ed, refA, 'ieee', 'parenthetical', false);
+assert(ed.getValue() === "The transformer architecture [1]", "Side panel IEEE numerical [1] insertion");
+
+// 1.3 Standard Vancouver Numerical Insertion
+ed = createMockEditor("Previous methods ", 17);
+simulateSidePanelInsert(ed, refA, 'vancouver', 'parenthetical', false);
+assert(ed.getValue() === "Previous methods (1)", "Side panel Vancouver numerical (1) insertion");
+
+// 1.4 Narrative Insertion
+ed = createMockEditor("According to ", 13);
+simulateSidePanelInsert(ed, refA, 'apa7', 'narrative', false);
+assert(ed.getValue() === "According to Vaswani et al. (2017)", "Side panel APA 7 narrative insertion");
+
+// 1.5 Pandoc Citekey Insertion
+ed = createMockEditor("Refer to ", 9);
+simulateSidePanelInsert(ed, refA, 'apa7', 'citekey', false);
+assert(ed.getValue() === "Refer to [@Vaswani2017]", "Side panel Pandoc citekey insertion");
+
+// 1.6 Footnote Mode ON Insertion (adds in-body callout + footnote definition at bottom)
+ed = createMockEditor("# Introduction\n\nAttention mechanisms are widespread .\n", 36, 2);
+simulateSidePanelInsert(ed, refA, 'apa7', 'footnote', true);
+assert(ed.getValue().includes("Attention mechanisms are widespread [^Vaswani2017]."), "Footnote Mode ON inserts [^Vaswani2017] at cursor");
+assert(ed.getValue().includes("[^Vaswani2017]: Vaswani, A.,"), "Footnote Mode ON appends footnote definition at bottom");
+
+// 1.7 Cursor Overload & Compounding (merging second reference into existing group)
+ed = createMockEditor("See previous work (Vaswani et al., 2017)", 25);
+simulateSidePanelInsert(ed, refB, 'apa7', 'parenthetical', false);
+assert(ed.getValue() === "See previous work (Smith & Doe, 2020; Vaswani et al., 2017)", "Side panel merges into sorted compound author-date citation");
+
+// 1.8 IEEE Numeric Group Overload [1] + [2] -> [1, 2]
+ed = createMockEditor("Foundational models [1]", 22);
+simulateSidePanelInsert(ed, refB, 'ieee', 'parenthetical', false);
+assert(ed.getValue() === "Foundational models [1, 2]", "Side panel overloads IEEE into [1, 2]");
+
+// -----------------------------------------------------------------------------
+// ENTRY POINT 2: EDITOR SUGGEST / AUTOCOMPLETE SIMULATION
+// -----------------------------------------------------------------------------
+function simulateEditorSuggest(
+  editor: MockEditor,
+  triggerMatch: string,
+  selectedRef: ReferenceMetadata,
+  style: CitationStyle = 'apa7',
+  format: InBodyFormat = 'parenthetical',
+  isFootnoteMode: boolean = false
+) {
+  const cursor = editor.cursor;
+  const line = editor.getLine(cursor.line);
+  const startCh = cursor.ch - triggerMatch.length;
+  const inBodyText = isFootnoteMode 
+    ? `[^${selectedRef.citekey}]` 
+    : CitationEngine.formatInBody(selectedRef, format, style);
+
+  // Consume trailing auto-paired bracket if present
+  let endCh = cursor.ch;
+  if (line.slice(cursor.ch).startsWith(']')) endCh++;
+
+  editor.replaceRange(inBodyText, { line: cursor.line, ch: startCh }, { line: cursor.line, ch: endCh });
+
+  if (isFootnoteMode) {
+    const docText = editor.getValue();
+    const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
+    const footnoteIndex = existingFnMatches.length + 1;
+    const fnDefRegex = new RegExp(`^\\[\\^${selectedRef.citekey}\\]:`, 'm');
+    if (!fnDefRegex.test(docText)) {
+      const fnDefinition = CitationEngine.formatFootnoteDefinition(selectedRef, style, footnoteIndex);
+      const separator = docText.endsWith("\n") ? "\n" : "\n\n";
+      editor.replaceRange(`${separator}${fnDefinition}\n`, { line: editor.lineCount(), ch: 0 });
+    }
+  }
+}
+
+// 2.1 Trigger [@Vaswani -> (Vaswani et al., 2017)
+ed = createMockEditor("Transformer models [@Vasw", 25);
+simulateEditorSuggest(ed, "[@Vasw", refA, 'apa7', 'parenthetical', false);
+assert(ed.getValue() === "Transformer models (Vaswani et al., 2017)", "Editor suggest [@query replaces with parenthetical format");
+
+// 2.2 Trigger ((Smith -> Smith and Doe (2020) in narrative format (uses 'and' per APA 7 Sec 8.17)
+ed = createMockEditor("As shown by ((Smith", 19);
+simulateEditorSuggest(ed, "((Smith", refB, 'apa7', 'narrative', false);
+assert(ed.getValue() === "As shown by Smith and Doe (2020)", "Editor suggest replaces with narrative format");
+
+// 2.3 Trigger \cite{Jones -> [1] in IEEE format
+ed = createMockEditor("Detailed review in \\cite{Jones", 30);
+simulateEditorSuggest(ed, "\\cite{Jones", refC, 'ieee', 'parenthetical', false);
+assert(ed.getValue() === "Detailed review in [1]", "Editor suggest replaces with IEEE [1]");
+
+// 2.4 Trigger in Footnote Mode
+ed = createMockEditor("# Notes\n\nDeep learning models [@Vasw\n", 27, 2);
+simulateEditorSuggest(ed, "[@Vasw", refA, 'apa7', 'footnote', true);
+assert(ed.getValue().includes("Deep learning models [^Vaswani2017]"), "Editor suggest in footnote mode inserts [^key]");
+assert(ed.getValue().includes("[^Vaswani2017]: Vaswani, A.,"), "Editor suggest in footnote mode generates footnote definition");
+
+// -----------------------------------------------------------------------------
+// ENTRY POINT 3: MULTI-CITATION MODAL GROUP INSERTION
+// -----------------------------------------------------------------------------
+function simulateMultiCitationModalInsert(
+  editor: MockEditor,
+  refs: ReferenceMetadata[],
+  style: CitationStyle = 'apa7',
+  format: InBodyFormat = 'parenthetical'
+) {
+  const multiText = CitationEngine.formatMultiInBody(refs, format, style);
+  editor.replaceRange(multiText, editor.cursor);
+}
+
+ed = createMockEditor("Multiple sources suggest ", 25);
+simulateMultiCitationModalInsert(ed, [refB, refA, refC], 'apa7', 'parenthetical');
+assert(
+  ed.getValue() === "Multiple sources suggest (Jones, 2021; Smith & Doe, 2020; Vaswani et al., 2017)",
+  "Multi-citation modal insertion produces sorted compound citation"
+);
+
+ed = createMockEditor("Several works ", 14);
+simulateMultiCitationModalInsert(ed, [refA, refB], 'ieee', 'parenthetical');
+assert(ed.getValue() === "Several works [1, 2]", "Multi-citation modal insertion produces IEEE [1, 2]");
+
+console.log("================================================================================");
+console.log(`  ALL CITATION INSERTION ENTRY POINTS TESTED & PASSING (${passCount}/${passCount})!`);
+console.log("================================================================================");

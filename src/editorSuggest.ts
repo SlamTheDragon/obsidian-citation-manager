@@ -61,14 +61,15 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
     if (!this.context) return;
     const editor = this.context.editor;
     const project = this.plugin.getActiveProject();
-    const isFootnote = Boolean(this.plugin.settings.enableFootnoteMode);
-    const format: InBodyFormat = (project?.inBodyFormat === ('footnote' as any) || !project?.inBodyFormat)
-      ? 'parenthetical'
-      : (project.inBodyFormat as InBodyFormat);
+    const isFootnote = Boolean(this.plugin.settings.enableFootnoteMode) || project?.inBodyFormat === ('footnote' as any);
+    const style = project?.citationStyle || this.plugin.settings.defaultCitationStyle || 'apa7';
+    const format: InBodyFormat = isFootnote
+      ? ('footnote' as any)
+      : (project?.inBodyFormat || this.plugin.settings.defaultInBodyFormat || 'parenthetical');
 
     const inBodyText = isFootnote 
       ? `[^${ref.citekey}]` 
-      : CitationEngine.formatInBody(ref, format, project?.citationStyle || 'apa7');
+      : CitationEngine.formatInBody(ref, format, style);
 
     // Cleanly consume any auto-paired trailing closing bracket/brace
     const line = editor.getLine(this.context.end.line);
@@ -85,32 +86,20 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
 
     editor.replaceRange(inBodyText, this.context.start, endPos);
 
-    const docText = editor.getValue();
-    const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
-    const footnoteIndex = existingFnMatches.length + 1;
-
     if (isFootnote) {
+      const docText = editor.getValue();
+      const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
+      const footnoteIndex = existingFnMatches.length + 1;
       const fnDefRegex = new RegExp(`^\\[\\^${ref.citekey}\\]:`, 'm');
       if (!fnDefRegex.test(docText)) {
         const fnDefinition = CitationEngine.formatFootnoteDefinition(
           ref,
-          project?.citationStyle || 'apa7',
+          style,
           footnoteIndex
         );
         const hasTrailingNewline = docText.endsWith("\n");
         const separator = hasTrailingNewline ? "\n" : "\n\n";
         editor.replaceRange(`${separator}${fnDefinition}\n`, { line: editor.lineCount(), ch: 0 });
-      }
-    } else {
-      const bibEntry = CitationEngine.formatBibliographyEntry(
-        ref,
-        project?.citationStyle || 'apa7',
-        footnoteIndex
-      );
-      if (!docText.includes(ref.title) && !docText.includes(ref.citekey)) {
-        const hasTrailingNewline = docText.endsWith("\n");
-        const separator = hasTrailingNewline ? "\n" : "\n\n";
-        editor.replaceRange(`${separator}${bibEntry}\n`, { line: editor.lineCount(), ch: 0 });
       }
     }
   }
