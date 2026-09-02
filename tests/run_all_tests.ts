@@ -2,7 +2,7 @@
 import './obsidian_mock';
 
 console.log("================================================================================");
-console.log("  EXECUTING ALL REPOSITORY TEST SUITES (29 SUITES)                           ");
+console.log("  EXECUTING ALL REPOSITORY TEST SUITES (30 SUITES)                           ");
 console.log("================================================================================");
 
 import './bx_mutation_test';
@@ -34,3 +34,4 @@ import './test_all_insertion_entry_points';
 import './test_v101_release_invariants';
 import './test_dismissed_lints_cache_and_file_scope';
 import './test_state_preservation';
+import './test_library_import_bib_ris_xml';

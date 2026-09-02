@@ -13,5 +13,6 @@ export * from './MoveToCollectionModal';
 export * from './ConfirmModal';
 export * from './PromptModal';
 export * from './UsageLocationsModal';
+export * from './LibraryImportModal';
 export * from './editorSuggest';
 export * from './settingsTab';

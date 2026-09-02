@@ -1,0 +1,9 @@
+// Library Import Modal Styles
+.citation-import-preview-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background-color: var(--background-secondary);
+  border-radius: var(--radius-s);
+  padding: 6px;
+}

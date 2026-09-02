@@ -16,6 +16,7 @@ import { CitationNotesModal } from '../CitationNotesModal';
 import { CollectionTransferModal } from '../CollectionTransferModal';
 import { CollectionEditorModal } from '../CollectionEditorModal';
 import { MoveToCollectionModal } from '../MoveToCollectionModal';
+import { LibraryImportModal } from '../LibraryImportModal';
 import { CitationCardRenderer } from '../CitationCardRenderer';
 import { Logger } from '../../backend/logger';
 
@@ -40,11 +41,6 @@ export class CitationManagerView extends ItemView {
   private isFilterIslandOpen: boolean = false;
   private currentSubpanel: ActiveSubpanel = 'citations';
 
-  // Bibliography state
-  private bibSelectedStyle: CitationStyle = 'apa7';
-  private bibOnlyCited: boolean = false;
-  private bibExportPath: string = "";
-
   private lastActiveMarkdownView: MarkdownView | null = null;
   private lastActiveFilePath: string | null = null;
   private statusMessage: string = "Ready";
@@ -62,7 +58,6 @@ export class CitationManagerView extends ItemView {
     this.projectIndexer = projectIndexer;
     this.settings = settings;
     this.onSaveSettings = onSaveSettings;
-    this.bibSelectedStyle = settings.defaultCitationStyle;
   }
 
   getViewType(): string {
@@ -965,6 +960,69 @@ export class CitationManagerView extends ItemView {
         }
       }
     });
+
+    // 4. Import Citations Library (.bib, .ris, .xml)
+    const libCard = wrapper.createDiv({ cls: "citation-card citation-drop-card-flex" });
+    libCard.createEl("h5", { text: "Import Library File (.bib, .ris, .xml)" });
+
+    const libDropZone = libCard.createDiv({ cls: "citation-drop-zone-spacious-full" });
+    setIcon(libDropZone.createDiv({ cls: "drop-icon" }), "folder-down");
+    libDropZone.createDiv({ cls: "drop-text-primary", text: "Drag & Drop .bib, .ris, or .xml library here" });
+    libDropZone.createDiv({ cls: "drop-text-secondary", text: "or click anywhere in this box to browse files" });
+
+    const libFileInput = libDropZone.createEl("input", {
+      type: "file",
+      attr: { accept: ".bib,.bibtex,.ris,.xml,.enw,.txt" }
+    });
+    libFileInput.style.display = "none";
+
+    libDropZone.addEventListener("click", () => libFileInput.click());
+    libFileInput.addEventListener("change", async () => {
+      if (libFileInput.files && libFileInput.files.length > 0) {
+        const file = libFileInput.files[0];
+        const content = await file.text();
+        this.openLibraryImport(content, file.name, project);
+      }
+    });
+
+    libDropZone.addEventListener("dragover", (e) => {
+      e.preventDefault();
+      libDropZone.addClass("drag-over");
+    });
+    libDropZone.addEventListener("dragleave", () => libDropZone.removeClass("drag-over"));
+    libDropZone.addEventListener("drop", async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      libDropZone.removeClass("drag-over");
+      if (e.dataTransfer?.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        const content = await file.text();
+        this.openLibraryImport(content, file.name, project);
+      }
+    });
+
+    const pasteLibBtn = libCard.createEl("button", {
+      cls: "citation-small-btn citation-btn-secondary full-width-btn",
+      text: "Paste Raw Library Snippet..."
+    });
+    pasteLibBtn.style.marginTop = "6px";
+    pasteLibBtn.addEventListener("click", () => {
+      this.openLibraryImport("", "", project);
+    });
+  }
+
+  private openLibraryImport(content: string, filename: string, project: ProjectRecord | null) {
+    new LibraryImportModal(
+      this.app,
+      project,
+      this.storageManager,
+      async (count: number) => {
+        this.currentSubpanel = 'citations';
+        await this.refreshData();
+      },
+      content,
+      filename
+    ).open();
   }
 
   // --- SUBPANEL 3: BIBLIOGRAPHY SUBPANEL ---
@@ -973,24 +1031,6 @@ export class CitationManagerView extends ItemView {
 
     // 1. Export Action Card (Situated at the Top Above the Monospace Preview)
     const exportCard = wrapper.createDiv({ cls: "citation-card" });
-
-    // Standard Selection Row
-    const standardRow = exportCard.createDiv({ cls: "citation-format-controls-row" });
-    standardRow.style.marginBottom = "8px";
-    const stdWrap = standardRow.createDiv({ cls: "format-control-item" });
-    stdWrap.createSpan({ cls: "control-label", text: "Citation Standard:" });
-    const stdSelect = stdWrap.createEl("select", { cls: "dropdown mini-dropdown" });
-    stdSelect.createEl("option", { value: "apa7", text: "APA 7th Edition" });
-    stdSelect.createEl("option", { value: "ieee", text: "IEEE" });
-    stdSelect.createEl("option", { value: "harvard", text: "Harvard" });
-    stdSelect.createEl("option", { value: "chicago", text: "Chicago" });
-    stdSelect.createEl("option", { value: "vancouver", text: "Vancouver" });
-    stdSelect.value = this.bibSelectedStyle || project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
-    stdSelect.addEventListener("change", () => {
-      this.bibSelectedStyle = stdSelect.value as CitationStyle;
-      previewBox.setText(this.getFormattedBib(project));
-    });
-
     const btnRow = exportCard.createDiv({ cls: "citation-export-actions-row" });
 
     // Copy to Clipboard
@@ -1048,7 +1088,7 @@ export class CitationManagerView extends ItemView {
   }
 
   private getFormattedBib(project: ProjectRecord | null): string {
-    const style = this.bibSelectedStyle || project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
+    const style = project?.citationStyle || this.settings.defaultCitationStyle || 'apa7';
     const virtualProj: ProjectRecord = (project && project.id !== ALL_PROJECTS_ID) ? project : {
       id: ALL_PROJECTS_ID,
       name: "All Citations",

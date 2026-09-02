@@ -108,11 +108,6 @@ export interface CitationManagerSettings {
   blockDeletionIfInUse: boolean;
   debugMode: boolean;
   lastExportSettings?: ProjectExportSettings;
-  lastBibliographySettings?: {
-    style?: CitationStyle;
-    onlyCited?: boolean;
-    exportPath?: string;
-  };
 }
 
 export const ALL_PROJECTS_ID = "__ALL_REFERENCES__";

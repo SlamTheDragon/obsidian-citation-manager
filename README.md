@@ -93,7 +93,7 @@ flowchart LR
 ### 1. Ingestion
 - **Identifier Resolution**: Type any DOI (`10.1145/3313831`), arXiv ID (`2301.07041`), ISBN (`9780465050659`), or URL into the search bar. Press **Enter** to fetch metadata from CrossRef, arXiv, or OpenLibrary.
 - **PDF Dropzone**: Drag and drop a PDF file into the editor modal. The plugin scans binary streams for embedded DOIs, compares them with metadata, and confirms matches.
-- **BibTeX Import**: Import single entries or complete `.bib` files into `.references/`.
+- **Citation Library File Import (.bib, .ris, .xml)**: Drag and drop or paste complete reference libraries exported from **Zotero**, **Mendeley**, **EndNote**, or **Google Scholar**. Supports standard BibTeX (`.bib`), Research Information Systems (`.ris`), and EndNote XML (`.xml`) with batch parsing and 1-click library import directly into the active bucket.
 
 ### 2. Buckets and Collections
 - **Citation Buckets**: Represent distinct research scopes such as chapters or papers.
@@ -181,7 +181,7 @@ This project is licensed under the [MIT License](./LICENSE).
 ## Development
 
 ```bash
-# Run all 28 automated test suites
+# Run all 30 automated test suites
 bun run test:all
 
 # Build production bundle with Bun (auto-compiles modular Sass)
