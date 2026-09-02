@@ -17,8 +17,8 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
     const line = editor.getLine(cursor.line);
     const beforeCursor = line.slice(0, cursor.ch);
 
-    // Trigger on [@query or \cite{query or ((query
-    const match = beforeCursor.match(/(?:\[@|\\cite\{|\(\()([a-zA-Z0-9_\s-]*)$/);
+    // Trigger on [@query, [^query, @query, \cite{query, or ((query
+    const match = beforeCursor.match(/(?:\[@|\[\^|@|\\cite\{|\(\()([a-zA-Z0-9_\s-]*)$/);
     if (!match) return null;
 
     return {
@@ -61,7 +61,11 @@ export class CitationEditorSuggest extends EditorSuggest<ReferenceMetadata> {
     if (!this.context) return;
     const editor = this.context.editor;
     const project = this.plugin.getActiveProject();
-    const isFootnote = Boolean(this.plugin.settings.enableFootnoteMode) || project?.inBodyFormat === ('footnote' as any);
+    
+    const lineBefore = editor.getLine(this.context.start.line).slice(0, this.context.start.ch + 2);
+    const isExplicitFootnote = lineBefore.endsWith('[^');
+
+    const isFootnote = isExplicitFootnote || Boolean(this.plugin.settings.enableFootnoteMode) || project?.inBodyFormat === ('footnote' as any);
     const style = project?.citationStyle || this.plugin.settings.defaultCitationStyle || 'apa7';
     const format: InBodyFormat = isFootnote
       ? ('footnote' as any)

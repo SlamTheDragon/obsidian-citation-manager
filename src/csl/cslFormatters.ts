@@ -742,17 +742,51 @@ export class CSLFormatters {
     return lines.join("\n\n");
   }
 
-  private static getLastName(authorStr: string): string {
-    const clean = authorStr.trim();
+  /**
+   * Normalizes capitalization for author surnames and words, preserving particles (van, von, de, etc.)
+   */
+  static capitalizeName(name: string): string {
+    if (!name) return "";
+    const clean = name.trim();
     if (this.isCorporateAuthor(clean)) return clean;
-    if (clean.includes(",")) return clean.split(",")[0].trim();
-    const parts = clean.split(/\s+/);
-    if (parts.length > 1) {
-      const lastToken = parts[parts.length - 1].replace(/\./g, "");
-      if (/^(jr|sr|ii|iii|iv|v)$/i.test(lastToken)) {
-        return `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
+    
+    const particleRegex = /^(van|von|der|den|de|del|da|du|la|le)\s+/i;
+    const hasParticle = particleRegex.test(clean);
+
+    if (clean === clean.toLowerCase() || (clean === clean.toUpperCase() && clean.length > 2)) {
+      return clean.replace(/\b([a-z\p{L}]+)/gu, (match) => {
+        if (/^(van|von|der|den|de|del|da|du|la|le)$/i.test(match)) {
+          return match.toLowerCase();
+        }
+        return match.charAt(0).toUpperCase() + match.slice(1).toLowerCase();
+      });
+    }
+    if (/^[a-z]/.test(clean) && !hasParticle) {
+      return clean.charAt(0).toUpperCase() + clean.slice(1);
+    }
+    return clean;
+  }
+
+  private static getLastName(authorStr: string): string {
+    const clean = (authorStr || "").trim();
+    if (!clean) return "Unknown";
+    if (this.isCorporateAuthor(clean)) return clean;
+    let lastName = "";
+    if (clean.includes(",")) {
+      lastName = clean.split(",")[0].trim();
+    } else {
+      const parts = clean.split(/\s+/);
+      if (parts.length > 1) {
+        const lastToken = parts[parts.length - 1].replace(/\./g, "");
+        if (/^(jr|sr|ii|iii|iv|v)$/i.test(lastToken)) {
+          lastName = `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
+        } else {
+          lastName = parts[parts.length - 1];
+        }
+      } else {
+        lastName = parts[0];
       }
     }
-    return parts[parts.length - 1];
+    return this.capitalizeName(lastName);
   }
 }

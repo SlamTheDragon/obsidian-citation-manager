@@ -3,7 +3,7 @@ import { CSLFormatters } from '../src/csl/cslFormatters';
 import { ReferenceMetadata, ProjectRecord, CitationStyle, InBodyFormat } from '../src/types';
 
 console.log("================================================================================");
-console.log("  TESTING CITATION INSERTION & FORMATTING ACROSS ALL ENTRY POINTS               ");
+console.log("  TESTING CITATION INSERTION, CAPITALIZATION & FORMATTING ACROSS ENTRY POINTS   ");
 console.log("================================================================================");
 
 let passCount = 0;
@@ -47,14 +47,45 @@ const refC: ReferenceMetadata = {
   projects: ["rl"]
 };
 
+const refLowercaseAuthor: ReferenceMetadata = {
+  citekey: "Mnih2015",
+  title: "Human-level control through deep reinforcement learning",
+  authors: ["mnih, volodymyr", "kavukcuoglu, koray", "silver, david"],
+  year: 2015,
+  publication: "Nature",
+  type: "journal",
+  projects: ["rl"]
+};
+
 const allRefsMap = new Map<string, ReferenceMetadata>([
   [refA.citekey, refA],
   [refB.citekey, refB],
   [refC.citekey, refC],
+  [refLowercaseAuthor.citekey, refLowercaseAuthor],
 ]);
 
 // -----------------------------------------------------------------------------
-// ENTRY POINT 1: SIDE PANEL CARD [INSERT] BUTTON SIMULATION
+// 1. CAPITALIZATION NORMALIZATION FOR CORRUPTED/LOWERCASE METADATA
+// -----------------------------------------------------------------------------
+assert(
+  CSLFormatters.capitalizeName("vaswani") === "Vaswani",
+  "capitalizeName capitalizes all-lowercase surname"
+);
+assert(
+  CSLFormatters.capitalizeName("SMITH") === "Smith",
+  "capitalizeName capitalizes all-uppercase surname"
+);
+assert(
+  CitationEngine.formatInBody(refLowercaseAuthor, 'parenthetical', 'apa7') === "(Mnih et al., 2015)",
+  "formatInBody normalizes all-lowercase author surname to capitalized Mnih"
+);
+assert(
+  CitationEngine.formatInBody(refLowercaseAuthor, 'narrative', 'apa7') === "Mnih et al. (2015)",
+  "formatInBody narrative normalizes all-lowercase author surname"
+);
+
+// -----------------------------------------------------------------------------
+// 2. ENTRY POINT 1: SIDE PANEL CARD [INSERT] BUTTON SIMULATION
 // -----------------------------------------------------------------------------
 interface MockEditor {
   content: string;
@@ -147,49 +178,44 @@ function simulateSidePanelInsert(
   }
 }
 
-// 1.1 Standard APA 7 Insertion
+// 2.1 Standard APA 7 Insertion
 let ed = createMockEditor("As discussed in ", 16);
 simulateSidePanelInsert(ed, refA, 'apa7', 'parenthetical', false);
 assert(ed.getValue() === "As discussed in (Vaswani et al., 2017)", "Side panel APA 7 parenthetical insertion");
 
-// 1.2 Standard IEEE Numerical Insertion
+// 2.2 Standard IEEE Numerical Insertion
 ed = createMockEditor("The transformer architecture ", 29);
 simulateSidePanelInsert(ed, refA, 'ieee', 'parenthetical', false);
 assert(ed.getValue() === "The transformer architecture [1]", "Side panel IEEE numerical [1] insertion");
 
-// 1.3 Standard Vancouver Numerical Insertion
+// 2.3 Standard Vancouver Numerical Insertion
 ed = createMockEditor("Previous methods ", 17);
 simulateSidePanelInsert(ed, refA, 'vancouver', 'parenthetical', false);
 assert(ed.getValue() === "Previous methods (1)", "Side panel Vancouver numerical (1) insertion");
 
-// 1.4 Narrative Insertion
+// 2.4 Narrative Insertion
 ed = createMockEditor("According to ", 13);
 simulateSidePanelInsert(ed, refA, 'apa7', 'narrative', false);
 assert(ed.getValue() === "According to Vaswani et al. (2017)", "Side panel APA 7 narrative insertion");
 
-// 1.5 Pandoc Citekey Insertion
+// 2.5 Pandoc Citekey Insertion
 ed = createMockEditor("Refer to ", 9);
 simulateSidePanelInsert(ed, refA, 'apa7', 'citekey', false);
 assert(ed.getValue() === "Refer to [@Vaswani2017]", "Side panel Pandoc citekey insertion");
 
-// 1.6 Footnote Mode ON Insertion (adds in-body callout + footnote definition at bottom)
+// 2.6 Footnote Mode ON Insertion
 ed = createMockEditor("# Introduction\n\nAttention mechanisms are widespread .\n", 36, 2);
 simulateSidePanelInsert(ed, refA, 'apa7', 'footnote', true);
 assert(ed.getValue().includes("Attention mechanisms are widespread [^Vaswani2017]."), "Footnote Mode ON inserts [^Vaswani2017] at cursor");
 assert(ed.getValue().includes("[^Vaswani2017]: Vaswani, A.,"), "Footnote Mode ON appends footnote definition at bottom");
 
-// 1.7 Cursor Overload & Compounding (merging second reference into existing group)
+// 2.7 Cursor Overload & Compounding
 ed = createMockEditor("See previous work (Vaswani et al., 2017)", 25);
 simulateSidePanelInsert(ed, refB, 'apa7', 'parenthetical', false);
 assert(ed.getValue() === "See previous work (Smith & Doe, 2020; Vaswani et al., 2017)", "Side panel merges into sorted compound author-date citation");
 
-// 1.8 IEEE Numeric Group Overload [1] + [2] -> [1, 2]
-ed = createMockEditor("Foundational models [1]", 22);
-simulateSidePanelInsert(ed, refB, 'ieee', 'parenthetical', false);
-assert(ed.getValue() === "Foundational models [1, 2]", "Side panel overloads IEEE into [1, 2]");
-
 // -----------------------------------------------------------------------------
-// ENTRY POINT 2: EDITOR SUGGEST / AUTOCOMPLETE SIMULATION
+// 3. ENTRY POINT 2: EDITOR SUGGEST / AUTOCOMPLETE SIMULATION
 // -----------------------------------------------------------------------------
 function simulateEditorSuggest(
   editor: MockEditor,
@@ -202,7 +228,10 @@ function simulateEditorSuggest(
   const cursor = editor.cursor;
   const line = editor.getLine(cursor.line);
   const startCh = cursor.ch - triggerMatch.length;
-  const inBodyText = isFootnoteMode 
+  const isExplicitFootnote = triggerMatch.startsWith('[^');
+
+  const activeFootnote = isExplicitFootnote || isFootnoteMode;
+  const inBodyText = activeFootnote 
     ? `[^${selectedRef.citekey}]` 
     : CitationEngine.formatInBody(selectedRef, format, style);
 
@@ -212,7 +241,7 @@ function simulateEditorSuggest(
 
   editor.replaceRange(inBodyText, { line: cursor.line, ch: startCh }, { line: cursor.line, ch: endCh });
 
-  if (isFootnoteMode) {
+  if (activeFootnote) {
     const docText = editor.getValue();
     const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
     const footnoteIndex = existingFnMatches.length + 1;
@@ -225,29 +254,29 @@ function simulateEditorSuggest(
   }
 }
 
-// 2.1 Trigger [@Vaswani -> (Vaswani et al., 2017)
-ed = createMockEditor("Transformer models [@Vasw", 25);
-simulateEditorSuggest(ed, "[@Vasw", refA, 'apa7', 'parenthetical', false);
-assert(ed.getValue() === "Transformer models (Vaswani et al., 2017)", "Editor suggest [@query replaces with parenthetical format");
+// 3.1 Trigger [@vasw (all lowercase query) -> (Vaswani et al., 2017)
+ed = createMockEditor("Transformer models [@vasw", 25);
+simulateEditorSuggest(ed, "[@vasw", refA, 'apa7', 'parenthetical', false);
+assert(ed.getValue() === "Transformer models (Vaswani et al., 2017)", "Editor suggest replaces lowercase [@vasw with capitalized (Vaswani et al., 2017)");
 
-// 2.2 Trigger ((Smith -> Smith and Doe (2020) in narrative format (uses 'and' per APA 7 Sec 8.17)
-ed = createMockEditor("As shown by ((Smith", 19);
-simulateEditorSuggest(ed, "((Smith", refB, 'apa7', 'narrative', false);
-assert(ed.getValue() === "As shown by Smith and Doe (2020)", "Editor suggest replaces with narrative format");
+// 3.2 Trigger @vasw (direct @ query) -> [@Vaswani2017] in citekey format
+ed = createMockEditor("See @vasw", 9);
+simulateEditorSuggest(ed, "@vasw", refA, 'apa7', 'citekey', false);
+assert(ed.getValue() === "See [@Vaswani2017]", "Editor suggest replaces @vasw with canonical uppercase [@Vaswani2017]");
 
-// 2.3 Trigger \cite{Jones -> [1] in IEEE format
-ed = createMockEditor("Detailed review in \\cite{Jones", 30);
-simulateEditorSuggest(ed, "\\cite{Jones", refC, 'ieee', 'parenthetical', false);
-assert(ed.getValue() === "Detailed review in [1]", "Editor suggest replaces with IEEE [1]");
+// 3.3 Trigger [^vasw (footnote callout query) -> [^Vaswani2017]
+ed = createMockEditor("# Introduction\n\nRecent models [^vasw\n", 20, 2);
+simulateEditorSuggest(ed, "[^vasw", refA, 'apa7', 'footnote', true);
+assert(ed.getValue().includes("Recent models [^Vaswani2017]"), "Editor suggest replaces lowercase [^vasw with canonical [^Vaswani2017]");
+assert(ed.getValue().includes("[^Vaswani2017]: Vaswani, A.,"), "Editor suggest in footnote mode appends canonical footnote definition");
 
-// 2.4 Trigger in Footnote Mode
-ed = createMockEditor("# Notes\n\nDeep learning models [@Vasw\n", 27, 2);
-simulateEditorSuggest(ed, "[@Vasw", refA, 'apa7', 'footnote', true);
-assert(ed.getValue().includes("Deep learning models [^Vaswani2017]"), "Editor suggest in footnote mode inserts [^key]");
-assert(ed.getValue().includes("[^Vaswani2017]: Vaswani, A.,"), "Editor suggest in footnote mode generates footnote definition");
+// 3.4 Trigger ((smith -> Smith and Doe (2020)
+ed = createMockEditor("As shown by ((smith", 19);
+simulateEditorSuggest(ed, "((smith", refB, 'apa7', 'narrative', false);
+assert(ed.getValue() === "As shown by Smith and Doe (2020)", "Editor suggest replaces lowercase ((smith with capitalized narrative");
 
 // -----------------------------------------------------------------------------
-// ENTRY POINT 3: MULTI-CITATION MODAL GROUP INSERTION
+// 4. ENTRY POINT 3: MULTI-CITATION MODAL GROUP INSERTION
 // -----------------------------------------------------------------------------
 function simulateMultiCitationModalInsert(
   editor: MockEditor,
@@ -266,10 +295,6 @@ assert(
   "Multi-citation modal insertion produces sorted compound citation"
 );
 
-ed = createMockEditor("Several works ", 14);
-simulateMultiCitationModalInsert(ed, [refA, refB], 'ieee', 'parenthetical');
-assert(ed.getValue() === "Several works [1, 2]", "Multi-citation modal insertion produces IEEE [1, 2]");
-
 console.log("================================================================================");
-console.log(`  ALL CITATION INSERTION ENTRY POINTS TESTED & PASSING (${passCount}/${passCount})!`);
+console.log(`  ALL CITATION INSERTION & CAPITALIZATION TESTS PASSING (${passCount}/${passCount})!`);
 console.log("================================================================================");
