@@ -444,6 +444,173 @@ export class FormatPropagator {
    * Unifies sequential indexing (e.g. IEEE [1..N], Vancouver (1..N)) across all documents
    * and exports both compiled notes and a master bibliography to the configured publication folder.
    */
+  /**
+   * Universal document compiler that transforms all source citation formats (citekeys, footnotes, parentheticals, numerics)
+   * into the target citation standard, respecting Footnote Mode authority and coalescing overloaded/compounded references.
+   */
+  static compileDocumentText(
+    content: string,
+    allReferences: Map<string, ReferenceMetadata>,
+    style: CitationStyle = 'apa7',
+    isFootnoteMode: boolean = false,
+    indexMap: Map<string, number> = new Map(),
+    cleanFootnotes: boolean = true
+  ): string {
+    let result = content;
+
+    // 1. Resolve Pandoc Citekey Groups (e.g. [@Smith2020; @Jones2021] or [@Smith2020])
+    const bracketGroupRegex = /\[([^\]]*@[\p{L}\p{N}_:.\-]+[^\]]*)\]/gu;
+    const singleCitekeyRegex = /@([\p{L}\p{N}_:.\-]+)/gu;
+
+    result = result.replace(bracketGroupRegex, (fullMatch, groupInner) => {
+      const keysInGroup: string[] = [];
+      let kMatch: RegExpExecArray | null;
+      singleCitekeyRegex.lastIndex = 0;
+      while ((kMatch = singleCitekeyRegex.exec(groupInner)) !== null) {
+        keysInGroup.push(kMatch[1]);
+      }
+
+      if (keysInGroup.length === 0) return fullMatch;
+
+      const refsInGroup = keysInGroup.map(k => allReferences.get(k)).filter(Boolean) as ReferenceMetadata[];
+      if (refsInGroup.length === 0) return fullMatch;
+
+      if (isFootnoteMode) {
+        return refsInGroup.map(r => `[^${r.citekey}]`).join('');
+      }
+
+      if (style === 'ieee') {
+        const numbers = keysInGroup.map(k => indexMap.get(k)).filter(n => n !== undefined) as number[];
+        numbers.sort((a, b) => a - b);
+        return numbers.length > 0 ? `[${Array.from(new Set(numbers)).join(', ')}]` : fullMatch;
+      } else if (style === 'vancouver') {
+        const numbers = keysInGroup.map(k => indexMap.get(k)).filter(n => n !== undefined) as number[];
+        numbers.sort((a, b) => a - b);
+        return numbers.length > 0 ? `(${Array.from(new Set(numbers)).join(', ')})` : fullMatch;
+      } else {
+        return CitationEngine.formatMultiInBody(refsInGroup, 'parenthetical', style);
+      }
+    });
+
+    // 2. Resolve Multi-Citation / Single-Citation Parentheticals (e.g. (Smith, 2020; Jones, 2021))
+    const parenGroupRegex = /\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\)/gu;
+    result = result.replace(parenGroupRegex, (fullMatch, groupInner) => {
+      const entries = groupInner.split(';').map(s => s.trim()).filter(Boolean);
+      const matchedRefs: ReferenceMetadata[] = [];
+
+      for (const entry of entries) {
+        const yearMatch = entry.match(/\b(19\d{2}|20\d{2})\b/);
+        if (yearMatch) {
+          const year = yearMatch[1];
+          const authorPart = entry.slice(0, entry.indexOf(year)).replace(/[,:\(\)]/g, '').trim().toLowerCase();
+          const parts = authorPart.split(/[\s,&]+/).filter(Boolean).map(p => p.replace(/[^a-z0-9]/g, ''));
+          for (const r of allReferences.values()) {
+            if (r.year && String(r.year) === year && r.authors && r.authors.length > 0) {
+              const firstAuthor = r.authors[0].split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (parts.includes(firstAuthor) && !matchedRefs.some(ex => ex.citekey === r.citekey)) {
+                matchedRefs.push(r);
+                break;
+              }
+            }
+          }
+        }
+      }
+
+      if (matchedRefs.length === 0) return fullMatch;
+
+      if (isFootnoteMode) {
+        return matchedRefs.map(r => `[^${r.citekey}]`).join('');
+      }
+
+      if (style === 'ieee') {
+        const numbers = matchedRefs.map(r => indexMap.get(r.citekey)).filter(n => n !== undefined) as number[];
+        numbers.sort((a, b) => a - b);
+        return numbers.length > 0 ? `[${Array.from(new Set(numbers)).join(', ')}]` : fullMatch;
+      } else if (style === 'vancouver') {
+        const numbers = matchedRefs.map(r => indexMap.get(r.citekey)).filter(n => n !== undefined) as number[];
+        numbers.sort((a, b) => a - b);
+        return numbers.length > 0 ? `(${Array.from(new Set(numbers)).join(', ')})` : fullMatch;
+      } else {
+        return CitationEngine.formatMultiInBody(matchedRefs, 'parenthetical', style);
+      }
+    });
+
+    // 3. Resolve Individual Footnote Callouts [^key]
+    for (const [key, ref] of allReferences.entries()) {
+      const globalIdx = indexMap.get(key) || 1;
+      let inBodyFormatted = "";
+      if (isFootnoteMode) {
+        inBodyFormatted = `[^${key}]`;
+      } else if (style === 'ieee') {
+        inBodyFormatted = `[${globalIdx}]`;
+      } else if (style === 'vancouver') {
+        inBodyFormatted = `(${globalIdx})`;
+      } else {
+        inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical', style);
+      }
+
+      const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+      result = result.replace(footnoteCallRegex, inBodyFormatted);
+
+      if (!isFootnoteMode && cleanFootnotes) {
+        const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
+        result = result.replace(fnCleanRegex, "");
+      } else if (isFootnoteMode) {
+        const expectedDef = CitationEngine.formatFootnoteDefinition(ref, style, globalIdx);
+        const fnDefRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$`, 'm');
+        if (fnDefRegex.test(result)) {
+          result = result.replace(fnDefRegex, expectedDef);
+        }
+      }
+    }
+
+    // 4. Overloaded Adjacent Citation Coalescing across all standards
+    if (!isFootnoteMode) {
+      if (style === 'ieee') {
+        // Coalesce [1][2] or [1] [2] or [1, 2][3] -> [1, 2, 3]
+        const adjacentBracketRegex = /\[(\d+(?:\s*,\s*\d+)*)\](?:\s*\[(\d+(?:\s*,\s*\d+)*)\])+/g;
+        result = result.replace(adjacentBracketRegex, (match) => {
+          const numMatches = match.match(/\d+/g) || [];
+          const numbers = Array.from(new Set(numMatches.map(n => parseInt(n)))).sort((a, b) => a - b);
+          return `[${numbers.join(', ')}]`;
+        });
+      } else if (style === 'vancouver') {
+        // Coalesce (1)(2) or (1) (2) or (1, 2)(3) -> (1, 2, 3)
+        const adjacentParenRegex = /\((\d+(?:\s*,\s*\d+)*)\)(?:\s*\((d+(?:\s*,\s*\d+)*)\))+/g;
+        result = result.replace(adjacentParenRegex, (match) => {
+          const numMatches = match.match(/\d+/g) || [];
+          const numbers = Array.from(new Set(numMatches.map(n => parseInt(n)))).sort((a, b) => a - b);
+          return `(${numbers.join(', ')})`;
+        });
+      } else {
+        // Author-Date Parenthetical Coalescing: (Smith, 2020)(Jones, 2021) -> (Jones, 2021; Smith, 2020)
+        const adjacentAuthorDateRegex = /\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\)(?:\s*\(([^)]*(?:19\d{2}|20\d{2})[^)]*)\))+/g;
+        result = result.replace(adjacentAuthorDateRegex, (match) => {
+          const innerMatches = Array.from(match.matchAll(/\(([^)]+)\)/g)).map(m => m[1]);
+          const allEntries = innerMatches.flatMap(s => s.split(';').map(e => e.trim())).filter(Boolean);
+          const uniqueEntries = Array.from(new Set(allEntries));
+          uniqueEntries.sort((a, b) => {
+            const nameA = a.replace(/^\(/, '').trim();
+            const nameB = b.replace(/^\(/, '').trim();
+            return nameA.localeCompare(nameB);
+          });
+          return `(${uniqueEntries.join('; ')})`;
+        });
+      }
+    } else {
+      // Footnote Mode Adjacent Coalescing: [^1] [^2] -> [^1][^2]
+      result = result.replace(/(\[\^[^\s\]]+\])\s+(\[\^[^\s\]]+\])/g, '$1$2');
+    }
+
+    result = result.replace(/\n{3,}$/, "\n\n");
+    return result;
+  }
+
+  /**
+   * Batch compiles all files in a project for Global Scope publication.
+   * Unifies sequential indexing (e.g. IEEE [1..N], Vancouver (1..N)) across all documents
+   * and exports both compiled notes and a master bibliography to the configured publication folder.
+   */
   static async compileProjectCorpus(
     app: App,
     getProjectFiles: (project: ProjectRecord | null, refFolder: string) => TFile[],
@@ -460,6 +627,8 @@ export class FormatPropagator {
     if (!(await app.vault.adapter.exists(pubDir))) {
       await app.vault.adapter.mkdir(pubDir);
     }
+
+    const isFootnoteMode = !!project.enableFootnoteMode;
 
     // 1. Build Global Reference Order across all project files
     const globalCitekeyOrder: string[] = [];
@@ -488,13 +657,9 @@ export class FormatPropagator {
 
     // Sort global citekeys alphabetically if Author-Date (APA, Harvard, Chicago)
     if (style === 'apa7' || style === 'harvard' || style === 'chicago') {
-      globalCitekeyOrder.sort((a, b) => {
-        const refA = allReferences.get(a);
-        const refB = allReferences.get(b);
-        const nameA = refA?.authors?.[0] || a;
-        const nameB = refB?.authors?.[0] || b;
-        return nameA.localeCompare(nameB);
-      });
+      const refObjs = globalCitekeyOrder.map(k => allReferences.get(k)).filter(Boolean) as ReferenceMetadata[];
+      const sorted = CitationEngine.sortReferences(refObjs, style);
+      globalCitekeyOrder.splice(0, globalCitekeyOrder.length, ...sorted.map(r => r.citekey));
     }
 
     // Create Global Index Map
@@ -506,85 +671,25 @@ export class FormatPropagator {
     let compiledFilesCount = 0;
 
     // 2. Batch Compile and write every file into publication folder
-    const bracketGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:.\-]+[^\]]*)\]/g;
-    const singleCitekeyRegex = /@([a-zA-Z0-9_:.\-]+)/g;
-
     for (const file of files) {
       let content = fileContents.get(file.path);
       if (content === undefined) continue;
 
-      // Replace multi-citation or single-citation bracket groups
-      content = content.replace(bracketGroupRegex, (fullMatch, groupInner) => {
-        const keysInGroup: string[] = [];
-        let kMatch: RegExpExecArray | null;
-        singleCitekeyRegex.lastIndex = 0;
-        while ((kMatch = singleCitekeyRegex.exec(groupInner)) !== null) {
-          keysInGroup.push(kMatch[1]);
-        }
-
-        if (keysInGroup.length === 0) return fullMatch;
-
-        if (style === 'ieee') {
-          const numbers = keysInGroup.map(k => globalIndexMap.get(k)).filter(n => n !== undefined);
-          return numbers.length > 0 ? `[${numbers.join(', ')}]` : fullMatch;
-        } else if (style === 'vancouver') {
-          const numbers = keysInGroup.map(k => globalIndexMap.get(k)).filter(n => n !== undefined);
-          return numbers.length > 0 ? `(${numbers.join(', ')})` : fullMatch;
-        } else {
-          // APA 7 / Harvard / Chicago
-          const formattedParts = keysInGroup.map(k => {
-            const ref = allReferences.get(k);
-            if (!ref) return null;
-            const inBody = CitationEngine.formatInBody(ref, 'parenthetical');
-            return inBody.replace(/^\(|\)$/g, '');
-          }).filter(Boolean);
-          return formattedParts.length > 0 ? `(${formattedParts.join('; ')})` : fullMatch;
-        }
-      });
-
-      // Replace individual footnotes and clean footnote definitions
-      for (const [key, globalIdx] of globalIndexMap.entries()) {
-        const ref = allReferences.get(key);
-        if (!ref) continue;
-
-        let inBodyFormatted = "";
-        if (style === 'ieee') {
-          inBodyFormatted = `[${globalIdx}]`;
-        } else if (style === 'vancouver') {
-          inBodyFormatted = `(${globalIdx})`;
-        } else {
-          inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
-        }
-
-        const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-        content = content.replace(footnoteCallRegex, inBodyFormatted);
-
-        // Strip local footnote definition
-        const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
-        content = content.replace(fnCleanRegex, "");
-      }
-
-      // Sanitization: Coalesce accidental adjacent bracket collisions for Markdown/PDF/Docs export
-      if (style === 'ieee') {
-        const adjacentBracketRegex = /\[(\d+(?:\s*,\s*\d+)*)\]\s*\[(\d+(?:\s*,\s*\d+)*)\]/g;
-        while (adjacentBracketRegex.test(content)) {
-          content = content.replace(adjacentBracketRegex, '[$1, $2]');
-        }
-      } else if (style === 'vancouver') {
-        const adjacentParenRegex = /\((\d+(?:\s*,\s*\d+)*)\)\s*\((\d+(?:\s*,\s*\d+)*)\)/g;
-        while (adjacentParenRegex.test(content)) {
-          content = content.replace(adjacentParenRegex, '($1, $2)');
-        }
-      }
-
-      content = content.replace(/\n{3,}$/, "\n\n");
+      let compiled = FormatPropagator.compileDocumentText(
+        content,
+        allReferences,
+        style,
+        isFootnoteMode,
+        globalIndexMap,
+        true
+      );
 
       // Strip citation manager frontmatter from exported publication note
-      content = FormatPropagator.cleanExportFrontmatter(content);
+      compiled = FormatPropagator.cleanExportFrontmatter(compiled);
 
       // Write compiled file to publication folder
       const targetOutPath = normalizePath(`${pubDir}/${file.name}`);
-      await app.vault.adapter.write(targetOutPath, content);
+      await app.vault.adapter.write(targetOutPath, compiled);
       compiledFilesCount++;
     }
 
@@ -600,5 +705,4 @@ export class FormatPropagator {
       bibliographyPath: bibFilePath
     };
   }
-
 }

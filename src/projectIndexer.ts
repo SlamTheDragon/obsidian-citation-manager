@@ -1039,6 +1039,17 @@ export class ProjectIndexer {
     return FormatPropagator.cleanExportFrontmatter(content);
   }
 
+  static compileDocumentText(
+    content: string,
+    allReferences: Map<string, ReferenceMetadata>,
+    style: CitationStyle = 'apa7',
+    isFootnoteMode: boolean = false,
+    indexMap: Map<string, number> = new Map(),
+    cleanFootnotes: boolean = true
+  ): string {
+    return FormatPropagator.compileDocumentText(content, allReferences, style, isFootnoteMode, indexMap, cleanFootnotes);
+  }
+
   async compileProjectCorpus(
     project: ProjectRecord,
     allReferences: Map<string, ReferenceMetadata>,

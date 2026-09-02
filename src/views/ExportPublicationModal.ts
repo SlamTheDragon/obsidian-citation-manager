@@ -343,70 +343,27 @@ export class ExportPublicationModal extends Modal {
       localIndexMap.set(key, idx + 1);
     });
 
-    // 2. Format multi-citation and single-citation bracket groups
-    content = content.replace(bracketGroupRegex, (fullMatch, groupInner) => {
-      const keysInGroup: string[] = [];
-      let kMatch: RegExpExecArray | null;
-      singleCitekeyRegex.lastIndex = 0;
-      while ((kMatch = singleCitekeyRegex.exec(groupInner)) !== null) {
-        keysInGroup.push(kMatch[1]);
-      }
+    const isFootnoteMode = !!this.project?.enableFootnoteMode;
 
-      if (keysInGroup.length === 0) return fullMatch;
+    let compiled = ProjectIndexer.compileDocumentText(
+      content,
+      this.allReferences,
+      this.selectedStyle,
+      isFootnoteMode,
+      localIndexMap,
+      this.cleanFootnotes
+    );
 
-      if (this.selectedStyle === 'ieee') {
-        const numbers = keysInGroup.map(k => localIndexMap.get(k)).filter(n => n !== undefined);
-        return numbers.length > 0 ? `[${numbers.join(', ')}]` : fullMatch;
-      } else if (this.selectedStyle === 'vancouver') {
-        const numbers = keysInGroup.map(k => localIndexMap.get(k)).filter(n => n !== undefined);
-        return numbers.length > 0 ? `(${numbers.join(', ')})` : fullMatch;
-      } else {
-        const formattedParts = keysInGroup.map(k => {
-          const ref = this.allReferences.get(k);
-          if (!ref) return null;
-          const inBody = CitationEngine.formatInBody(ref, 'parenthetical');
-          return inBody.replace(/^\(|\)$/g, '');
-        }).filter(Boolean);
-        return formattedParts.length > 0 ? `(${formattedParts.join('; ')})` : fullMatch;
-      }
-    });
-
-    // 3. Format individual footnotes and clean definitions
-    for (const key of usedCitekeys) {
-      const ref = this.allReferences.get(key);
-      if (!ref) continue;
-
-      const localIdx = localIndexMap.get(key) || 1;
-      let inBodyFormatted = "";
-      if (this.selectedStyle === 'ieee') {
-        inBodyFormatted = `[${localIdx}]`;
-      } else if (this.selectedStyle === 'vancouver') {
-        inBodyFormatted = `(${localIdx})`;
-      } else {
-        inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
-      }
-
-      const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-      content = content.replace(footnoteCallRegex, inBodyFormatted);
-
-      if (this.cleanFootnotes) {
-        const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
-        content = content.replace(fnCleanRegex, "");
-      }
-    }
-
-    content = content.replace(/\n{3,}$/, "\n\n");
-
-    // 3. Append Bibliography
+    // 3. Append Bibliography if requested
     if (this.appendBib && usedCitekeys.length > 0) {
       const targetRefs = usedCitekeys.map(k => this.allReferences.get(k)!).filter(Boolean);
       const bibText = CitationEngine.generateBibliography(targetRefs, this.selectedStyle, "References");
       const bibHeadingRegex = /##\s*References[\s\S]*$/i;
-      content = content.replace(bibHeadingRegex, "").trimEnd();
-      content += `\n\n${bibText}\n`;
+      compiled = compiled.replace(bibHeadingRegex, "").trimEnd();
+      compiled += `\n\n${bibText}\n`;
     }
 
-    return content;
+    return compiled;
   }
 
   onClose() {

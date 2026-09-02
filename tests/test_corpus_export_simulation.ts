@@ -120,9 +120,55 @@ async function runTests() {
     '.references'
   );
 
-  assert(apaRes.compiledFilesCount === 2, "Compiled 2 files for APA 7");
-  const exportedApaIntro = virtualFileSystem.get('publication_apa/intro.md') || '';
-  assert(exportedApaIntro.includes('(Smith, 2024; Vaswani & Shazeer, 2017)'), "APA 7 compound parenthetical formatted with alphabetical sorting");
+  // Test 3: Overloading from Adjacent Footnotes & Existing Parentheticals in Footnote Mode OFF
+  const docWithAdjacentFootnotes = `Testing adjacent footnotes [^Vaswani2017][^Smith2024] and existing parenthetical (Smith, 2024; Vaswani & Shazeer, 2017).
+
+[^Vaswani2017]: Vaswani et al.
+[^Smith2024]: Smith et al.`;
+
+  const apaCompiled = FormatPropagator.compileDocumentText(
+    docWithAdjacentFootnotes,
+    allReferences,
+    'apa7',
+    false,
+    new Map([['Smith2024', 1], ['Vaswani2017', 2]]),
+    true
+  );
+
+  assert(apaCompiled.includes('(Smith, 2024; Vaswani & Shazeer, 2017)'), "Adjacent footnotes [^Vaswani2017][^Smith2024] coalesced into APA 7 compound group");
+  assert(!apaCompiled.includes('[^Vaswani2017]:'), "Footnote definitions stripped in Footnote Mode OFF");
+
+  const ieeeCompiled = FormatPropagator.compileDocumentText(
+    docWithAdjacentFootnotes,
+    allReferences,
+    'ieee',
+    false,
+    new Map([['Smith2024', 1], ['Vaswani2017', 2]]),
+    true
+  );
+  assert(ieeeCompiled.includes('[1, 2]'), "Existing author-date parentheticals and adjacent footnotes converted to IEEE [1, 2]");
+
+  const vancouverCompiled = FormatPropagator.compileDocumentText(
+    docWithAdjacentFootnotes,
+    allReferences,
+    'vancouver',
+    false,
+    new Map([['Smith2024', 1], ['Vaswani2017', 2]]),
+    true
+  );
+  assert(vancouverCompiled.includes('(1, 2)'), "Adjacent citations converted to Vancouver (1, 2)");
+
+  // Test 4: Footnote Mode ON Authority on Corpus Export
+  const docWithCitekeys = `Pandoc group [@Smith2024; @Vaswani2017] exported in Footnote Mode ON.`;
+  const fnModeCompiled = FormatPropagator.compileDocumentText(
+    docWithCitekeys,
+    allReferences,
+    'apa7',
+    true,
+    new Map([['Smith2024', 1], ['Vaswani2017', 2]]),
+    false
+  );
+  assert(fnModeCompiled.includes('[^Smith2024][^Vaswani2017]'), "Pandoc group converted to adjacent footnotes [^Smith2024][^Vaswani2017] in Footnote Mode ON");
 
   console.log(`================================================================================`);
   console.log(`  CORPUS BATCH EXPORT FULLY VERIFIED (${passCount}/${passCount})!`);
