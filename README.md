@@ -1,19 +1,29 @@
-﻿# Obsidian Citation Manager & Reference Studio
+# Obsidian Citation Manager & Reference Studio
 
-A project-centric, local-first academic reference manager, live citation indexer, linter, and publication export studio for Obsidian with `.references` folder integration.
+[![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue.svg)](https://obsidian.md)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Academic Standards](https://img.shields.io/badge/CSL-APA7%20%7C%20IEEE%20%7C%20Harvard%20%7C%20Chicago%20%7C%20Vancouver-green.svg)](https://citationstyles.org/)
 
----
-
-## Architectural Principles
-
-1. **Local-First & Markdown Native**: All reference metadata notes are stored as individual Markdown files inside `.references/` (or your configured root directory). No proprietary databases, no cloud dependencies, and zero vendor lock-in.
-2. **Authoritative Academic Standards**: Citation styles (APA 7th Edition, IEEE, Harvard, Chicago Author-Date, Vancouver) govern both in-body citations and reference lists consistently per project bucket.
-3. **Non-Destructive Footnote Mode**: Obsidian Footnote Mode (`[^citekey]`) is a toggleable companion setting for seamless Obsidian Footnotes plugin drafting, automatically converted to clean target standards upon publication export without data loss.
-4. **Interactive Diagnostic Telemetry**: Continuous background indexing detects formatting mismatches, style anomalies, and unresolved citation stubs with unified one-click resolution workflows.
+A project-centric, local-first academic reference manager, live citation indexer, diagnostic linter, and publication export studio for [Obsidian](https://obsidian.md) with `.references/` folder integration.
 
 ---
 
-## Complete UX Pathways & Entry Points
+## Key Highlights
+
+- **Local-First & Markdown Native**: All reference records and literature notes are stored as individual Markdown files in `.references/` with YAML frontmatter. No proprietary databases, no external servers, and zero vendor lock-in.
+- **5 Authoritative Academic Standards**: Complete CSL implementations for **APA 7th Edition**, **IEEE [1]**, **Harvard (Author Year)**, **Chicago 17th Author-Date**, and **Vancouver (1)**.
+- **Citation Buckets**: Group manuscripts and notes by project scope. Each bucket governs its own citation standard, document linkages, and sequential numeric indexing.
+- **Citation Collections & Groups**: Organize literature across buckets with color-coded collections and combinatorial multi-facet filtering.
+- **In-Editor Autocomplete**: Dynamic popup suggestions triggered seamlessly by typing `[@`, `\cite{`, or `((`.
+- **Diagnostic Linter Engine**: Continuous real-time scanning for orphan footnote definitions, unformatted citations, and style inconsistencies with one-click batch repairs.
+- **Plugin Integrations**:
+  - **Obsidian Footnotes Companion**: Toggle non-destructive `[^citekey]` footnote drafting that cleanly bakes into target citation styles upon export.
+  - **Surfing & Web Viewer In-App Browser**: Open primary study sources (DOI, arXiv, URL) directly in Surfing tabs or Obsidian's native Web Viewer.
+- **Publication Export Studio**: Sanitize internal tags, bake footnotes into final citation tokens, generate sorted master bibliographies, and export pristine standalone manuscripts.
+
+---
+
+## Architectural Workflow
 
 ```mermaid
 flowchart TD
@@ -23,29 +33,28 @@ flowchart TD
         I3["<b>PDF Dropzone</b><br/>Drag &amp; drop PDF binary &rarr; Auto DOI scan &amp; verification"]
     end
 
-    subgraph SCOPE["2. Bucket & Scope Management"]
-        B1["<b>Project Buckets</b><br/>Isolate literature by manuscript / thesis scope"]
-        B2["<b>Citation Standard Selector</b><br/>Authoritative style per bucket (APA, IEEE, Vancouver, etc.)"]
+    subgraph SCOPE["2. Buckets & Collections"]
+        B1["<b>Citation Buckets</b><br/>Isolate literature &amp; styles by manuscript scope"]
+        B2["<b>Citation Collections</b><br/>Cross-bucket tags &amp; two-column transfer modal"]
         B3["<b>Linked Documents Bar</b><br/>One-click note linking &amp; frontmatter binding"]
     end
 
-    subgraph DRAFTING["3. Drafting & Insertion Entry Points"]
+    subgraph DRAFTING["3. Drafting & In-Text Insertion"]
         D1["<b>In-Editor Autocomplete</b><br/>Type <code>[@</code>, <code>\\cite{</code>, or <code>((</code> anywhere"]
         D2["<b>Insert Citation Modal</b><br/>Fuzzy search &bull; Shift+Click multi-citation chips"]
-        D3["<b>Editor Context Menu</b><br/>Right click &rarr; Insert Citation..."]
-        D4["<b>Command Palette</b><br/><code>Ctrl/Cmd + P</code> &rarr; Quick Add / Insert"]
+        D3["<b>Footnote Mode Toggle</b><br/>Draft non-destructively with <code>[^citekey]</code>"]
     end
 
-    subgraph DIAGNOSTICS["4. Link Diagnostics & Linter Engine"]
-        L1["<b>Real-time Metric Tiles</b><br/>Total, In-Text Instances, Used vs. Unused"]
-        L2["<b>Inconsistency Detection</b><br/>Format mismatches, nth footnote styles, unresolved stubs"]
-        L3["<b>Fix Inconsistencies Modal</b><br/>&bull; Batch format correction<br/>&bull; + Create Reference Entry<br/>&bull; Purge stub from note<br/>&bull; Dismiss warning to cache"]
+    subgraph DIAGNOSTICS["4. Diagnostics & Linter Engine"]
+        L1["<b>Real-time Telemetry</b><br/>Total, In-Text Instances, Used vs. Unused"]
+        L2["<b>Interactive Accordion</b><br/>Format mismatches, orphan definitions, unlinked stubs"]
+        L3["<b>Fix Inconsistencies Modal</b><br/>Checkbox batch fixes, stub creation, and purging"]
     end
 
-    subgraph EXPORT["5. Bibliography & Publication Studio"]
-        E1["<b>Live Monospace Preview</b><br/>Displays formatted reference list for cited items"]
-        E2["<b>Quick Actions Island</b><br/>&bull; Copy to Clipboard<br/>&bull; Append <code>## References</code> to Note"]
-        E3["<b>Publication Export Studio</b><br/>&bull; Footnote-to-citation conversion<br/>&bull; Frontmatter sanitation<br/>&bull; Clean compiled output"]
+    subgraph EXPORT["5. Publication Studio & Browser"]
+        E1["<b>Surfing &amp; Web Viewer</b><br/>Click card to browse DOI/arXiv inside Obsidian"]
+        E2["<b>Live Bibliography Preview</b><br/>Real-time sorted reference list for cited items"]
+        E3["<b>Export for Publication</b><br/>Footnote conversion, frontmatter cleaning &amp; export"]
     end
 
     INGESTION --> SCOPE
@@ -56,49 +65,102 @@ flowchart TD
 
 ---
 
-## Detailed UX Walkthrough
+## Installation
 
-### 1. Ingestion & Attachment
-* **Instant Identifier Resolution**: Type any DOI (`10.1145/...`), arXiv ID (`2301.07041`), ISBN, or URL into the top search bar and press **Enter** to instantly fetch full metadata and open the editor modal.
-* **PDF Attachment & DOI Verification**: When editing or adding a citation, drag and drop a PDF file into the dropzone. The engine scans the PDF binary for an embedded DOI and compares it against your citation metadata:
-  * `✓ DOI Match Verified`: Confirms the PDF matches the citation record.
-  * `⚠ DOI Mismatch Warning`: Flags if the PDF's internal DOI differs from the entry.
-  * `ℹ DOI Status`: Notes if no DOI was detectable in scanned OCR text.
+### Method 1: Obsidian Community Plugins (Recommended upon release)
+1. Open Obsidian **Settings** &rarr; **Community plugins**.
+2. Turn off **Restricted mode**.
+3. Click **Browse** and search for `Citation Manager`.
+4. Click **Install**, then click **Enable**.
 
-### 2. Drafting & In-Text Insertion
-* **In-Editor Autocomplete (`EditorSuggest`)**: Trigger citation suggestions anywhere in your active document by typing:
-  * `[@` (Pandoc citekey trigger)
-  * `\cite{` (LaTeX trigger)
-  * `((` (Double parenthesis trigger)
-* **Multi-Citation Insert Modal**: Press `Ctrl/Cmd + Shift + I` (or use context menu) to open the multi-citation picker. Hold `Shift` while clicking to assemble multiple citations into a single group (e.g. `(Spielberg et al., 2016; Thériault et al., 2022)` or `[^Spielberg2016][^Thériault2022]`).
+### Method 2: Obsidian BRAT (Beta Reviewers Auto-update Tester)
+1. Install and enable the [BRAT plugin](https://github.com/TfTHacker/obsidian42-brat).
+2. Open BRAT settings &rarr; **Add Beta plugin**.
+3. Enter repository URL: `https://github.com/SlamTheDragon/obsidian-citation-manager`.
+4. Click **Add Plugin** and enable **Citation Manager** under Community Plugins.
 
-### 3. Footnote Mode & Synchronization
-* **Global Companion Setting**: Managed under **Obsidian Settings -> Citation Manager -> Enable Obsidian Footnote Mode**.
-* **Global Propagation**: Toggling Footnote Mode on or off automatically synchronizes all registered notes across your vault, converting between `[^citekey]` footnotes and your bucket's native in-body citation standard.
+### Method 3: Manual Installation
+1. Download the latest `main.js`, `manifest.json`, and `styles.css` from the [Releases](https://github.com/SlamTheDragon/obsidian-citation-manager/releases) page.
+2. Inside your Obsidian vault, navigate to `.obsidian/plugins/`.
+3. Create a folder named `citation-manager/` and move the three downloaded files into it.
+4. Reload Obsidian and enable **Citation Manager** in **Settings &rarr; Community plugins**.
 
-### 4. Citation Diagnostics & Automated Linter
-* **Status Bar & Diagnostics Panel**: The panel header and status bar highlight active diagnostic warnings across linked notes.
-* **Consolidated Unresolved Stubs**: Unresolved citekeys in-text and their bottom footnote definitions are consolidated into a single actionable incident.
-* **Action Decision Tree in Fix Modal**:
-  * **`+ Create Entry`**: Launches the reference editor pre-filled with the citekey and note definition text.
-  * **`Purge`**: Strips the invalid reference token and definition from the note.
-  * **`Dismiss`**: Silences the warning, persisting the state to `.references/.cache/dismissed_lints.json`.
+---
 
-### 5. Publication Export Studio
-* **Sanitized Standalone Output**: Strips internal frontmatter keys (`projects`, etc.), converts `[^citekey]` footnote tokens into authoritative academic citations, appends the complete formatted bibliography, and exports the clean note to your designated publication directory.
+## Comprehensive Feature Guide
+
+### 1. Literature Ingestion
+* **Instant Identifier Resolution**: Type any DOI (`10.1145/3313831`), arXiv ID (`2301.07041`), ISBN (`9780465050659`), or URL into the top search bar and press **Enter** to fetch metadata from CrossRef, arXiv, or OpenLibrary.
+* **PDF Dropzone & DOI Extraction**: Drag and drop a PDF binary directly into the editor modal. The plugin scans binary header streams for embedded DOIs, validates them against your metadata, and provides match confirmation.
+* **BibTeX Import**: Import single entries or entire `.bib` files directly into `.references/`.
+
+### 2. Citation Buckets vs. Collections
+* **Citation Buckets**: Represent distinct research scopes (e.g., *Conference Paper A*, *Dissertation Chapter 2*).
+  - Buckets own the **Citation Standard** (e.g., IEEE vs. APA 7).
+  - Buckets govern sequential numeric indexing across all attached documents.
+  - Edit bucket names directly from the **Bucket Settings** subpanel.
+* **Citation Collections**: Represent organizational groups independent of manuscript scope (e.g., *Methodology*, *Key Review*).
+  - Filter references using the animated 4-state filter island.
+  - Move citations between collections with the two-column transfer modal.
+
+### 3. Drafting & In-Text Insertion
+* **In-Editor Suggestions**: Type `[@`, `\cite{`, or `((` to open the inline autocomplete popup. Selecting an entry formats it according to your bucket's active style.
+* **Multi-Citation Insert Modal (`Ctrl/Cmd + Shift + I`)**: Search references and hold `Shift` to select multiple papers. The engine automatically compounds them into a sorted citation group:
+  - APA 7: `(Carter et al., 2026; Li, 2024; Norman, 2013)`
+  - IEEE: `[1, 3, 5]`
+  - Vancouver: `(1, 3, 5)`
+
+### 4. Diagnostic Linter Engine
+* **Continuous Integrity Verification**: Scans linked documents in the background for:
+  - In-text citation format deviations (e.g., manual author-year syntax when IEEE is active).
+  - Orphan footnote definitions missing in-text callouts.
+  - Unresolved citation citekeys.
+* **Batch Fix Modal**: Review issues in expandable accordions with diff previews. Check individual boxes or use **Select All** to apply fixes in one click.
+
+### 5. Plugin Integrations
+
+#### Obsidian Footnotes Companion
+- **Toggle Location**: **Settings &rarr; Citation Manager &rarr; Enable Obsidian Footnote Mode**.
+- **Drafting Workflow**: When enabled, inserting a citation places a clean footnote callout (e.g. `[^Vaswani2017]`) at the cursor and appends a canonical footnote definition at the bottom of the document.
+- **Export Synchronization**: When exporting for publication, footnote callouts are automatically converted back into the target style (e.g. `[1]` for IEEE or `(Vaswani et al., 2017)` for APA 7) without altering your draft notes.
+
+#### Surfing & Web Viewer Integration
+- **Card-as-Link Navigation**: Citation cards with a DOI, arXiv ID, or URL have full external source linking.
+- **Surfing Community Plugin**: If the [Surfing](https://github.com/PKM-er/Obsidian-Surfing) plugin is active, clicking a citation card automatically opens the study in a new in-app browser tab.
+- **Obsidian Web Viewer**: If Obsidian's core Web Viewer is enabled, links open within Obsidian's native webview.
+- **Default Browser Fallback**: If neither is active, links open smoothly in your default web browser.
 
 ---
 
 ## Commands & Shortcuts
 
-| Command | Action |
-| :--- | :--- |
-| `Citation Manager: Open Panel` | Opens the Citation Studio right sidebar. |
-| `Citation Manager: Insert Citation` | Opens the search and multi-select insert modal. |
-| `Citation Manager: Quick Add Citation` | Quick identifier prompt (DOI / arXiv / URL / ISBN / Manual). |
-| `Citation Manager: Link File to Bucket` | Associates the active note with the selected project bucket. |
-| `Citation Manager: Generate Project Bibliography` | Opens the Bibliography preview and export subpanel. |
-| `Citation Manager: Export for Publication` | Opens the publication export modal for active note. |
+| Command | Default Shortcut | Description |
+| :--- | :--- | :--- |
+| `Citation Manager: Open Panel` | `Alt + C` | Toggles the Citation Studio sidebar view. |
+| `Citation Manager: Insert Citation` | `Ctrl/Cmd + Shift + I` | Opens the search and multi-select insert modal. |
+| `Citation Manager: Quick Add Citation` | — | Opens the quick identifier resolution prompt. |
+| `Citation Manager: Link File to Bucket` | — | Links the active document to the active bucket. |
+| `Citation Manager: Generate Bibliography` | — | Displays formatted bibliography modal for active bucket. |
+| `Citation Manager: Resync Notes in Bucket` | — | Batch verifies and catches up footnote definitions. |
+| `Citation Manager: Export for Publication` | — | Opens the publication export and sanitization studio. |
+
+---
+
+## Technical Documentation
+
+Detailed architectural specifications and developer guides are available in the [`docs/`](./docs/) directory:
+
+- [**Architecture & Subsystem Decomposition**](./docs/ARCHITECTURE.md): Class responsibilities, data flow diagrams, and lifecycle state machines.
+- [**Schema Specifications**](./docs/SCHEMAS.md): Strict TypeScript and JSON schemas for reference metadata, buckets, collections, and settings.
+- [**CSL Academic Standards Guide**](./docs/STANDARDS.md): Authoritative formatting rules for APA 7, IEEE, Harvard, Chicago, and Vancouver.
+- [**Diagnostic Linter Rules**](./docs/LINTING_RULES.md): Catalog of diagnostic checks, severity ratings, and automated repair transforms.
+- [**Contributing Guide**](./docs/CONTRIBUTING.md): Environment setup, Bun test suite matrix, and code standards.
+
+---
+
+## License
+
+This project is licensed under the [MIT License](./LICENSE).
 
 ---
 

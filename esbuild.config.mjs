@@ -12,9 +12,10 @@ Obsidian Citation Manager & Reference Studio
 
 const prod = process.argv[2] === "production";
 const builtins = module.builtinModules;
-const VAULT_PLUGIN_DIR = "G:/.shortcut-targets-by-id/1KzQrYkpxXhOtOkGJQIWYD76vThVypZOR/Heavy Pilots/.obsidian/plugins/citation-manager";
+const VAULT_PLUGIN_DIR = process.env.OBSIDIAN_VAULT_DIR || process.env.VAULT_PLUGIN_DIR || null;
 
 function copyToVault() {
+  if (!VAULT_PLUGIN_DIR) return;
   try {
     const parentDir = path.dirname(VAULT_PLUGIN_DIR);
     if (fs.existsSync(parentDir)) {

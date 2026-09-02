@@ -271,7 +271,7 @@ export class CitationManagerView extends ItemView {
     const select = topBar.createEl("select", { cls: "dropdown citation-project-dropdown" });
     const allOpt = select.createEl("option", { 
       value: ALL_PROJECTS_ID, 
-      text: `All Citations (${this.referencesMap.size})` 
+      text: `All Buckets (${this.referencesMap.size})` 
     });
     if (!project || this.settings.activeProjectId === ALL_PROJECTS_ID) {
       allOpt.selected = true;
@@ -1093,8 +1093,30 @@ export class CitationManagerView extends ItemView {
 
     // Format & Style Controls Card (if in project)
     if (project) {
-      const controlsCard = wrapper.createDiv({ cls: "citation-card" });
-      controlsCard.createEl("h5", { text: "Bucket Settings: " + project.name });
+      const controlsCard = wrapper.createDiv({ cls: "citation-card citation-bucket-settings-card" });
+      controlsCard.createEl("h5", { text: "Bucket Settings" });
+
+      // Bucket Name Edit Field
+      const nameRow = controlsCard.createDiv({ cls: "citation-bucket-name-edit-row" });
+      nameRow.createSpan({ cls: "control-label", text: "Bucket Name:" });
+      const nameInput = nameRow.createEl("input", {
+        type: "text",
+        cls: "citation-bucket-name-input",
+        value: project.name
+      });
+      nameInput.placeholder = "Bucket name...";
+      nameInput.title = "Edit bucket name";
+      nameInput.addEventListener("change", async () => {
+        const newName = nameInput.value.trim();
+        if (newName && newName !== project.name) {
+          project.name = newName;
+          await this.onSaveSettings();
+          await this.refreshData();
+          new Notice(`Renamed bucket to "${newName}"`);
+        } else {
+          nameInput.value = project.name;
+        }
+      });
 
       const row = controlsCard.createDiv({ cls: "citation-format-controls-row" });
 

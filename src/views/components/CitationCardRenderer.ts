@@ -24,6 +24,51 @@ export class CitationCardRenderer {
     return null;
   }
 
+  public static async openSourceUrl(app: App, url: string) {
+    if (!url) return;
+
+    try {
+      // 1. Surfing Community Plugin Integration
+      const surfingPlugin = (app as any).plugins?.plugins?.['surfing'];
+      if (surfingPlugin) {
+        if (typeof surfingPlugin.openUrl === 'function') {
+          surfingPlugin.openUrl(url);
+          return;
+        }
+        const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
+        if (leaf) {
+          await leaf.setViewState({
+            type: 'surfing-view',
+            active: true,
+            state: { url }
+          });
+          app.workspace.revealLeaf(leaf);
+          return;
+        }
+      }
+
+      // 2. Obsidian Native Web Viewer Core Plugin Integration
+      const webViewerPlugin = (app as any).internalPlugins?.plugins?.['web-viewer'];
+      if (webViewerPlugin?.enabled) {
+        const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
+        if (leaf) {
+          await leaf.setViewState({
+            type: 'web-viewer',
+            active: true,
+            state: { url }
+          });
+          app.workspace.revealLeaf(leaf);
+          return;
+        }
+      }
+
+      // 3. Fallback: Default Browser
+      window.open(url, '_blank');
+    } catch {
+      window.open(url, '_blank');
+    }
+  }
+
   static renderCard(
     app: App,
     container: HTMLElement,
@@ -38,19 +83,19 @@ export class CitationCardRenderer {
   ) {
     const card = container.createDiv({ cls: 'citation-card' });
 
-    // Open source link when clicking on the card body
+    // Open source link when clicking on the card body (Surfing / Web Viewer / Browser)
     const sourceUrl = CitationCardRenderer.getSourceUrl(ref);
     if (sourceUrl) {
       card.addClass('has-source-link');
       card.title = `Click to open source: ${sourceUrl}`;
-      card.addEventListener('click', (e: MouseEvent) => {
+      card.addEventListener('click', async (e: MouseEvent) => {
         const target = e.target as HTMLElement | null;
         if (!target) return;
         // Ignore clicks on buttons, pills, dropdowns, accordions, etc.
         if (target.closest('button, .citation-usage-pill, .citation-notes-pill, .citation-card-notes-accordion, input, select, a')) {
           return;
         }
-        window.open(sourceUrl, '_blank');
+        await CitationCardRenderer.openSourceUrl(app, sourceUrl);
       });
     }
 
@@ -59,7 +104,7 @@ export class CitationCardRenderer {
     cardHeader.createSpan({ cls: 'citation-type-badge type-' + ref.type, text: ref.type.toUpperCase() });
     cardHeader.createSpan({ cls: 'citation-key-pill', text: ref.citekey });
 
-    // Usage & Notes badges
+    // Usage badge
     const occurrences = stats?.referenceUsageMap[ref.citekey] || [];
     if (occurrences.length > 0) {
       const usageBadge = cardHeader.createSpan({
@@ -73,20 +118,6 @@ export class CitationCardRenderer {
       });
     } else {
       cardHeader.createSpan({ cls: 'citation-usage-pill unused', text: 'Unused' });
-    }
-
-    if (ref.userNotes && ref.userNotes.trim()) {
-      const notesPill = cardHeader.createSpan({
-        cls: 'citation-notes-pill',
-        text: 'Notes',
-        title: 'Click to view/edit literature notes'
-      });
-      notesPill.addEventListener('click', (e) => {
-        e.stopPropagation();
-        new CitationNotesModal(app, ref, storageManager, async () => {
-          await onRefresh();
-        }).open();
-      });
     }
 
     // Title & Authors
@@ -113,7 +144,7 @@ export class CitationCardRenderer {
       const accBody = accordion.createDiv({ cls: 'citation-card-notes-body' });
       accBody.style.display = 'none';
 
-      const previewLength = 30;
+      const previewLength = 60;
       const previewText = cleanNotes.length > previewLength ? (cleanNotes.slice(0, previewLength) + '...') : cleanNotes;
 
       const snippetEl = accBody.createDiv({
@@ -137,12 +168,10 @@ export class CitationCardRenderer {
           accordion.addClass('open');
           accBody.style.display = 'block';
           setIcon(accChevron, 'chevron-down');
-          accTitle.style.display = 'none';
         } else {
           accordion.removeClass('open');
           accBody.style.display = 'none';
           setIcon(accChevron, 'chevron-right');
-          accTitle.style.display = 'inline';
         }
       });
     }

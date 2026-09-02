@@ -196,4 +196,18 @@ assert(CitationCardRenderer.getSourceUrl({ ...arxivRef, doi: undefined, arxivId:
 assert(CitationCardRenderer.getSourceUrl(bookRef) === "https://openlibrary.org/isbn/9780465050659", "Book URL resolves correctly");
 assert(CitationCardRenderer.getSourceUrl({ citekey: 'Empty2026', type: 'other', title: 'Draft', authors: [], year: 2026, dateAdded: '', dateModified: '', projects: [] }) === null, "Empty source resolves to null");
 
-console.log("\nALL MULTI-SOURCE RESOLVER & PLUGIN PROPAGATION TESTS PASSED (23/23)!");
+// Test Surfing integration simulation
+let surfingLeafOpened = false;
+const mockSurfingApp: any = {
+  plugins: {
+    plugins: {
+      surfing: {
+        openUrl: (url: string) => { surfingLeafOpened = true; }
+      }
+    }
+  }
+};
+await CitationCardRenderer.openSourceUrl(mockSurfingApp, "https://doi.org/10.1145/3313831.3376722");
+assert(surfingLeafOpened === true, "openSourceUrl routes to Surfing plugin when active");
+
+console.log("\nALL MULTI-SOURCE RESOLVER & PLUGIN PROPAGATION TESTS PASSED (24/24)!");
