@@ -1,3 +1,4 @@
+import process from 'process';
 import { App } from 'obsidian';
 import { StorageManager } from '../src/backend/storageManager';
 import { CitationCardRenderer } from '../src/frontend/CitationCardRenderer';
@@ -94,6 +95,7 @@ const refWithPdf: ReferenceMetadata = {
   authors: ["Vaswani, A."],
   year: 2017,
   type: "conference",
+  projects: [],
   pdfAttachment: ".references/attachments/Vaswani2017.pdf"
 };
 
@@ -118,6 +120,8 @@ const mockWarnings: LintWarning[] = [
     filePath: "Note1.md",
     fileName: "Note1.md",
     lineNumber: 10,
+    lineContent: "According to [@Vaswani2017]",
+    rawCitation: "[@Vaswani2017]",
     type: "format_mismatch",
     severity: "warning",
     message: "Format mismatch",
@@ -128,6 +132,8 @@ const mockWarnings: LintWarning[] = [
     filePath: "Note2.md",
     fileName: "Note2.md",
     lineNumber: 15,
+    lineContent: "[^Vaswani2017]: Orphan reference",
+    rawCitation: "[^Vaswani2017]: Orphan reference",
     type: "orphan_definition",
     severity: "warning",
     message: "Orphan definition",
@@ -138,6 +144,8 @@ const mockWarnings: LintWarning[] = [
     filePath: "Note3.md",
     fileName: "Note3.md",
     lineNumber: 20,
+    lineContent: "Cited [@Unknown2024]",
+    rawCitation: "[@Unknown2024]",
     type: "unresolved",
     severity: "error",
     message: "Unresolved reference"

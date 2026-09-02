@@ -16,6 +16,9 @@ export class StorageManager {
     this.settings = settings;
   }
 
+  /**
+   * Ensures necessary root, attachments, and cache directories exist in vault
+   */
   async ensureStorageDirectories(): Promise<void> {
     const rootPath = normalizePath(this.settings.referencesFolder);
     const attachmentsPath = normalizePath(`${rootPath}/attachments`);
@@ -42,6 +45,9 @@ export class StorageManager {
     } catch {}
   }
 
+  /**
+   * Loads all dismissed lint warning identifiers from .references/.cache/dismissed_lints.json
+   */
   async loadDismissedLints(): Promise<Set<string>> {
     await this.ensureStorageDirectories();
     const cacheFile = normalizePath(`${this.settings.referencesFolder}/.cache/dismissed_lints.json`);
@@ -59,6 +65,10 @@ export class StorageManager {
     return new Set();
   }
 
+  /**
+   * Persists a dismissed lint warning identifier to disk cache
+   * @param id Fully qualified warning ID scoped by file path and line
+   */
   async saveDismissedLint(id: string): Promise<void> {
     await this.ensureStorageDirectories();
     const current = await this.loadDismissedLints();
@@ -71,6 +81,9 @@ export class StorageManager {
     }
   }
 
+  /**
+   * Deletes the dismissed lints cache file and restores all hidden diagnostics
+   */
   async clearDismissedLints(): Promise<void> {
     await this.ensureStorageDirectories();
     const cacheFile = normalizePath(`${this.settings.referencesFolder}/.cache/dismissed_lints.json`);
@@ -81,6 +94,9 @@ export class StorageManager {
     } catch {}
   }
 
+  /**
+   * Scans .references/*.md files and loads all literature reference metadata into memory
+   */
   async loadAllReferences(): Promise<Map<string, ReferenceMetadata>> {
     await this.ensureStorageDirectories();
     const references = new Map<string, ReferenceMetadata>();

@@ -951,7 +951,7 @@ export class ProjectIndexer {
 
     const relevantReferenceKeys = project.id === ALL_PROJECTS_ID 
       ? Array.from(allReferences.keys())
-      : (project.referenceIds.length > 0 ? project.referenceIds : Array.from(allReferences.keys()));
+      : ((project.referenceIds && project.referenceIds.length > 0) ? project.referenceIds : Array.from(allReferences.keys()));
 
     const totalReferences = relevantReferenceKeys.length;
     let usedReferencesCount = 0;

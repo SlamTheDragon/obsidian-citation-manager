@@ -1049,7 +1049,7 @@ export class CitationManagerView extends ItemView {
   private renderStatsSubpanel(container: HTMLElement, project: ProjectRecord | null) {
     const wrapper = container.createDiv({ cls: "citation-subpanel-fullheight" });
 
-    // 1. Metric Tiles & Status Indicators (Rendered at the top)
+    // GROUP 1: [STATS] - Metric Summary Tiles
     if (this.stats) {
       const statsGrid = wrapper.createDiv({ cls: "citation-stats-grid" });
 
@@ -1063,8 +1063,136 @@ export class CitationManagerView extends ItemView {
       createStatCard("In-Text Instances", this.stats.totalCitationsInFiles);
       createStatCard("Used Citations", this.stats.usedReferencesCount, "success");
       createStatCard("Unused Citations", this.stats.unusedReferencesCount, "muted");
+    }
 
-      // Single Unified Hybrid Container with Switchable Bottom Tabs
+    // GROUP 2: [BUCKET SETTINGS] - Format & Bucket Configuration Card
+    if (project) {
+      const controlsCard = wrapper.createDiv({ cls: "citation-card citation-bucket-settings-card" });
+      controlsCard.createEl("h5", { text: "Bucket Settings" });
+
+      // Bucket Name Edit Field
+      const nameRow = controlsCard.createDiv({ cls: "citation-bucket-name-edit-row" });
+      nameRow.createSpan({ cls: "control-label", text: "Bucket Name:" });
+      const nameInput = nameRow.createEl("input", {
+        type: "text",
+        cls: "citation-bucket-name-input",
+        value: project.name
+      });
+      nameInput.placeholder = "Bucket name...";
+      nameInput.title = "Edit bucket name";
+      nameInput.addEventListener("change", async () => {
+        const newName = nameInput.value.trim();
+        if (newName && newName !== project.name) {
+          project.name = newName;
+          await this.onSaveSettings();
+          await this.refreshData();
+          new Notice(`Renamed bucket to "${newName}"`);
+        } else {
+          nameInput.value = project.name;
+        }
+      });
+
+      const row = controlsCard.createDiv({ cls: "citation-format-controls-row" });
+
+      // Single Unified Citation Standard Dropdown
+      const formatWrap = row.createDiv({ cls: "format-control-item" });
+      formatWrap.createSpan({ cls: "control-label", text: "Citation Standard:" });
+      const formatSelect = formatWrap.createEl("select", { cls: "dropdown mini-dropdown" });
+      formatSelect.createEl("option", { value: "apa7_parenthetical", text: "APA 7 (Author, Year)" });
+      formatSelect.createEl("option", { value: "apa7_narrative", text: "APA 7 Narrative Author (Year)" });
+      formatSelect.createEl("option", { value: "ieee", text: "IEEE [1]" });
+      formatSelect.createEl("option", { value: "harvard", text: "Harvard (Author Year)" });
+      formatSelect.createEl("option", { value: "chicago", text: "Chicago (Author Year)" });
+      formatSelect.createEl("option", { value: "vancouver", text: "Vancouver (1)" });
+      formatSelect.createEl("option", { value: "citekey", text: "Pandoc Citekey [@key]" });
+
+      // Calculate current value
+      let currentVal = "apa7_parenthetical";
+      if (project.inBodyFormat === 'citekey') currentVal = "citekey";
+      else if (project.inBodyFormat === 'narrative') currentVal = "apa7_narrative";
+      else if (project.citationStyle === 'ieee') currentVal = "ieee";
+      else if (project.citationStyle === 'harvard') currentVal = "harvard";
+      else if (project.citationStyle === 'chicago') currentVal = "chicago";
+      else if (project.citationStyle === 'vancouver') currentVal = "vancouver";
+      else currentVal = "apa7_parenthetical";
+
+      formatSelect.value = currentVal;
+
+      formatSelect.addEventListener("change", async () => {
+        const val = formatSelect.value;
+        let newStyle: CitationStyle = 'apa7';
+        let newFormat: InBodyFormat = 'parenthetical';
+
+        if (val === 'citekey') {
+          newStyle = project.citationStyle || 'apa7';
+          newFormat = 'citekey';
+        } else if (val === 'apa7_narrative') {
+          newStyle = 'apa7';
+          newFormat = 'narrative';
+        } else if (val === 'ieee') {
+          newStyle = 'ieee';
+          newFormat = 'parenthetical';
+        } else if (val === 'harvard') {
+          newStyle = 'harvard';
+          newFormat = 'parenthetical';
+        } else if (val === 'chicago') {
+          newStyle = 'chicago';
+          newFormat = 'parenthetical';
+        } else if (val === 'vancouver') {
+          newStyle = 'vancouver';
+          newFormat = 'parenthetical';
+        } else {
+          newStyle = 'apa7';
+          newFormat = 'parenthetical';
+        }
+
+        project.citationStyle = newStyle;
+        project.inBodyFormat = newFormat;
+        await this.onSaveSettings();
+
+        new ConfirmModal(
+          this.app,
+          "Update Citations in Bucket?",
+          "Standard changed to '" + formatSelect.selectedOptions[0]?.text + "'. Synchronize citations across " + project.name + " documents?",
+          "Update Documents",
+          false,
+          async () => {
+            const mod = await this.projectIndexer.propagateFormatChange(
+              project,
+              newFormat,
+              this.referencesMap,
+              newStyle,
+              this.settings.referencesFolder,
+              this.settings.enableFootnoteMode
+            );
+            new Notice("Updated citations across " + mod + " document(s).");
+            await this.refreshData();
+          }
+        ).open();
+      });
+
+      // Resync / Catch-Up Button
+      const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
+      setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
+      syncBtn.createSpan({ text: "Resync & Catch Up Bucket Notes" });
+      syncBtn.style.marginTop = "8px";
+      syncBtn.title = "Manual catch-up tool if files were modified offline or external changes occurred";
+      syncBtn.addEventListener("click", async () => {
+        syncBtn.disabled = true;
+        const res = await this.projectIndexer.syncFootnotesInRegisteredFiles(
+          project,
+          this.referencesMap,
+          project.citationStyle || this.settings.defaultCitationStyle,
+          this.settings.referencesFolder
+        );
+        new Notice("Resynced " + res.updatedFootnotesCount + " definition(s) across " + res.updatedFilesCount + " document(s).");
+        syncBtn.disabled = false;
+        await this.refreshData();
+      });
+    }
+
+    // GROUP 3: [SUBPANEL VIEWS FOR FILE LINKS AND LINTS] - Hybrid Container with Bottom Switcher
+    if (this.stats) {
       const hybridCard = wrapper.createDiv({ cls: "citation-card citation-hybrid-card-flex" });
       const warningCount = this.stats.lintWarnings?.length || 0;
       const fileCount = project?.registeredFiles?.length || 0;
@@ -1325,132 +1453,6 @@ export class CitationManagerView extends ItemView {
       diagTabBtn.addEventListener("click", () => {
         this.statsActiveTab = 'diagnostics';
         this.renderUI();
-      });
-    }
-
-    // 2. Format & Style Controls Card (Bucket Settings, rendered below indicators)
-    if (project) {
-      const controlsCard = wrapper.createDiv({ cls: "citation-card citation-bucket-settings-card" });
-      controlsCard.createEl("h5", { text: "Bucket Settings" });
-
-      // Bucket Name Edit Field
-      const nameRow = controlsCard.createDiv({ cls: "citation-bucket-name-edit-row" });
-      nameRow.createSpan({ cls: "control-label", text: "Bucket Name:" });
-      const nameInput = nameRow.createEl("input", {
-        type: "text",
-        cls: "citation-bucket-name-input",
-        value: project.name
-      });
-      nameInput.placeholder = "Bucket name...";
-      nameInput.title = "Edit bucket name";
-      nameInput.addEventListener("change", async () => {
-        const newName = nameInput.value.trim();
-        if (newName && newName !== project.name) {
-          project.name = newName;
-          await this.onSaveSettings();
-          await this.refreshData();
-          new Notice(`Renamed bucket to "${newName}"`);
-        } else {
-          nameInput.value = project.name;
-        }
-      });
-
-      const row = controlsCard.createDiv({ cls: "citation-format-controls-row" });
-
-      // Single Unified Citation Standard Dropdown
-      const formatWrap = row.createDiv({ cls: "format-control-item" });
-      formatWrap.createSpan({ cls: "control-label", text: "Citation Standard:" });
-      const formatSelect = formatWrap.createEl("select", { cls: "dropdown mini-dropdown" });
-      formatSelect.createEl("option", { value: "apa7_parenthetical", text: "APA 7 (Author, Year)" });
-      formatSelect.createEl("option", { value: "apa7_narrative", text: "APA 7 Narrative Author (Year)" });
-      formatSelect.createEl("option", { value: "ieee", text: "IEEE [1]" });
-      formatSelect.createEl("option", { value: "harvard", text: "Harvard (Author Year)" });
-      formatSelect.createEl("option", { value: "chicago", text: "Chicago (Author Year)" });
-      formatSelect.createEl("option", { value: "vancouver", text: "Vancouver (1)" });
-      formatSelect.createEl("option", { value: "citekey", text: "Pandoc Citekey [@key]" });
-
-      // Calculate current value
-      let currentVal = "apa7_parenthetical";
-      if (project.inBodyFormat === 'citekey') currentVal = "citekey";
-      else if (project.inBodyFormat === 'narrative') currentVal = "apa7_narrative";
-      else if (project.citationStyle === 'ieee') currentVal = "ieee";
-      else if (project.citationStyle === 'harvard') currentVal = "harvard";
-      else if (project.citationStyle === 'chicago') currentVal = "chicago";
-      else if (project.citationStyle === 'vancouver') currentVal = "vancouver";
-      else currentVal = "apa7_parenthetical";
-
-      formatSelect.value = currentVal;
-
-      formatSelect.addEventListener("change", async () => {
-        const val = formatSelect.value;
-        let newStyle: CitationStyle = 'apa7';
-        let newFormat: InBodyFormat = 'parenthetical';
-
-        if (val === 'citekey') {
-          newStyle = project.citationStyle || 'apa7';
-          newFormat = 'citekey';
-        } else if (val === 'apa7_narrative') {
-          newStyle = 'apa7';
-          newFormat = 'narrative';
-        } else if (val === 'ieee') {
-          newStyle = 'ieee';
-          newFormat = 'parenthetical';
-        } else if (val === 'harvard') {
-          newStyle = 'harvard';
-          newFormat = 'parenthetical';
-        } else if (val === 'chicago') {
-          newStyle = 'chicago';
-          newFormat = 'parenthetical';
-        } else if (val === 'vancouver') {
-          newStyle = 'vancouver';
-          newFormat = 'parenthetical';
-        } else {
-          newStyle = 'apa7';
-          newFormat = 'parenthetical';
-        }
-
-        project.citationStyle = newStyle;
-        project.inBodyFormat = newFormat;
-        await this.onSaveSettings();
-
-        new ConfirmModal(
-          this.app,
-          "Update Citations in Bucket?",
-          "Standard changed to '" + formatSelect.selectedOptions[0]?.text + "'. Synchronize citations across " + project.name + " documents?",
-          "Update Documents",
-          false,
-          async () => {
-            const mod = await this.projectIndexer.propagateFormatChange(
-              project,
-              newFormat,
-              this.referencesMap,
-              newStyle,
-              this.settings.referencesFolder,
-              this.settings.enableFootnoteMode
-            );
-            new Notice("Updated citations across " + mod + " document(s).");
-            await this.refreshData();
-          }
-        ).open();
-      });
-
-      // Resync / Catch-Up Button
-      const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
-      setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
-      syncBtn.createSpan({ text: "Resync & Catch Up Bucket Notes" });
-      syncBtn.style.marginTop = "8px";
-      syncBtn.title = "Manual catch-up tool if files were modified offline or external changes occurred";
-      syncBtn.addEventListener("click", async () => {
-        syncBtn.disabled = true;
-        const res = await this.projectIndexer.syncFootnotesInRegisteredFiles(
-          project,
-          this.referencesMap,
-          project.citationStyle || this.settings.defaultCitationStyle,
-          this.settings.referencesFolder
-        );
-        new Notice("Resynced " + res.updatedFootnotesCount + " definition(s) across " + res.updatedFilesCount + " document(s).");
-        syncBtn.disabled = false;
-        await this.refreshData();
       });
     }
   }

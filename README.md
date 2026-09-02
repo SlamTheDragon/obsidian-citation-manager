@@ -149,6 +149,29 @@ Technical specifications and guides are available in the [`docs/`](./docs/) dire
 
 ---
 
+## External & Internal APIs Used
+
+The plugin integrates with the following academic data APIs and Obsidian platform interfaces:
+
+### 1. Academic Metadata Resolution APIs
+| API | Endpoint / Protocol | Purpose | Authentication |
+| :--- | :--- | :--- | :--- |
+| **CrossRef REST API** | `https://api.crossref.org/works/{doi}` | Automated DOI metadata resolution (authors, journal, volume, issue, pages, publication year). | None (Public) |
+| **arXiv Export API** | `https://export.arxiv.org/api/query?id_list={arxivId}` | Preprint metadata resolution (Atom XML parsing for authors, abstract, publication date, primary category). | None (Public) |
+| **OpenLibrary Books API** | `https://openlibrary.org/api/books?bibkeys=ISBN:{isbn}&format=json&jscmd=data` | ISBN book resolution (title, publishers, authors, page counts, cover links). | None (Public) |
+| **Dublin Core & Highwire Press Meta Parser** | Direct HTTP `fetch` | Direct webpage metadata extraction (`DC.title`, `DC.creator`, `citation_title`, `citation_author`, `citation_journal_title`, `og:title`). | None (Public) |
+
+### 2. Obsidian Platform APIs
+- **`Vault` & `DataAdapter`**: Native vault file operations, local binary PDF caching (`writeBinary`), atomic Markdown note persistence with YAML frontmatter.
+- **`MetadataCache`**: Frontmatter inspection for project-scoped note detection (`citation-manager: [Bucket]`).
+- **`Workspace` & `WorkspaceLeaf`**: Sidebar view mounting (`ItemView`), dynamic status bar rendering, document navigation.
+- **`EditorSuggest`**: High-performance in-editor cursor trigger detection (`[@`, `\cite{`, `((`, `[^`) and token replacement.
+
+### 3. Companion Plugin APIs
+- **Surfing Plugin Leaf API** (`app.plugins.plugins['surfing'].openUrl(url)`): Native integration for opening external academic source links (DOI, arXiv, URLs) and locally attached PDFs in browser tabs, with automatic fallback to default Obsidian leaves.
+
+---
+
 ## License
 
 This project is licensed under the [MIT License](./LICENSE).
@@ -158,11 +181,14 @@ This project is licensed under the [MIT License](./LICENSE).
 ## Development
 
 ```bash
-# Run all 27 automated test suites
+# Run all 28 automated test suites
 bun run test:all
 
 # Build production bundle with Bun (auto-compiles modular Sass)
 bun run build
+
+# Package release artifacts directly in dist/
+bun run package
 
 # Watch mode for active development
 bun run dev

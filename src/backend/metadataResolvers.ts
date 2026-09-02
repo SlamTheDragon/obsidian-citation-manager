@@ -45,22 +45,42 @@ export class MetadataResolvers {
     throw new Error('Could not detect identifier format. Please enter a valid DOI, arXiv ID, ISBN, URL, or BibTeX snippet.');
   }
 
+  /**
+   * Resolves literature metadata from CrossRef using a DOI string
+   * @param doi Digital Object Identifier (e.g. 10.1145/3313831)
+   */
   static async resolveDOI(doi: string): Promise<Partial<ReferenceMetadata>> {
     return DOIResolver.resolveDOI(doi);
   }
 
+  /**
+   * Resolves preprint metadata from arXiv Atom API
+   * @param arxivId arXiv identifier (e.g. 2301.07041 or 1706.03762)
+   */
   static async resolveArXiv(arxivId: string): Promise<Partial<ReferenceMetadata>> {
     return ArxivResolver.resolveArXiv(arxivId);
   }
 
+  /**
+   * Resolves book metadata from OpenLibrary API using an ISBN-10 or ISBN-13
+   * @param isbn International Standard Book Number
+   */
   static async resolveISBN(isbn: string): Promise<Partial<ReferenceMetadata>> {
     return ISBNResolver.resolveISBN(isbn);
   }
 
+  /**
+   * Resolves webpage, blog, video, or online article metadata via Dublin Core / OpenGraph tags
+   * @param url Web URL
+   */
   static async resolveURL(url: string): Promise<Partial<ReferenceMetadata>> {
     return URLResolver.resolveURL(url);
   }
 
+  /**
+   * Parses raw BibTeX string into structured ReferenceMetadata objects
+   * @param bibtex Raw BibTeX input containing one or multiple @article/@book/@misc entries
+   */
   static parseBibTeX(bibtex: string): Partial<ReferenceMetadata>[] {
     return BibTeXResolver.parseBibTeX(bibtex);
   }

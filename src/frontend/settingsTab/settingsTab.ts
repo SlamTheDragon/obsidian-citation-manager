@@ -83,5 +83,18 @@ export class CitationManagerSettingTab extends PluginSettingTab {
           Logger.setEnabled(value);
           await this.plugin.saveSettings();
         }));
+
+    // Cache Reset (Dismissed Lints Cache)
+    new Setting(containerEl)
+      .setName('Reset Dismissed Diagnostics Cache')
+      .setDesc('Clear cached dismissals to restore all diagnostic warnings and linting checks across vault files.')
+      .addButton(button => button
+        .setButtonText('Clear Dismissed Cache')
+        .setClass('citation-small-btn')
+        .onClick(async () => {
+          await this.plugin.storageManager.clearDismissedLints();
+          new Notice('Dismissed diagnostics cache cleared.');
+          this.plugin.refreshOpenViews();
+        }));
   }
 }
