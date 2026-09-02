@@ -6,6 +6,7 @@ import { ReferenceEditorModal } from '../ReferenceEditorModal';
 import { UsageLocationsModal } from '../UsageLocationsModal';
 import { CitationNotesModal } from '../CitationNotesModal';
 import { ConfirmModal } from '../ConfirmModal';
+import { MoveToCollectionModal } from '../MoveToCollectionModal';
 
 export class CitationCardRenderer {
   static renderCard(
@@ -111,55 +112,31 @@ export class CitationCardRenderer {
       });
     }
 
-    // Actions Row
+    // Actions Row with Left & Right Flex Groups
     const actionsRow = card.createDiv({ cls: 'citation-card-actions' });
+    const actionsLeft = actionsRow.createDiv({ cls: 'citation-card-actions-left' });
+    const actionsRight = actionsRow.createDiv({ cls: 'citation-card-actions-right' });
 
-    // Insert Button
-    const insertBtn = actionsRow.createEl('button', { cls: 'citation-card-btn', title: 'Insert Citation at Cursor' });
-    setIcon(insertBtn.createSpan({ cls: 'btn-icon' }), 'quote-glyph');
-    insertBtn.createSpan({ text: ' Insert' });
-    insertBtn.addEventListener('click', async () => {
-      await onInsert(ref);
-    });
-
-    // Notes Button
-    const notesBtn = actionsRow.createEl('button', {
-      cls: 'citation-card-btn ' + (ref.userNotes ? 'has-notes' : ''),
-      title: 'View & Edit Research Notes in Modal'
-    });
-    setIcon(notesBtn.createSpan({ cls: 'btn-icon' }), 'file-text');
-    notesBtn.createSpan({ text: ' Notes' });
-    notesBtn.addEventListener('click', () => {
-      new CitationNotesModal(app, ref, storageManager, async () => {
-        await onRefresh();
-      }).open();
-    });
-
-    // Edit Button
-    const editBtn = actionsRow.createEl('button', { cls: 'citation-card-btn', title: 'Edit Reference Metadata' });
-    setIcon(editBtn.createSpan({ cls: 'btn-icon' }), 'edit-3');
-    editBtn.createSpan({ text: ' Edit' });
-    editBtn.addEventListener('click', () => {
-      new ReferenceEditorModal(
+    // Move to Collection Button (Left Group)
+    const moveBtn = actionsLeft.createEl('button', { cls: 'citation-card-btn', title: 'Move to Collection' });
+    setIcon(moveBtn.createSpan({ cls: 'btn-icon' }), 'log-out');
+    moveBtn.createSpan({ text: ' Move' });
+    moveBtn.addEventListener('click', () => {
+      const allRefsMap = (storageManager as any).referencesCache || new Map();
+      new MoveToCollectionModal(
         app,
         ref,
-        async (updatedRef, origCitekey) => {
-          await storageManager.saveReference(updatedRef, origCitekey);
-          await projectIndexer.syncReferenceUpdateAcrossDocuments(
-            ref,
-            updatedRef,
-            project,
-            project?.citationStyle || settings.defaultCitationStyle,
-            settings.referencesFolder
-          );
+        settings.collections || [],
+        allRefsMap,
+        storageManager,
+        async () => {
           await onRefresh();
-        },
-        false
+        }
       ).open();
     });
 
-    // Delete Button
-    const deleteBtn = actionsRow.createEl('button', { cls: 'citation-card-btn btn-danger', title: 'Delete Reference' });
+    // Delete Button (Left Group)
+    const deleteBtn = actionsLeft.createEl('button', { cls: 'citation-card-btn btn-danger', title: 'Delete Reference' });
     setIcon(deleteBtn.createSpan({ cls: 'btn-icon' }), 'trash-2');
     deleteBtn.addEventListener('click', () => {
       if (settings.blockDeletionIfInUse && stats) {
@@ -182,6 +159,51 @@ export class CitationCardRenderer {
           new Notice('Deleted [' + ref.citekey + ']');
           await onRefresh();
         }
+      ).open();
+    });
+
+    // Insert Button (Right Group)
+    const insertBtn = actionsRight.createEl('button', { cls: 'citation-card-btn mod-cta', title: 'Insert Citation at Cursor' });
+    setIcon(insertBtn.createSpan({ cls: 'btn-icon' }), 'quote-glyph');
+    insertBtn.createSpan({ text: ' Insert' });
+    insertBtn.addEventListener('click', async () => {
+      await onInsert(ref);
+    });
+
+    // Notes Button (Right Group)
+    const notesBtn = actionsRight.createEl('button', {
+      cls: 'citation-card-btn ' + (ref.userNotes ? 'has-notes' : ''),
+      title: 'View & Edit Research Notes in Modal'
+    });
+    setIcon(notesBtn.createSpan({ cls: 'btn-icon' }), 'file-text');
+    notesBtn.createSpan({ text: ' Notes' });
+    notesBtn.addEventListener('click', () => {
+      new CitationNotesModal(app, ref, storageManager, async () => {
+        await onRefresh();
+      }).open();
+    });
+
+    // Edit Button (Right Group)
+    const editBtn = actionsRight.createEl('button', { cls: 'citation-card-btn', title: 'Edit Reference Metadata' });
+    setIcon(editBtn.createSpan({ cls: 'btn-icon' }), 'edit-3');
+    editBtn.createSpan({ text: ' Edit' });
+    editBtn.addEventListener('click', () => {
+      new ReferenceEditorModal(
+        app,
+        ref,
+        async (updatedRef, origCitekey) => {
+          await storageManager.saveReference(updatedRef, origCitekey);
+          await projectIndexer.syncReferenceUpdateAcrossDocuments(
+            ref,
+            updatedRef,
+            project,
+            project?.citationStyle || settings.defaultCitationStyle,
+            settings.referencesFolder
+          );
+          await onRefresh();
+        },
+        false,
+        settings.collections || []
       ).open();
     });
   }

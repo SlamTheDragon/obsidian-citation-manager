@@ -1,5 +1,5 @@
 import { App, Modal, Setting, Notice, setIcon } from 'obsidian';
-import { ReferenceMetadata, ProjectRecord, ReferenceType } from '../types';
+import { ReferenceMetadata, ProjectRecord, ReferenceType, CitationCollection, DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID } from '../types';
 import { StorageManager } from '../storageManager';
 import { MetadataResolvers } from '../metadataResolvers';
 import { CitationEngine } from '../citationEngine';
@@ -10,6 +10,7 @@ export class PDFImportModal extends Modal {
   private pdfFile: File;
   private project: ProjectRecord | null;
   private existingRefs: ReferenceMetadata[];
+  private collections: CitationCollection[];
   private storageManager: StorageManager;
   private onComplete: () => Promise<void>;
 
@@ -28,12 +29,14 @@ export class PDFImportModal extends Modal {
     project: ProjectRecord | null,
     existingRefs: ReferenceMetadata[],
     storageManager: StorageManager,
-    onComplete: () => Promise<void>
+    onComplete: () => Promise<void>,
+    collections: CitationCollection[] = [DEFAULT_COLLECTION]
   ) {
     super(app);
     this.pdfFile = pdfFile;
     this.project = project;
     this.existingRefs = existingRefs;
+    this.collections = collections.length > 0 ? collections : [DEFAULT_COLLECTION];
     this.storageManager = storageManager;
     this.onComplete = onComplete;
 
@@ -57,6 +60,7 @@ export class PDFImportModal extends Modal {
       abstract: "",
       pdfAttachment: "",
       projects: project ? [project.id] : [],
+      collectionId: DEFAULT_COLLECTION_ID,
       tags: [],
       apa: "",
       ieee: "",
@@ -292,6 +296,19 @@ export class PDFImportModal extends Modal {
         title: "Citekey is automatically derived from author & year"
       });
       this.keyInputEl.tabIndex = -1;
+
+      // Collection Selector
+      const collectionGroup = coreCard.createDiv({ cls: "citation-form-group" });
+      const colLabelRow = collectionGroup.createDiv({ cls: "citation-label-row" });
+      colLabelRow.createEl("label", { cls: "citation-form-label", text: "Citation Collection / Group" });
+      const colSelect = collectionGroup.createEl("select", { cls: "citation-form-select" });
+      for (const col of this.collections) {
+        const opt = colSelect.createEl("option", { value: col.id, text: `${col.name}${col.isDefault ? ' (Default)' : ''}` });
+        if (col.id === (this.ref.collectionId || DEFAULT_COLLECTION_ID)) opt.selected = true;
+      }
+      colSelect.addEventListener("change", () => {
+        this.ref.collectionId = colSelect.value;
+      });
 
       // Accordion 1: Publication & Venue
       this.createAnimatedAccordion(

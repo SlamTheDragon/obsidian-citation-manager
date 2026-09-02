@@ -1,11 +1,12 @@
 import { App, Modal, Notice, setIcon } from 'obsidian';
-import { ReferenceMetadata, ReferenceType } from '../types';
+import { ReferenceMetadata, ReferenceType, CitationCollection, DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID } from '../types';
 import { CitationEngine } from '../citationEngine';
 import { MetadataResolvers } from '../metadataResolvers';
 import { ProjectIndexer } from '../projectIndexer';
 
 export class ReferenceEditorModal extends Modal {
   private ref: ReferenceMetadata;
+  private collections: CitationCollection[];
   private originalCitekey: string;
   private onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>;
   private isNew: boolean;
@@ -19,9 +20,11 @@ export class ReferenceEditorModal extends Modal {
     app: App,
     ref: Partial<ReferenceMetadata>,
     onSave: (ref: ReferenceMetadata, originalCitekey?: string) => Promise<void>,
-    isNew: boolean = false
+    isNew: boolean = false,
+    collections: CitationCollection[] = [DEFAULT_COLLECTION]
   ) {
     super(app);
+    this.collections = collections.length > 0 ? collections : [DEFAULT_COLLECTION];
     this.originalCitekey = ref.citekey || "";
     this.ref = {
       citekey: ref.citekey || "",
@@ -42,6 +45,7 @@ export class ReferenceEditorModal extends Modal {
       abstract: ref.abstract || "",
       pdfAttachment: ref.pdfAttachment || "",
       projects: ref.projects || [],
+      collectionId: ref.collectionId || DEFAULT_COLLECTION_ID,
       tags: ref.tags || [],
       apa: ref.apa || "",
       ieee: ref.ieee || "",
@@ -179,6 +183,19 @@ export class ReferenceEditorModal extends Modal {
       title: "Citekey is automatically derived from author & year"
     });
     this.keyInputEl.tabIndex = -1;
+
+    // Collection Selector
+    const collectionGroup = coreCard.createDiv({ cls: "citation-form-group" });
+    const colLabelRow = collectionGroup.createDiv({ cls: "citation-label-row" });
+    colLabelRow.createEl("label", { cls: "citation-form-label", text: "Citation Collection / Group" });
+    const colSelect = collectionGroup.createEl("select", { cls: "citation-form-select" });
+    for (const col of this.collections) {
+      const opt = colSelect.createEl("option", { value: col.id, text: `${col.name}${col.isDefault ? ' (Default)' : ''}` });
+      if (col.id === (this.ref.collectionId || DEFAULT_COLLECTION_ID)) opt.selected = true;
+    }
+    colSelect.addEventListener("change", () => {
+      this.ref.collectionId = colSelect.value;
+    });
 
     // 3. ACCORDION 1: PUBLICATION & VENUE
     this.createAnimatedAccordion(

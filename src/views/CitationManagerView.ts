@@ -1,5 +1,5 @@
 import { App, ItemView, WorkspaceLeaf, Notice, MarkdownView, TFile, setIcon, normalizePath } from 'obsidian';
-import { ReferenceMetadata, ProjectRecord, ProjectHealthStats, CitationManagerSettings, CitationStyle, InBodyFormat, ALL_PROJECTS_ID } from '../types';
+import { ReferenceMetadata, ProjectRecord, ProjectHealthStats, CitationManagerSettings, CitationStyle, InBodyFormat, ALL_PROJECTS_ID, CitationCollection, DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID } from '../types';
 import { StorageManager } from '../storageManager';
 import { ProjectIndexer } from '../projectIndexer';
 import { MetadataResolvers } from '../metadataResolvers';
@@ -13,12 +13,15 @@ import { PromptModal } from './PromptModal';
 import { ConfirmModal } from './ConfirmModal';
 import { ExportPublicationModal } from './ExportPublicationModal';
 import { CitationNotesModal } from './CitationNotesModal';
+import { CollectionTransferModal } from './CollectionTransferModal';
+import { CollectionEditorModal } from './CollectionEditorModal';
+import { MoveToCollectionModal } from './MoveToCollectionModal';
 import { CitationCardRenderer } from './components/CitationCardRenderer';
 import { Logger } from '../logger';
 
 export const VIEW_TYPE_CITATION_MANAGER = "citation-manager-view";
 
-type ActiveSubpanel = 'citations' | 'add' | 'bib' | 'stats';
+type ActiveSubpanel = 'citations' | 'add' | 'bib' | 'stats' | 'collections';
 
 export class CitationManagerView extends ItemView {
   private storageManager: StorageManager;
@@ -32,7 +35,9 @@ export class CitationManagerView extends ItemView {
   private statsActiveTab: 'docs' | 'diagnostics' = 'docs';
   private openDiagnosticsIds: Set<string> = new Set();
   private searchQuery: string = "";
-  private selectedTypeFilter: string = "all";
+  private selectedCollectionFilters: Set<string> = new Set();
+  private selectedTypeFilters: Set<string> = new Set();
+  private isFilterIslandOpen: boolean = false;
   private currentSubpanel: ActiveSubpanel = 'citations';
 
   // Bibliography state
@@ -108,8 +113,15 @@ export class CitationManagerView extends ItemView {
   async refreshData() {
     const t0 = performance.now();
     this.referencesMap = await this.storageManager.loadAllReferences();
+    (this.storageManager as any).referencesCache = this.referencesMap;
     this.dismissedLints = await this.storageManager.loadDismissedLints();
     this.discoverFrontmatterProjects();
+
+    if (!this.settings.collections || this.settings.collections.length === 0) {
+      this.settings.collections = [DEFAULT_COLLECTION];
+    } else if (!this.settings.collections.some(c => c.id === DEFAULT_COLLECTION_ID)) {
+      this.settings.collections.unshift(DEFAULT_COLLECTION);
+    }
 
     const activeProject = this.getActiveProjectRecord();
 
@@ -207,6 +219,9 @@ export class CitationManagerView extends ItemView {
         break;
       case 'stats':
         this.renderStatsSubpanel(contentArea, project);
+        break;
+      case 'collections':
+        this.renderCollectionsSubpanel(contentArea, project);
         break;
       case 'citations':
       default:
@@ -379,6 +394,17 @@ export class CitationManagerView extends ItemView {
       }
     });
 
+    // Action Button 0: Citation Collections / Groups Toggle (Folder icon)
+    const folderBtn = row.createEl("button", { 
+      cls: `citation-merged-btn ${this.currentSubpanel === 'collections' ? 'active' : ''}`, 
+      title: "Citation Collections / Groups" 
+    });
+    setIcon(folderBtn, "folder");
+    folderBtn.addEventListener("click", () => {
+      this.currentSubpanel = this.currentSubpanel === 'collections' ? 'citations' : 'collections';
+      this.renderUI();
+    });
+
     // Action Button 1: Add Citations Toggle (+)
     const addBtn = row.createEl("button", { 
       cls: `citation-merged-btn ${this.currentSubpanel === 'add' ? 'active' : ''}`, 
@@ -413,36 +439,311 @@ export class CitationManagerView extends ItemView {
   private renderCitationsListSubpanel(container: HTMLElement, project: ProjectRecord | null) {
     const wrapper = container.createDiv({ cls: "citation-subpanel-fullheight" });
 
-    // Filter Chips (Enlarged)
-    const chipsContainer = wrapper.createDiv({ cls: "citation-type-chips" });
-    const types = [
-      { id: "all", label: "All" },
-      { id: "journal", label: "Journal" },
-      { id: "conference", label: "Conf" },
-      { id: "book", label: "Book" },
-      { id: "webpage", label: "Web" },
-      { id: "blog", label: "Blog" },
-      { id: "video", label: "Video" },
-      { id: "preprint", label: "Preprint" },
-      { id: "report", label: "Report" },
-    ];
+    // Dynamic 4-State Filter Section
+    const filterSectionWrapper = wrapper.createDiv({ cls: "citation-filter-section-wrapper" });
+    const cardsContainer = wrapper.createDiv({ cls: "citation-reference-list-container" });
 
-    for (const t of types) {
-      const chip = chipsContainer.createSpan({
-        cls: `type-chip ${this.selectedTypeFilter === t.id ? 'active' : ''}`,
-        text: t.label
+    this.renderDynamicFilterSection(filterSectionWrapper, cardsContainer, project);
+    this.renderCardsOnly(cardsContainer, project);
+  }
+
+  private renderDynamicFilterSection(wrapper: HTMLElement, cardsContainer: HTMLElement, project: ProjectRecord | null) {
+    wrapper.empty();
+
+    const hasCol = this.selectedCollectionFilters.size > 0;
+    const hasType = this.selectedTypeFilters.size > 0;
+    const isCleanState = !hasCol && !hasType;
+
+    const chipsRow = wrapper.createDiv({ cls: "citation-dynamic-filter-chips-row" });
+
+    if (isCleanState) {
+      // (State 1 - Clean)
+      // Filters [filter / sliders-horizontal icon]
+      const filterBtn = chipsRow.createEl("button", {
+        cls: `citation-filter-pill-btn ${this.isFilterIslandOpen ? 'active' : ''}`,
+        title: "Open Collection & Type Filters"
       });
-      chip.addEventListener("click", () => {
-        this.selectedTypeFilter = t.id;
-        chipsContainer.querySelectorAll(".type-chip").forEach(c => c.removeClass("active"));
-        chip.addClass("active");
+      setIcon(filterBtn.createSpan({ cls: "btn-icon" }), "sliders-horizontal");
+      filterBtn.createSpan({ text: " Filters" });
+      filterBtn.addEventListener("click", () => {
+        this.isFilterIslandOpen = !this.isFilterIslandOpen;
+        this.renderDynamicFilterSection(wrapper, cardsContainer, project);
+      });
+    } else {
+      // (States 2, 3, 4 - Active Filters)
+      // Edit Filters [Pencil Icon]
+      const editBtn = chipsRow.createEl("button", {
+        cls: `citation-filter-pill-btn ${this.isFilterIslandOpen ? 'active' : ''}`,
+        title: "Edit Active Filters"
+      });
+      setIcon(editBtn.createSpan({ cls: "btn-icon" }), "pencil");
+      editBtn.createSpan({ text: " Edit Filters" });
+      editBtn.addEventListener("click", () => {
+        this.isFilterIslandOpen = !this.isFilterIslandOpen;
+        this.renderDynamicFilterSection(wrapper, cardsContainer, project);
+      });
+
+      // Clear Filters [X Icon]
+      const clearBtn = chipsRow.createEl("button", {
+        cls: "citation-filter-pill-btn btn-clear-filters",
+        title: "Clear All Active Filters"
+      });
+      setIcon(clearBtn.createSpan({ cls: "btn-icon" }), "x");
+      clearBtn.createSpan({ text: " Clear Filters" });
+      clearBtn.addEventListener("click", () => {
+        this.selectedCollectionFilters.clear();
+        this.selectedTypeFilters.clear();
+        this.renderDynamicFilterSection(wrapper, cardsContainer, project);
         this.renderCardsOnly(cardsContainer, project);
       });
+
+      // Collection Active Chips
+      for (const colId of this.selectedCollectionFilters) {
+        const col = this.settings.collections?.find(c => c.id === colId) || { name: colId };
+        const chip = chipsRow.createSpan({ cls: "citation-filter-active-chip col-chip" });
+        chip.createSpan({ cls: "chip-label", text: col.name });
+        const removeX = chip.createSpan({ cls: "chip-remove-icon" });
+        setIcon(removeX, "x");
+        chip.addEventListener("click", () => {
+          this.selectedCollectionFilters.delete(colId);
+          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
+          this.renderCardsOnly(cardsContainer, project);
+        });
+      }
+
+      // Type Active Chips
+      const typeLabels: Record<string, string> = {
+        journal: "Journal",
+        conference: "Conference",
+        book: "Book",
+        webpage: "Webpage",
+        blog: "Blog",
+        video: "Video",
+        preprint: "Preprint",
+        report: "Report",
+        standard: "Standard",
+        thesis: "Thesis",
+        other: "Other",
+      };
+
+      for (const typeId of this.selectedTypeFilters) {
+        const label = typeLabels[typeId] || typeId;
+        const chip = chipsRow.createSpan({ cls: "citation-filter-active-chip type-chip-active" });
+        chip.createSpan({ cls: "chip-label", text: label });
+        const removeX = chip.createSpan({ cls: "chip-remove-icon" });
+        setIcon(removeX, "x");
+        chip.addEventListener("click", () => {
+          this.selectedTypeFilters.delete(typeId);
+          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
+          this.renderCardsOnly(cardsContainer, project);
+        });
+      }
     }
 
-    // Scrollable Cards List
+    // Animated Expanding Two-Column Filter Island
+    if (this.isFilterIslandOpen) {
+      const island = wrapper.createDiv({ cls: "citation-filter-island-container animated-expand" });
+      const grid = island.createDiv({ cls: "citation-filter-island-grid" });
+
+      const allRefsList = Array.from(this.referencesMap.values());
+
+      // Column 1: Collections Checklist
+      const colCol = grid.createDiv({ cls: "filter-island-col" });
+      colCol.createEl("h5", { cls: "filter-col-header", text: "Collections" });
+      const colList = colCol.createDiv({ cls: "filter-checklist" });
+
+      for (const col of this.settings.collections || []) {
+        const count = allRefsList.filter(r => (r.collectionId || DEFAULT_COLLECTION_ID) === col.id).length;
+        const item = colList.createDiv({ cls: "filter-checklist-item" });
+        const checkbox = item.createEl("input", { type: "checkbox" });
+        checkbox.checked = this.selectedCollectionFilters.has(col.id);
+        const label = item.createEl("span", { cls: "checklist-text", text: col.name });
+        item.createEl("span", { cls: "checklist-count", text: `(${count})` });
+
+        const toggleCol = () => {
+          if (this.selectedCollectionFilters.has(col.id)) {
+            this.selectedCollectionFilters.delete(col.id);
+          } else {
+            this.selectedCollectionFilters.add(col.id);
+          }
+          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
+          this.renderCardsOnly(cardsContainer, project);
+        };
+
+        checkbox.addEventListener("change", toggleCol);
+        label.addEventListener("click", toggleCol);
+      }
+
+      // Column 2: Publication Types Checklist
+      const typeCol = grid.createDiv({ cls: "filter-island-col" });
+      typeCol.createEl("h5", { cls: "filter-col-header", text: "Publication Types" });
+      const typeList = typeCol.createDiv({ cls: "filter-checklist" });
+
+      const typesList: { id: string; label: string }[] = [
+        { id: "journal", label: "Journal" },
+        { id: "conference", label: "Conference" },
+        { id: "book", label: "Book" },
+        { id: "webpage", label: "Webpage" },
+        { id: "blog", label: "Blog" },
+        { id: "video", label: "Video" },
+        { id: "preprint", label: "Preprint" },
+        { id: "report", label: "Report" },
+        { id: "other", label: "Other" },
+      ];
+
+      for (const t of typesList) {
+        const count = allRefsList.filter(r => r.type === t.id).length;
+        const item = typeList.createDiv({ cls: "filter-checklist-item" });
+        const checkbox = item.createEl("input", { type: "checkbox" });
+        checkbox.checked = this.selectedTypeFilters.has(t.id);
+        const label = item.createEl("span", { cls: "checklist-text", text: t.label });
+        item.createEl("span", { cls: "checklist-count", text: `(${count})` });
+
+        const toggleType = () => {
+          if (this.selectedTypeFilters.has(t.id)) {
+            this.selectedTypeFilters.delete(t.id);
+          } else {
+            this.selectedTypeFilters.add(t.id);
+          }
+          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
+          this.renderCardsOnly(cardsContainer, project);
+        };
+
+        checkbox.addEventListener("change", toggleType);
+        label.addEventListener("click", toggleType);
+      }
+    }
+  }
+
+  // --- SUBPANEL 4: CITATION COLLECTIONS / GROUPS SUBPANEL ---
+  private renderCollectionsSubpanel(container: HTMLElement, project: ProjectRecord | null) {
+    const wrapper = container.createDiv({ cls: "citation-subpanel-fullheight" });
+
+    // 1. Top Create Collection Island
+    const topActionCard = wrapper.createDiv({ cls: "citation-card citation-top-action-card" });
+    const createColBtn = topActionCard.createEl("button", { cls: "citation-big-cta-btn", text: "+ Create Collection" });
+    setIcon(createColBtn.createSpan({ cls: "btn-icon" }), "folder-plus");
+    createColBtn.addEventListener("click", () => {
+      new CollectionEditorModal(this.app, null, async (newCol) => {
+        this.settings.collections.push(newCol);
+        await this.onSaveSettings();
+        await this.refreshData();
+        new Notice(`Created collection "${newCol.name}"`);
+      }).open();
+    });
+
+    // Sub-instruction
+    const tipEl = wrapper.createDiv({ cls: "citation-transfer-instruction" });
+    tipEl.createSpan({ text: "Click any collection card to manage citations and transfer them between collections." });
+
+    // 2. Collections Card List Container
     const cardsContainer = wrapper.createDiv({ cls: "citation-reference-list-container" });
-    this.renderCardsOnly(cardsContainer, project);
+    const allRefsList = Array.from(this.referencesMap.values());
+
+    for (const col of this.settings.collections || []) {
+      const count = allRefsList.filter(r => (r.collectionId || DEFAULT_COLLECTION_ID) === col.id).length;
+
+      const card = cardsContainer.createDiv({ cls: "citation-card citation-collection-card" });
+      card.setAttribute("tabindex", "0");
+
+      // Card Header
+      const cardHeader = card.createDiv({ cls: "citation-card-header" });
+      const folderIcon = cardHeader.createSpan({ cls: "collection-folder-icon" });
+      setIcon(folderIcon, col.isDefault ? "folder" : "folder-open");
+      cardHeader.createSpan({ cls: "citation-key-pill", text: col.name });
+
+      if (col.isDefault) {
+        cardHeader.createSpan({ cls: "citation-default-badge", text: "DEFAULT" });
+      }
+
+      cardHeader.createSpan({ cls: "citation-usage-pill used", text: `${count} citation(s)` });
+
+      // Title & Description
+      card.createDiv({ cls: "citation-card-title", text: col.name });
+      if (col.description) {
+        card.createDiv({ cls: "citation-sub-desc", text: col.description });
+      }
+
+      // Actions Row
+      const actionsRow = card.createDiv({ cls: "citation-card-actions" });
+      const actionsLeft = actionsRow.createDiv({ cls: "citation-card-actions-left" });
+      const actionsRight = actionsRow.createDiv({ cls: "citation-card-actions-right" });
+
+      // Manage / Open Transfer Modal Button (Primary CTA)
+      const manageBtn = actionsRight.createEl("button", { cls: "citation-card-btn mod-cta", title: "Open Transfer Modal" });
+      setIcon(manageBtn.createSpan({ cls: "btn-icon" }), "arrow-right-left");
+      manageBtn.createSpan({ text: " Manage Citations" });
+      manageBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        new CollectionTransferModal(
+          this.app,
+          col,
+          this.referencesMap,
+          this.storageManager,
+          async () => {
+            await this.refreshData();
+          }
+        ).open();
+      });
+
+      // Edit Button
+      const editBtn = actionsLeft.createEl("button", { cls: "citation-card-btn", title: "Edit Collection Details" });
+      setIcon(editBtn.createSpan({ cls: "btn-icon" }), "edit-3");
+      editBtn.createSpan({ text: " Edit" });
+      editBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        new CollectionEditorModal(this.app, col, async (updatedCol) => {
+          Object.assign(col, updatedCol);
+          await this.onSaveSettings();
+          await this.refreshData();
+          new Notice(`Updated collection "${col.name}"`);
+        }).open();
+      });
+
+      // Delete Button (Protected for default collection)
+      if (!col.isDefault) {
+        const deleteBtn = actionsLeft.createEl("button", { cls: "citation-card-btn btn-danger", title: "Delete Collection" });
+        setIcon(deleteBtn.createSpan({ cls: "btn-icon" }), "trash-2");
+        deleteBtn.addEventListener("click", (e) => {
+          e.stopPropagation();
+          new ConfirmModal(
+            this.app,
+            `Delete Collection: ${col.name}`,
+            `Delete collection "${col.name}"? Bare citations will remain safe and be moved to General collection.`,
+            "Delete Collection",
+            true,
+            async () => {
+              for (const ref of this.referencesMap.values()) {
+                if (ref.collectionId === col.id) {
+                  ref.collectionId = DEFAULT_COLLECTION_ID;
+                  await this.storageManager.saveReference(ref);
+                }
+              }
+              this.settings.collections = this.settings.collections.filter(c => c.id !== col.id);
+              if (this.selectedCollectionFilters.has(col.id)) {
+                this.selectedCollectionFilters.delete(col.id);
+              }
+              await this.onSaveSettings();
+              await this.refreshData();
+              new Notice(`Deleted collection "${col.name}"`);
+            }
+          ).open();
+        });
+      }
+
+      // Clicking card anywhere opens the transfer modal
+      card.addEventListener("click", () => {
+        new CollectionTransferModal(
+          this.app,
+          col,
+          this.referencesMap,
+          this.storageManager,
+          async () => {
+            await this.refreshData();
+          }
+        ).open();
+      });
+    }
   }
 
   private renderCardsOnly(container: HTMLElement, project: ProjectRecord | null) {
@@ -1187,8 +1488,19 @@ export class CitationManagerView extends ItemView {
         if (!inProject) return false;
       }
 
-      if (this.selectedTypeFilter !== "all" && ref.type !== this.selectedTypeFilter) {
-        return false;
+      // Filter by Collection(s)
+      if (this.selectedCollectionFilters.size > 0) {
+        const refColId = ref.collectionId || DEFAULT_COLLECTION_ID;
+        if (!this.selectedCollectionFilters.has(refColId)) {
+          return false;
+        }
+      }
+
+      // Filter by Type(s)
+      if (this.selectedTypeFilters.size > 0) {
+        if (!this.selectedTypeFilters.has(ref.type)) {
+          return false;
+        }
       }
 
       if (this.searchQuery) {

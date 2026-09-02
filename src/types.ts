@@ -36,6 +36,7 @@ export interface ReferenceMetadata {
   abstract?: string;
   pdfAttachment?: string;
   projects: string[];
+  collectionId?: string; // Group / collection assignment, defaults to "default"
   tags?: string[];
   apa?: string;
   ieee?: string;
@@ -47,6 +48,27 @@ export interface ReferenceMetadata {
   dateAdded: string;
   dateModified: string;
 }
+
+export interface CitationCollection {
+  id: string;
+  name: string;
+  description?: string;
+  color?: string;
+  isDefault?: boolean;
+  created: string;
+  modified: string;
+}
+
+export const DEFAULT_COLLECTION_ID = "default";
+
+export const DEFAULT_COLLECTION: CitationCollection = {
+  id: DEFAULT_COLLECTION_ID,
+  name: "General",
+  description: "Default unassigned citation collection",
+  isDefault: true,
+  created: new Date().toISOString(),
+  modified: new Date().toISOString(),
+};
 
 export interface ProjectExportSettings {
   style?: CitationStyle;
@@ -76,7 +98,9 @@ export interface CitationManagerSettings {
   defaultInBodyFormat: InBodyFormat;
   enableFootnoteMode: boolean;
   projects: ProjectRecord[];
+  collections: CitationCollection[];
   activeProjectId: string; // "ALL" or specific project id
+  activeCollectionId?: string; // "ALL" or specific collection id
   enableEditorSuggest: boolean;
   blockDeletionIfInUse: boolean;
   debugMode: boolean;
@@ -90,7 +114,9 @@ export const DEFAULT_SETTINGS: CitationManagerSettings = {
   defaultInBodyFormat: "parenthetical",
   enableFootnoteMode: false,
   projects: [],
+  collections: [DEFAULT_COLLECTION],
   activeProjectId: ALL_PROJECTS_ID,
+  activeCollectionId: "ALL",
   enableEditorSuggest: true,
   blockDeletionIfInUse: true,
   debugMode: false,
