@@ -292,3 +292,14 @@ flowchart TD
   1. **Surfing Community Plugin**: If active, route to `surfingPlugin.openUrl(url)` or open a tab leaf with `type: 'surfing-view'`, `state: { url }`.
   2. **Obsidian Web Viewer Core Plugin**: If active, open a tab leaf with `type: 'web-viewer'`, `state: { url }`.
   3. **Default Browser Fallback**: Open via `window.open(url, '_blank')`.
+
+### 6.3 Static Asset Isolation (`public/`) & Dynamic Distribution (`dist/`)
+* **Clean Root Directory Invariant**: Do not clutter the repository root with static configuration or compiled bundles.
+  - Store static source assets in `public/` (`public/manifest.json`, `public/styles.css`).
+  - Store TypeScript source in `src/`.
+  - Exclude `dist/`, `main.js`, and `*.zip` from version control in `.gitignore`.
+* **Dynamic Online Bundling**:
+  - `bun run package` builds `src/main.ts` into `dist/main.js` and copies `public/manifest.json` and `public/styles.css` into `dist/`.
+  - GitHub Actions runs `bun run package` dynamically on CI/Release runs and attaches the assets (`main.js`, `manifest.json`, `styles.css`, `citation-manager.zip`) to GitHub Releases.
+* **Atomic Version Bumping**:
+  - `scripts/version-bump.mjs` synchronizes semantic versions atomically across `package.json`, `public/manifest.json`, and `versions.json`.
