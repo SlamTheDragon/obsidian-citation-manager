@@ -70,6 +70,11 @@ obsidian-citation-manager/
 3. **Strict Zero-Emoji Policy**: Enforced across all UI views, status notices, modals, logs, and artifacts. Use Lucide SVG icons exclusively (`setIcon(el, "...")`).
 4. **Obsidian Vault Adapter Directory Creation**: Use `app.vault.adapter.mkdir(pubDir)` for custom publication and export directory creation to prevent vault path collisions.
 
+### 2.2 UI Styling & Surface Invariants
+1. **Solid Card Surface Persistence**: Never replace a card container's solid background (`background: var(--background-secondary)`) with `var(--background-modifier-hover)` on `:hover`. In many user themes and custom CSS snippets, `--background-modifier-hover` has low or zero opacity, which makes the entire card transparent and see-through. Always maintain solid surface opacity and highlight cards on hover via `border-color: var(--interactive-accent)` and subtle `box-shadow`.
+2. **Accordion Header Persistence**: When expanding inline accordion items (e.g. Citation Card Notes), keep the section title and chevron permanently visible across both collapsed and expanded states.
+3. **Button Flex Alignment**: Enforce `display: inline-flex; align-items: center; justify-content: center; line-height: 1;` across all buttons and pills, stripping leading whitespace strings from text spans to guarantee mathematical icon-text centering.
+
 
 ---
 
@@ -272,3 +277,18 @@ flowchart TD
   2. The rationale and trade-offs.
   3. The specific files and storage models affected.
   4. Await explicit approval before modifying codebase files.
+
+---
+
+## 6. Release Pipeline & External Integrations
+
+### 6.1 Standalone Build Pipeline
+* **Zero Machine-Path Assumptions**: `esbuild.config.mjs` must build cleanly in the repository root without hardcoded machine paths.
+* **Opt-In Vault Deployment**: Support deployment via `process.env.OBSIDIAN_VAULT_DIR` or `process.env.VAULT_PLUGIN_DIR` without failing or emitting warnings when running standalone builds.
+
+### 6.2 In-App Browser & External Source Routing
+* **Card-as-Link Navigation**: Citation cards with a DOI, arXiv ID, or URL support direct source opening on card body click (with `e.stopPropagation()` on all inner action buttons, badges, and inputs).
+* **Routing Hierarchy**:
+  1. **Surfing Community Plugin**: If active, route to `surfingPlugin.openUrl(url)` or open a tab leaf with `type: 'surfing-view'`, `state: { url }`.
+  2. **Obsidian Web Viewer Core Plugin**: If active, open a tab leaf with `type: 'web-viewer'`, `state: { url }`.
+  3. **Default Browser Fallback**: Open via `window.open(url, '_blank')`.
