@@ -11,13 +11,18 @@ if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
 
-const filesToCopy = ['main.js', 'manifest.json', 'styles.css'];
-for (const file of filesToCopy) {
-  if (fs.existsSync(file)) {
-    fs.copyFileSync(file, path.join(distDir, file));
-    console.log(`[Package] Copied ${file} -> dist/${file}`);
+const filesToPackage = [
+  { src: 'main.js', dest: 'main.js' },
+  { src: 'public/manifest.json', dest: 'manifest.json' },
+  { src: 'public/styles.css', dest: 'styles.css' }
+];
+
+for (const item of filesToPackage) {
+  if (fs.existsSync(item.src)) {
+    fs.copyFileSync(item.src, path.join(distDir, item.dest));
+    console.log(`[Package] Copied ${item.src} -> dist/${item.dest}`);
   } else {
-    console.error(`[Package] Error: missing required release file ${file}`);
+    console.error(`[Package] Error: missing required release file ${item.src}`);
     process.exit(1);
   }
 }

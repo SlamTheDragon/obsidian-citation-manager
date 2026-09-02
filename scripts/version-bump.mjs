@@ -4,7 +4,7 @@ import path from 'path';
 const type = process.argv[2] || 'patch';
 
 const packageJsonPath = path.resolve('package.json');
-const manifestJsonPath = path.resolve('manifest.json');
+const manifestJsonPath = path.resolve('public/manifest.json');
 const versionsJsonPath = path.resolve('versions.json');
 
 const pkg = JSON.parse(fs.readFileSync(packageJsonPath, 'utf8'));

@@ -22,9 +22,14 @@ function copyToVault() {
       if (!fs.existsSync(VAULT_PLUGIN_DIR)) {
         fs.mkdirSync(VAULT_PLUGIN_DIR, { recursive: true });
       }
-      for (const file of ["main.js", "manifest.json", "styles.css"]) {
-        if (fs.existsSync(file)) {
-          fs.copyFileSync(file, path.join(VAULT_PLUGIN_DIR, file));
+      const files = [
+        { src: "main.js", dest: "main.js" },
+        { src: "public/manifest.json", dest: "manifest.json" },
+        { src: "public/styles.css", dest: "styles.css" },
+      ];
+      for (const item of files) {
+        if (fs.existsSync(item.src)) {
+          fs.copyFileSync(item.src, path.join(VAULT_PLUGIN_DIR, item.dest));
         }
       }
       console.log(`[Plugin Build] Copied release files to vault plugin directory: ${VAULT_PLUGIN_DIR}`);
