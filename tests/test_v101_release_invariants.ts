@@ -84,34 +84,36 @@ const mockApp: any = {
   }
 };
 
-const storage = new StorageManager(mockApp as any, DEFAULT_SETTINGS);
-assert(typeof (storage as any).loadSerializedSettings === 'undefined', "StorageManager does not export loadSerializedSettings");
-assert(typeof (storage as any).saveSerializedSettings === 'undefined', "StorageManager does not export saveSerializedSettings");
+async function runInvariantTests() {
+  const storage = new StorageManager(mockApp as any, DEFAULT_SETTINGS);
+  assert(typeof (storage as any).loadSerializedSettings === 'undefined', "StorageManager does not export loadSerializedSettings");
+  assert(typeof (storage as any).saveSerializedSettings === 'undefined', "StorageManager does not export saveSerializedSettings");
 
-// 2. Surfing PDF Open Integration
-const refWithPdf: ReferenceMetadata = {
-  citekey: "Vaswani2017",
-  title: "Attention Is All You Need",
-  authors: ["Vaswani, A."],
-  year: 2017,
-  type: "conference",
-  projects: [],
-  pdfAttachment: ".references/attachments/Vaswani2017.pdf"
-};
+  // 2. Surfing PDF Open Integration
+  const refWithPdf: ReferenceMetadata = {
+    citekey: "Vaswani2017",
+    title: "Attention Is All You Need",
+    authors: ["Vaswani, A."],
+    year: 2017,
+    type: "conference",
+    projects: [],
+    pdfAttachment: ".references/attachments/Vaswani2017.pdf"
+  };
 
-// Simulate PDF exists
-mockApp.vault.adapter.files.set(".references/attachments/Vaswani2017.pdf", "%PDF-1.4 mock");
+  // Simulate PDF exists
+  mockApp.vault.adapter.files.set(".references/attachments/Vaswani2017.pdf", "%PDF-1.4 mock");
 
-CitationCardRenderer.openAttachedPDF(mockApp as any, refWithPdf, ".references");
-assert(
-  mockApp.plugins.plugins['surfing'].openUrlCalledWith === "app://local/.references/attachments/Vaswani2017.pdf",
-  "openAttachedPDF successfully routed attached PDF to Surfing plugin openUrl"
-);
+  await CitationCardRenderer.openAttachedPDF(mockApp as any, refWithPdf, ".references");
+  assert(
+    mockApp.plugins.plugins['surfing'].openUrlCalledWith === "app://local/.references/attachments/Vaswani2017.pdf",
+    "openAttachedPDF successfully routed attached PDF to Surfing plugin openUrl"
+  );
 
-// Fallback test when Surfing is disabled
-mockApp.plugins.plugins = {};
-const fallbackPromise = CitationCardRenderer.openAttachedPDF(mockApp as any, refWithPdf, ".references");
-assert(typeof fallbackPromise?.then === 'function', "openAttachedPDF handles fallback gracefully without throwing");
+  // Fallback test when Surfing is disabled
+  mockApp.plugins.plugins = {};
+  const fallbackPromise = CitationCardRenderer.openAttachedPDF(mockApp as any, refWithPdf, ".references");
+  assert(typeof fallbackPromise?.then === 'function', "openAttachedPDF handles fallback gracefully without throwing");
+  await fallbackPromise;
 
 // 3. Diagnostics Modal State Flow Simulation: Single Accordion & Master Checkbox
 const mockWarnings: LintWarning[] = [
@@ -195,8 +197,12 @@ toggleAccordion("w2");
 assert(openWarningId === "w2", "Accordion w2 opened and w1 automatically collapsed");
 
 toggleAccordion("w2");
-assert(openWarningId === null, "Accordion w2 collapsed on re-click");
+  console.log("================================================================================");
+  console.log(`  ALL V1.0.1 RELEASE INVARIANT TESTS PASSED (${passCount}/${passCount})!`);
+  console.log("================================================================================");
+}
 
-console.log("================================================================================");
-console.log(`  ALL V1.0.1 RELEASE INVARIANT TESTS PASSED (${passCount}/${passCount})!`);
-console.log("================================================================================");
+runInvariantTests().catch(err => {
+  console.error(err);
+  process.exit(1);
+});

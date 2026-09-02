@@ -70,34 +70,45 @@ export class CitationCardRenderer {
   }
 
   public static async openAttachedPDF(app: App, ref: ReferenceMetadata, referencesFolder: string) {
-    if (!ref.pdfAttachment) return;
+    const rawAttachment = (ref.pdfAttachment || '').trim();
+    const citekey = ref.citekey;
     const pathsToTry = [
-      normalizePath(ref.pdfAttachment),
-      normalizePath(`${referencesFolder}/attachments/${ref.citekey}.pdf`),
-      normalizePath(`${referencesFolder}/${ref.citekey}.pdf`),
-    ];
+      rawAttachment ? normalizePath(rawAttachment) : '',
+      normalizePath(`${referencesFolder}/attachments/${citekey}.pdf`),
+      normalizePath(`${referencesFolder}/${citekey}.pdf`),
+      normalizePath(`attachments/${citekey}.pdf`),
+    ].filter(p => p.length > 0);
 
+    let resolvedPath: string | null = null;
     let targetFile: any = null;
+
     for (const p of pathsToTry) {
-      const file = app.vault.getAbstractFileByPath(p);
-      if (file) {
-        targetFile = file;
+      if (await app.vault.adapter.exists(p)) {
+        resolvedPath = p;
+        targetFile = app.vault.getAbstractFileByPath(p);
         break;
       }
     }
 
-    if (!targetFile) {
+    if (!resolvedPath) {
       new Notice(`Attached PDF not found for [${ref.citekey}]`);
       return;
     }
 
     try {
-      // 1. Surfing Community Plugin Integration for attached local PDF
+      // Get resource URL (e.g. app://... or file:///...)
+      let resourceUrl = '';
+      if (typeof (app.vault.adapter as any).getResourcePath === 'function') {
+        resourceUrl = (app.vault.adapter as any).getResourcePath(resolvedPath);
+      } else if (targetFile && typeof app.vault.getResourcePath === 'function') {
+        resourceUrl = app.vault.getResourcePath(targetFile);
+      }
+
+      // 1. Surfing Community Plugin Integration
       const surfingPlugin = (app as any).plugins?.plugins?.['surfing'];
-      if (surfingPlugin) {
-        const resourcePath = app.vault.getResourcePath(targetFile);
+      if (surfingPlugin && resourceUrl) {
         if (typeof surfingPlugin.openUrl === 'function') {
-          surfingPlugin.openUrl(resourcePath);
+          surfingPlugin.openUrl(resourceUrl);
           return;
         }
         const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
@@ -105,23 +116,38 @@ export class CitationCardRenderer {
           await leaf.setViewState({
             type: 'surfing-view',
             active: true,
-            state: { url: resourcePath }
+            state: { url: resourceUrl }
           });
           app.workspace.revealLeaf(leaf);
           return;
         }
       }
 
-      // 2. Fallback: Obsidian Native Tab Leaf PDF Viewer
-      const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
-      if (leaf) {
-        await leaf.openFile(targetFile);
-        app.workspace.revealLeaf(leaf);
+      // 2. Obsidian Native Tab Leaf
+      if (targetFile) {
+        const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
+        if (leaf) {
+          await leaf.openFile(targetFile);
+          app.workspace.revealLeaf(leaf);
+          return;
+        }
       }
-    } catch {
-      const leaf = app.workspace.getLeaf('tab') || app.workspace.getLeaf(true);
-      if (leaf) {
-        await leaf.openFile(targetFile);
+
+      // 3. Open via system default app or Electron shell
+      if (typeof (app as any).openWithDefaultApp === 'function') {
+        (app as any).openWithDefaultApp(resolvedPath);
+        return;
+      }
+
+      if (resourceUrl) {
+        window.open(resourceUrl, '_blank');
+        return;
+      }
+
+      new Notice(`Opened PDF for [${ref.citekey}]`);
+    } catch (err: any) {
+      if (typeof (app as any).openWithDefaultApp === 'function' && resolvedPath) {
+        (app as any).openWithDefaultApp(resolvedPath);
       }
     }
   }
@@ -161,41 +187,33 @@ export class CitationCardRenderer {
     cardHeader.createSpan({ cls: 'citation-type-badge type-' + ref.type, text: ref.type.toUpperCase() });
     cardHeader.createSpan({ cls: 'citation-key-pill', text: ref.citekey });
 
-    // PDF attachment pill
-    if (ref.pdfAttachment) {
-      const pdfBadge = cardHeader.createSpan({
-        cls: 'citation-pdf-pill',
-        text: 'PDF',
-        title: 'Open attached PDF'
-      });
-      setIcon(pdfBadge.createSpan({ cls: 'inline-icon' }), 'file-text');
-      pdfBadge.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        await CitationCardRenderer.openAttachedPDF(app, ref, settings.referencesFolder);
-      });
-    }
-
     // Usage badge
     const occurrences = stats?.referenceUsageMap[ref.citekey] || [];
     if (occurrences.length > 0) {
-      const usageBadge = cardHeader.createSpan({
-        cls: 'citation-usage-pill used',
-        text: 'Cited (' + occurrences.length + 'x)',
-        title: 'Click to see document occurrences'
+      const usagePill = cardHeader.createSpan({
+        cls: 'citation-usage-pill',
+        text: occurrences.length + ' in-text',
+        title: 'Cited in ' + occurrences.length + ' note(s). Click to view.'
       });
-      usageBadge.addEventListener('click', (e) => {
+      usagePill.addEventListener('click', (e) => {
         e.stopPropagation();
         new UsageLocationsModal(app, ref.citekey, occurrences).open();
       });
-    } else {
-      cardHeader.createSpan({ cls: 'citation-usage-pill unused', text: 'Unused' });
     }
 
-    // Title & Authors
-    card.createDiv({ cls: 'citation-card-title', text: ref.title });
-    const authorYear = card.createDiv({ cls: 'citation-card-author-year' });
-    authorYear.createSpan({ text: (ref.authors || []).slice(0, 3).join(', ') + ((ref.authors?.length || 0) > 3 ? ' et al.' : '') });
-    authorYear.createSpan({ cls: 'citation-year-dot', text: ' • ' + ref.year });
+    // Title
+    const titleEl = card.createDiv({ cls: 'citation-card-title', text: ref.title });
+    titleEl.title = ref.title;
+
+    // Authors & Year
+    const metaRow = card.createDiv({ cls: 'citation-card-meta' });
+    const authorsText = ref.authors && ref.authors.length > 0
+      ? (ref.authors.length > 3
+          ? ref.authors.slice(0, 3).join(', ') + ' et al.'
+          : ref.authors.join(', '))
+      : 'Unknown Authors';
+    metaRow.createSpan({ cls: 'citation-card-authors', text: authorsText });
+    metaRow.createSpan({ cls: 'citation-card-year', text: ' (' + ref.year + ')' });
 
     if (ref.publication) {
       card.createDiv({ cls: 'citation-card-publication', text: ref.publication });
@@ -252,7 +270,7 @@ export class CitationCardRenderer {
     const actionsLeft = actionsRow.createDiv({ cls: 'citation-card-actions-left' });
     const actionsRight = actionsRow.createDiv({ cls: 'citation-card-actions-right' });
 
-    // 1. Left Group: Primary Authoring Actions (Insert, Notes, Edit)
+    // 1. Left Group: Primary Authoring Actions (Insert, Notes, PDF, Edit)
     // Insert Button
     const insertBtn = actionsLeft.createEl('button', { cls: 'citation-card-btn mod-cta', title: 'Insert Citation at Cursor' });
     setIcon(insertBtn.createSpan({ cls: 'btn-icon' }), 'quote-glyph');
@@ -274,6 +292,37 @@ export class CitationCardRenderer {
       new CitationNotesModal(app, ref, storageManager, async () => {
         await onRefresh();
       }).open();
+    });
+
+    // PDF Button (Situated beside Notes button in Left Group)
+    const pdfBtn = actionsLeft.createEl('button', {
+      cls: 'citation-card-btn ' + (ref.pdfAttachment ? 'has-pdf' : ''),
+      title: ref.pdfAttachment ? 'Open Attached PDF Document' : 'Attach PDF File'
+    });
+    setIcon(pdfBtn.createSpan({ cls: 'btn-icon' }), 'file-text');
+    pdfBtn.createSpan({ text: 'PDF' });
+    pdfBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      if (ref.pdfAttachment) {
+        await CitationCardRenderer.openAttachedPDF(app, ref, settings.referencesFolder);
+      } else {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.pdf';
+        input.style.display = 'none';
+        input.onchange = async () => {
+          if (input.files && input.files.length > 0) {
+            const file = input.files[0];
+            const buffer = await file.arrayBuffer();
+            const pdfPath = await storageManager.savePDFAttachment(ref.citekey, buffer);
+            ref.pdfAttachment = pdfPath;
+            await storageManager.saveReference(ref);
+            new Notice(`Attached PDF to [${ref.citekey}]!`);
+            await onRefresh();
+          }
+        };
+        input.click();
+      }
     });
 
     // Edit Button

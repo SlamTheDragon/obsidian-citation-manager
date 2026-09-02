@@ -8,9 +8,12 @@ import { RISResolver } from './resolvers/risResolver';
 import { EndNoteXMLResolver } from './resolvers/endnoteXmlResolver';
 import { LibraryImportResolver } from './resolvers/libraryImportResolver';
 
+import { EndNoteTaggedResolver } from './resolvers/endnoteTaggedResolver';
+import { PlainCitationResolver } from './resolvers/plainCitationResolver';
+
 export class MetadataResolvers {
   /**
-   * Automatically detects input type (DOI, ISBN, arXiv, URL, BibTeX, RIS, EndNote XML) and resolves metadata
+   * Automatically detects input type (DOI, ISBN, arXiv, URL, BibTeX, RIS, EndNote XML, EndNote Tagged, Plain Ref) and resolves metadata
    */
   static async detectAndResolve(input: string): Promise<Partial<ReferenceMetadata>> {
     const trimmed = input.trim();
@@ -22,42 +25,54 @@ export class MetadataResolvers {
       throw new Error('Invalid BibTeX format');
     }
 
-    // 2. RIS
+    // 2. EndNote Tagged (%0 ...)
+    if (/^%0\s+/m.test(trimmed)) {
+      const parsed = this.parseEndNoteTagged(trimmed);
+      if (parsed.length > 0) return parsed[0];
+    }
+
+    // 3. RIS
     if (/^TY\s*-\s*/i.test(trimmed) || /^[A-Z0-9]{2}\s*-\s*/m.test(trimmed)) {
       const parsed = this.parseRIS(trimmed);
       if (parsed.length > 0) return parsed[0];
     }
 
-    // 3. EndNote XML
+    // 4. EndNote XML
     if (/<record>/i.test(trimmed) || /<xml/i.test(trimmed)) {
       const parsed = this.parseEndNoteXML(trimmed);
       if (parsed.length > 0) return parsed[0];
     }
 
-    // 4. DOI
+    // 5. DOI
     const doiMatch = trimmed.match(/(10\.\d{4,9}\/[-._;()/:A-Z0-9]+)/i);
     if (doiMatch) {
       return await this.resolveDOI(doiMatch[1]);
     }
 
-    // 5. arXiv ID
+    // 6. arXiv ID
     const arxivMatch = trimmed.match(/arxiv(?:\.org\/(?:abs|pdf)\/|:)?([0-9]{4}\.[0-9]{4,5}(?:v[0-9]+)?)/i);
     if (arxivMatch) {
       return await this.resolveArXiv(arxivMatch[1]);
     }
 
-    // 6. ISBN
+    // 7. ISBN
     const isbnClean = trimmed.replace(/[- ]/g, '');
     if (/^(978|979)?\d{9}[\dX]$/i.test(isbnClean)) {
       return await this.resolveISBN(isbnClean);
     }
 
-    // 7. URL (Webpage, YouTube, Blog)
+    // 8. URL (Webpage, YouTube, Blog)
     if (/^https?:\/\//i.test(trimmed)) {
       return await this.resolveURL(trimmed);
     }
 
-    throw new Error('Could not detect identifier format. Please enter a valid DOI, arXiv ID, ISBN, URL, BibTeX, RIS, or EndNote XML snippet.');
+    // 9. Plain Formatted Citation (ACM Ref, APA, IEEE, etc.)
+    const plainParsed = PlainCitationResolver.parseCitationString(trimmed);
+    if (plainParsed && (plainParsed.doi || plainParsed.authors?.length || plainParsed.year)) {
+      return plainParsed;
+    }
+
+    throw new Error('Could not detect identifier format. Please enter a valid DOI, arXiv ID, ISBN, URL, BibTeX, RIS, EndNote (%0 / XML), or reference string.');
   }
 
   /**
@@ -109,6 +124,14 @@ export class MetadataResolvers {
   }
 
   /**
+   * Parses EndNote Tagged / Refer (.enw) string into structured ReferenceMetadata objects
+   * @param text Raw EndNote Tagged text
+   */
+  static parseEndNoteTagged(text: string): Partial<ReferenceMetadata>[] {
+    return EndNoteTaggedResolver.parseEndNoteTagged(text);
+  }
+
+  /**
    * Parses EndNote XML string into structured ReferenceMetadata objects
    * @param xml Raw EndNote XML input
    */
@@ -117,7 +140,15 @@ export class MetadataResolvers {
   }
 
   /**
-   * Automatically detects and parses library files (.bib, .ris, .xml) or text
+   * Parses plain formatted citation string (ACM, APA, IEEE, etc.) into structured ReferenceMetadata
+   * @param text Plain reference text
+   */
+  static parsePlainCitation(text: string): Partial<ReferenceMetadata> | null {
+    return PlainCitationResolver.parseCitationString(text);
+  }
+
+  /**
+   * Automatically detects and parses library files (.bib, .ris, .xml, .enw, plain) or text
    * @param content File content or raw snippet
    * @param filename Optional filename or extension
    */

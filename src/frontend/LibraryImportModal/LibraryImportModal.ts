@@ -157,8 +157,8 @@ export class LibraryImportModal extends Modal {
             type: partial.type || 'journal',
             projects: this.project ? [this.project.id] : [],
             collectionId: DEFAULT_COLLECTION_ID,
-            created: new Date().toISOString(),
-            modified: new Date().toISOString(),
+            dateAdded: new Date().toISOString(),
+            dateModified: new Date().toISOString(),
           };
 
           await this.storageManager.saveReference(fullRef);
