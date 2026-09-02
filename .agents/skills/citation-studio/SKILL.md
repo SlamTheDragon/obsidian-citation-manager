@@ -164,6 +164,22 @@ The linter treats grouped multi-citations (`[@A; @B]`, `(A, 2020; B, 2021)`, `[1
 * **Multi-Style Source Matching**: When switching standards across any of the 7 options (`APA 7`, `APA 7 Narrative`, `IEEE [1]`, `Harvard`, `Chicago`, `Vancouver`, `Pandoc Citekey`), the propagation engine scans all 10 possible source representations (both parenthetical, narrative, numeric, and citekeys) to ensure 100% replacement accuracy.
 * **Bipartite Numeric Mapping (`numericIndexToKeyMap`)**: Pre-scans bottom numeric entries so that numeric tokens (`[1]`, `(1)`) are mapped to library citekeys, preventing false-positive orphan warnings.
 
+### 3.11 Corpus Compilation & Overloaded Reference Export Authority (`compileDocumentText`)
+When compiling local notes or batch exporting the entire project corpus:
+* **Universal Citation Source Ingestion**:
+  The compiler scans and unifies all 4 source citation representations:
+  1. Pandoc citekey bracket groups `[@A; @B]` and singles `[@A]`.
+  2. Parenthetical multi-citation groups `(A, 2020; B, 2021)` and singles `(A, 2020)`.
+  3. Footnote callouts `[^A]` and adjacent footnote callouts `[^A][^B]`.
+  4. Numeric citations `[1, 2]` / `(1, 2)`.
+* **Footnote Mode Authority**:
+  - **Footnote Mode ON**: Compiles all citations into sequential/key footnote callouts (`[^A]` or `[^1]`), preserves adjacent collisions as `[^A][^B]`, and updates bottom footnote definitions with the chosen citation standard.
+  - **Footnote Mode OFF**: Compiles all citations into target in-body format, strips bottom footnote definitions if `cleanFootnotes: true`, and coalesces adjacent overloaded collisions into clean unified groups:
+    - **IEEE**: `[1, 2, 3]` (deduplicated and sorted in ascending order).
+    - **Vancouver**: `(1, 2, 3)` (deduplicated and sorted in ascending order).
+    - **APA 7 / Harvard / Chicago**: `(Jones, 2021; Smith, 2020)` (deduplicated and sorted alphabetically by first author surname).
+    - **Pandoc Citekeys**: `[@Jones2021; @Smith2020]`.
+
 ---
 
 ## 4. Verification & Quality Assurance Protocol
