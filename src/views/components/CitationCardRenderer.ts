@@ -9,6 +9,21 @@ import { ConfirmModal } from '../ConfirmModal';
 import { MoveToCollectionModal } from '../MoveToCollectionModal';
 
 export class CitationCardRenderer {
+  public static getSourceUrl(ref: ReferenceMetadata): string | null {
+    if (ref.doi && ref.doi.trim()) {
+      const clean = ref.doi.trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i, '');
+      return `https://doi.org/${clean}`;
+    }
+    if (ref.arxivId && ref.arxivId.trim()) {
+      const clean = ref.arxivId.trim().replace(/^arxiv:\s*/i, '');
+      return `https://arxiv.org/abs/${clean}`;
+    }
+    if (ref.url && ref.url.trim() && /^https?:\/\//i.test(ref.url.trim())) {
+      return ref.url.trim();
+    }
+    return null;
+  }
+
   static renderCard(
     app: App,
     container: HTMLElement,
@@ -23,6 +38,22 @@ export class CitationCardRenderer {
   ) {
     const card = container.createDiv({ cls: 'citation-card' });
 
+    // Open source link when clicking on the card body
+    const sourceUrl = CitationCardRenderer.getSourceUrl(ref);
+    if (sourceUrl) {
+      card.addClass('has-source-link');
+      card.title = `Click to open source: ${sourceUrl}`;
+      card.addEventListener('click', (e: MouseEvent) => {
+        const target = e.target as HTMLElement | null;
+        if (!target) return;
+        // Ignore clicks on buttons, pills, dropdowns, accordions, etc.
+        if (target.closest('button, .citation-usage-pill, .citation-notes-pill, .citation-card-notes-accordion, input, select, a')) {
+          return;
+        }
+        window.open(sourceUrl, '_blank');
+      });
+    }
+
     // Header
     const cardHeader = card.createDiv({ cls: 'citation-card-header' });
     cardHeader.createSpan({ cls: 'citation-type-badge type-' + ref.type, text: ref.type.toUpperCase() });
@@ -36,7 +67,8 @@ export class CitationCardRenderer {
         text: 'Cited (' + occurrences.length + 'x)',
         title: 'Click to see document occurrences'
       });
-      usageBadge.addEventListener('click', () => {
+      usageBadge.addEventListener('click', (e) => {
+        e.stopPropagation();
         new UsageLocationsModal(app, ref.citekey, occurrences).open();
       });
     } else {
@@ -49,7 +81,8 @@ export class CitationCardRenderer {
         text: 'Notes',
         title: 'Click to view/edit literature notes'
       });
-      notesPill.addEventListener('click', () => {
+      notesPill.addEventListener('click', (e) => {
+        e.stopPropagation();
         new CitationNotesModal(app, ref, storageManager, async () => {
           await onRefresh();
         }).open();
@@ -89,14 +122,16 @@ export class CitationCardRenderer {
       });
       snippetEl.title = 'Click to open literature notes editor';
       snippetEl.style.cursor = 'pointer';
-      snippetEl.addEventListener('click', () => {
+      snippetEl.addEventListener('click', (e) => {
+        e.stopPropagation();
         new CitationNotesModal(app, ref, storageManager, async () => {
           await onRefresh();
         }).open();
       });
 
       let isOpen = false;
-      accHeader.addEventListener('click', () => {
+      accHeader.addEventListener('click', (e) => {
+        e.stopPropagation();
         isOpen = !isOpen;
         if (isOpen) {
           accordion.addClass('open');
@@ -121,8 +156,9 @@ export class CitationCardRenderer {
     // Insert Button
     const insertBtn = actionsLeft.createEl('button', { cls: 'citation-card-btn mod-cta', title: 'Insert Citation at Cursor' });
     setIcon(insertBtn.createSpan({ cls: 'btn-icon' }), 'quote-glyph');
-    insertBtn.createSpan({ text: ' Insert' });
-    insertBtn.addEventListener('click', async () => {
+    insertBtn.createSpan({ text: 'Insert' });
+    insertBtn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       await onInsert(ref);
     });
 
@@ -132,8 +168,9 @@ export class CitationCardRenderer {
       title: 'View & Edit Research Notes in Modal'
     });
     setIcon(notesBtn.createSpan({ cls: 'btn-icon' }), 'file-text');
-    notesBtn.createSpan({ text: ' Notes' });
-    notesBtn.addEventListener('click', () => {
+    notesBtn.createSpan({ text: 'Notes' });
+    notesBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       new CitationNotesModal(app, ref, storageManager, async () => {
         await onRefresh();
       }).open();
@@ -142,8 +179,9 @@ export class CitationCardRenderer {
     // Edit Button
     const editBtn = actionsLeft.createEl('button', { cls: 'citation-card-btn', title: 'Edit Reference Metadata' });
     setIcon(editBtn.createSpan({ cls: 'btn-icon' }), 'edit-3');
-    editBtn.createSpan({ text: ' Edit' });
-    editBtn.addEventListener('click', () => {
+    editBtn.createSpan({ text: 'Edit' });
+    editBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       new ReferenceEditorModal(
         app,
         ref,
@@ -167,7 +205,8 @@ export class CitationCardRenderer {
     // Move to Collection Button (Icon only)
     const moveBtn = actionsRight.createEl('button', { cls: 'citation-card-btn', title: 'Move to Collection' });
     setIcon(moveBtn.createSpan({ cls: 'btn-icon' }), 'log-out');
-    moveBtn.addEventListener('click', () => {
+    moveBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       const allRefsMap = (storageManager as any).referencesCache || new Map();
       new MoveToCollectionModal(
         app,
@@ -184,7 +223,8 @@ export class CitationCardRenderer {
     // Delete Button
     const deleteBtn = actionsRight.createEl('button', { cls: 'citation-card-btn btn-danger', title: 'Delete Reference' });
     setIcon(deleteBtn.createSpan({ cls: 'btn-icon' }), 'trash-2');
-    deleteBtn.addEventListener('click', () => {
+    deleteBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (settings.blockDeletionIfInUse && stats) {
         const check = projectIndexer.canDelete(ref.citekey, stats);
         if (!check.allowed) {

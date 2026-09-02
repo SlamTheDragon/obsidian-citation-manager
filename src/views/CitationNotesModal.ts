@@ -130,10 +130,10 @@ export class CitationNotesModal extends Modal {
     
     if (this.activeTab === 'edit') {
       setIcon(toggleBtn.createSpan({ cls: "btn-icon" }), "eye");
-      toggleBtn.createSpan({ text: " Preview" });
+      toggleBtn.createSpan({ text: "Preview" });
     } else {
       setIcon(toggleBtn.createSpan({ cls: "btn-icon" }), "pencil");
-      toggleBtn.createSpan({ text: " Edit" });
+      toggleBtn.createSpan({ text: "Edit" });
     }
 
     toggleBtn.addEventListener("click", async () => {

@@ -8,6 +8,9 @@ mock.module('obsidian', () => ({
   ItemView: class {},
   WorkspaceLeaf: class {},
   MarkdownView: class {},
+  MarkdownRenderer: {
+    render: async () => {}
+  },
   Modal: class {},
   Setting: class {
     setName(n: string) { return this; }

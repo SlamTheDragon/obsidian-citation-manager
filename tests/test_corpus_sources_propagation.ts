@@ -186,4 +186,14 @@ assert(multiGroupInBody === "(Li et al., 2026; Norman, 2013; Vaswani & Shazeer, 
 const multiGroupIEEE = CitationEngine.formatMultiInBody([enrichedJournal, enrichedArxiv, enrichedBook], 'parenthetical', 'ieee', [1, 2, 3]);
 assert(multiGroupIEEE === "[1, 2, 3]", `Heterogeneous sources multi-citation IEEE: ${multiGroupIEEE}`);
 
-console.log("\nALL MULTI-SOURCE RESOLVER & PLUGIN PROPAGATION TESTS PASSED (18/18)!");
+import { CitationCardRenderer } from '../src/views/components/CitationCardRenderer';
+
+// --- SOURCE URL CARD CLICK RESOLUTION ---
+console.log("\n--- SOURCE URL CARD CLICK RESOLUTION ---");
+assert(CitationCardRenderer.getSourceUrl(journalRef) === "https://doi.org/10.1145/3313831.3376722", "Journal DOI resolves to https://doi.org/...");
+assert(CitationCardRenderer.getSourceUrl(arxivRef) === "https://doi.org/10.48550/arXiv.2603.25223", "arXiv DOI resolves to https://doi.org/...");
+assert(CitationCardRenderer.getSourceUrl({ ...arxivRef, doi: undefined, arxivId: "1706.03762" }) === "https://arxiv.org/abs/1706.03762", "arXiv ID resolves to https://arxiv.org/abs/...");
+assert(CitationCardRenderer.getSourceUrl(bookRef) === "https://openlibrary.org/isbn/9780465050659", "Book URL resolves correctly");
+assert(CitationCardRenderer.getSourceUrl({ citekey: 'Empty2026', type: 'other', title: 'Draft', authors: [], year: 2026, dateAdded: '', dateModified: '', projects: [] }) === null, "Empty source resolves to null");
+
+console.log("\nALL MULTI-SOURCE RESOLVER & PLUGIN PROPAGATION TESTS PASSED (23/23)!");

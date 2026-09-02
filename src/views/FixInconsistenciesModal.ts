@@ -135,8 +135,31 @@ export class FixInconsistenciesModal extends Modal {
       // Accordion Header
       const header = item.createDiv({ cls: 'lint-accordion-header' });
 
-      // Header Left: [>] [Severity Icon] [Short Title]
+      // Header Left: [Checkbox] [>] [Severity Icon] [Short Title]
       const hLeft = header.createDiv({ cls: 'lint-header-left' });
+
+      const isFixable = w.suggestedFix !== undefined && w.suggestedFix !== '';
+      if (isFixable) {
+        const checkbox = hLeft.createEl('input', {
+          type: 'checkbox',
+          cls: 'lint-item-checkbox',
+        });
+        checkbox.checked = this.selectedIds.has(w.id);
+        checkbox.title = 'Select this issue for batch correction';
+        checkbox.addEventListener('click', (e) => {
+          e.stopPropagation();
+        });
+        checkbox.addEventListener('change', (e) => {
+          e.stopPropagation();
+          if (checkbox.checked) {
+            this.selectedIds.add(w.id);
+          } else {
+            this.selectedIds.delete(w.id);
+          }
+          this.renderModal();
+        });
+      }
+
       const chevronSpan = hLeft.createSpan({ cls: 'lint-chevron-icon' });
       setIcon(chevronSpan, isOpen ? 'chevron-down' : 'chevron-right');
 

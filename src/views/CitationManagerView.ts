@@ -501,7 +501,7 @@ export class CitationManagerView extends ItemView {
           title: "Open Collection & Type Filters"
         });
         setIcon(filterBtn.createSpan({ cls: "btn-icon" }), "sliders-horizontal");
-        filterBtn.createSpan({ text: " Filters" });
+        filterBtn.createSpan({ text: "Filters" });
         filterBtn.addEventListener("click", () => {
           this.isFilterIslandOpen = !this.isFilterIslandOpen;
           if (this.isFilterIslandOpen) {
@@ -522,7 +522,7 @@ export class CitationManagerView extends ItemView {
           title: "Edit Active Filters"
         });
         setIcon(editBtn.createSpan({ cls: "btn-icon" }), "pencil");
-        editBtn.createSpan({ text: " Edit Filters" });
+        editBtn.createSpan({ text: "Edit Filters" });
         editBtn.addEventListener("click", () => {
           this.isFilterIslandOpen = !this.isFilterIslandOpen;
           if (this.isFilterIslandOpen) {
@@ -542,7 +542,7 @@ export class CitationManagerView extends ItemView {
           title: "Clear All Active Filters"
         });
         setIcon(clearBtn.createSpan({ cls: "btn-icon" }), "x");
-        clearBtn.createSpan({ text: " Clear Filters" });
+        clearBtn.createSpan({ text: "Clear Filters" });
         clearBtn.addEventListener("click", () => {
           this.selectedCollectionFilters.clear();
           this.selectedTypeFilters.clear();
@@ -707,7 +707,7 @@ export class CitationManagerView extends ItemView {
     const topActionCard = wrapper.createDiv({ cls: "citation-card citation-top-action-card" });
     const createColBtn = topActionCard.createEl("button", { cls: "citation-big-cta-btn" });
     setIcon(createColBtn.createSpan({ cls: "btn-icon" }), "folder-plus");
-    createColBtn.createSpan({ text: " Create Collection" });
+    createColBtn.createSpan({ text: "Create Collection" });
     createColBtn.addEventListener("click", () => {
       new CollectionEditorModal(this.app, null, async (newCol) => {
         this.settings.collections.push(newCol);
@@ -763,7 +763,7 @@ export class CitationManagerView extends ItemView {
       // Manage / Open Transfer Modal Button (Primary CTA)
       const manageBtn = actionsRight.createEl("button", { cls: "citation-card-btn mod-cta", title: "Open Transfer Modal" });
       setIcon(manageBtn.createSpan({ cls: "btn-icon" }), "arrow-right-left");
-      manageBtn.createSpan({ text: " Manage Citations" });
+      manageBtn.createSpan({ text: "Manage Citations" });
       manageBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         new CollectionTransferModal(
@@ -780,7 +780,7 @@ export class CitationManagerView extends ItemView {
       // Edit Button
       const editBtn = actionsLeft.createEl("button", { cls: "citation-card-btn", title: "Edit Collection Details" });
       setIcon(editBtn.createSpan({ cls: "btn-icon" }), "edit-3");
-      editBtn.createSpan({ text: " Edit" });
+      editBtn.createSpan({ text: "Edit" });
       editBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         new CollectionEditorModal(this.app, col, async (updatedCol) => {
@@ -1050,7 +1050,7 @@ export class CitationManagerView extends ItemView {
       cls: "citation-small-btn citation-btn-secondary full-width-btn"
     });
     setIcon(pubStudioBtn.createSpan({ cls: "btn-icon" }), "printer");
-    pubStudioBtn.createSpan({ text: " Export for Publication" });
+    pubStudioBtn.createSpan({ text: "Export for Publication" });
     pubStudioBtn.style.marginTop = "6px";
     pubStudioBtn.addEventListener("click", () => {
       new ExportPublicationModal(
@@ -1178,7 +1178,7 @@ export class CitationManagerView extends ItemView {
       // Resync / Catch-Up Button
       const syncBtn = controlsCard.createEl("button", { cls: "citation-small-btn citation-btn-secondary full-width-btn" });
       setIcon(syncBtn.createSpan({ cls: "btn-icon" }), "refresh-cw");
-      syncBtn.createSpan({ text: " Resync & Catch Up Bucket Notes" });
+      syncBtn.createSpan({ text: "Resync & Catch Up Bucket Notes" });
       syncBtn.style.marginTop = "8px";
       syncBtn.title = "Manual catch-up tool if files were modified offline or external changes occurred";
       syncBtn.addEventListener("click", async () => {
