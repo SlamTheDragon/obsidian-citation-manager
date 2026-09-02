@@ -273,6 +273,44 @@ export class ProjectIndexer {
       return authorYearIndex.get(`${parts[0]}_${parts[1]}_${y}`) || authorYearIndex.get(`${parts[0]}_${y}`) || null;
     };
 
+    const levenshtein = (s1: string, s2: string): number => {
+      const a = s1.toLowerCase();
+      const b = s2.toLowerCase();
+      const matrix: number[][] = [];
+      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+      for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+          if (b.charAt(i - 1) === a.charAt(j - 1)) {
+            matrix[i][j] = matrix[i - 1][j - 1];
+          } else {
+            matrix[i][j] = Math.min(
+              matrix[i - 1][j - 1] + 1,
+              matrix[i][j - 1] + 1,
+              matrix[i - 1][j] + 1
+            );
+          }
+        }
+      }
+      return matrix[b.length][a.length];
+    };
+
+    const findFuzzyRef = (queryKey: string): ReferenceMetadata | null => {
+      const cleanQuery = queryKey.toLowerCase().replace(/[^a-z0-9]/g, '');
+      let candidate: ReferenceMetadata | null = null;
+      let minDistance = 3;
+
+      for (const ref of allReferences.values()) {
+        const cleanRefKey = ref.citekey.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const dist = levenshtein(cleanQuery, cleanRefKey);
+        if (dist > 0 && dist < minDistance) {
+          minDistance = dist;
+          candidate = ref;
+        }
+      }
+      return candidate;
+    };
+
     for (const file of files) {
       try {
         const rawContent = await this.app.vault.cachedRead(file);
@@ -338,19 +376,53 @@ export class ProjectIndexer {
                 });
               } else {
                 unresolvedCitations.push({ rawCitation: `@${key}`, file: file.path, line: lineIdx + 1 });
-                const id = `${file.path}::${lineIdx + 1}::@${key}::unresolved`;
-                if (!dismissed.has(id)) {
-                  lintWarnings.push({
-                    id,
-                    filePath: file.path,
-                    fileName: file.basename,
-                    lineNumber: lineIdx + 1,
-                    lineContent: displayLine,
-                    rawCitation: `@${key}`,
-                    citekey: key,
-                    type: 'unresolved',
-                    message: `Citekey @${key} is not registered in any connected reference library.`,
-                  });
+                const fuzzyMatch = findFuzzyRef(key);
+                if (fuzzyMatch) {
+                  const id = `${file.path}::${lineIdx + 1}::@${key}::typo`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: `@${key}`,
+                      citekey: key,
+                      severity: 'warning',
+                      shortTitle: 'Possible Citekey Typo',
+                      explanation: `Found "@${key}" which closely matches library entry "@${fuzzyMatch.citekey}".`,
+                      suggestedFix: `@${fuzzyMatch.citekey}`,
+                      fixOptions: [
+                        { label: `Fix Typo -> @${fuzzyMatch.citekey}`, action: 'replace', replacementText: `@${fuzzyMatch.citekey}` },
+                        { label: 'Dismiss', action: 'dismiss' }
+                      ],
+                      type: 'author_typo_fuzzy',
+                      message: `Possible typo in @${key}. Did you mean @${fuzzyMatch.citekey}?`,
+                    });
+                  }
+                } else {
+                  const id = `${file.path}::${lineIdx + 1}::@${key}::unresolved`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: `@${key}`,
+                      citekey: key,
+                      severity: 'error',
+                      shortTitle: 'Unresolved Reference',
+                      explanation: `Citekey "@${key}" is not registered in your connected reference library.`,
+                      fixOptions: [
+                        { label: '+ Create Reference Entry', action: 'create_entry' },
+                        { label: 'Purge from Note', action: 'purge' },
+                        { label: 'Dismiss', action: 'dismiss' }
+                      ],
+                      type: 'unresolved',
+                      message: `Citekey @${key} is not registered in any connected reference library.`,
+                    });
+                  }
                 }
               }
             }
@@ -368,6 +440,13 @@ export class ProjectIndexer {
                     lineContent: displayLine,
                     rawCitation: rawGroup,
                     suggestedFix: expected,
+                    severity: 'warning',
+                    shortTitle: 'Footnote Mode Mismatch',
+                    explanation: `Citation should be in footnote format [^key] when Footnote Mode is enabled.`,
+                    fixOptions: [
+                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
                     type: 'format_mismatch',
                     message: `Expected footnote citation in Footnote Mode.`,
                   });
@@ -384,9 +463,42 @@ export class ProjectIndexer {
                     lineContent: displayLine,
                     rawCitation: rawGroup,
                     suggestedFix: expected,
+                    severity: 'warning',
+                    shortTitle: 'Format Mismatch',
+                    explanation: `Citation format should match project format (${targetFormat}).`,
+                    fixOptions: [
+                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
                     type: 'format_mismatch',
                     message: `Expected ${targetFormat} citation for ${rawGroup}.`,
                   });
+                }
+              } else if (groupRefs.length > 1) {
+                // Check if citekey group is sorted alphabetically
+                const expected = CitationEngine.formatMultiInBody(groupRefs, 'citekey', targetStyle);
+                if (rawGroup !== expected) {
+                  const id = `${file.path}::${lineIdx + 1}::${rawGroup}::compounded_order`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: rawGroup,
+                      suggestedFix: expected,
+                      severity: 'info',
+                      shortTitle: 'Unsorted Compounded Citation',
+                      explanation: `Citekeys in group ${rawGroup} are not sorted alphabetically.`,
+                      fixOptions: [
+                        { label: `Re-order -> ${expected}`, action: 'replace', replacementText: expected },
+                        { label: 'Dismiss', action: 'dismiss' }
+                      ],
+                      type: 'compounded_order_mismatch',
+                      message: `Citekeys in compounded group should be sorted alphabetically: ${expected}`,
+                    });
+                  }
                 }
               }
             }
@@ -423,25 +535,66 @@ export class ProjectIndexer {
                     rawCitation: `[^${key}]`,
                     citekey: key,
                     suggestedFix: expected,
+                    severity: 'warning',
+                    shortTitle: 'Footnote Callout in Standard Mode',
+                    explanation: `Footnote marker [^${key}] found while Footnote Mode is disabled.`,
+                    fixOptions: [
+                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
                     type: 'format_mismatch',
                     message: `Expected ${targetFormat} citation for [^${key}] (Footnote Mode is disabled).`,
                   });
                 }
               }
             } else {
-              const id = `${file.path}::${lineIdx + 1}::[^${key}]::unresolved`;
-              if (!dismissed.has(id)) {
-                lintWarnings.push({
-                  id,
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: lineIdx + 1,
-                  lineContent: displayLine,
-                  rawCitation: `[^${key}]`,
-                  citekey: key,
-                  type: 'unresolved',
-                  message: `Reference [^${key}] not found in library.`,
-                });
+              const fuzzyMatch = findFuzzyRef(key);
+              if (fuzzyMatch) {
+                const id = `${file.path}::${lineIdx + 1}::[^${key}]::typo`;
+                if (!dismissed.has(id)) {
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: `[^${key}]`,
+                    citekey: key,
+                    severity: 'warning',
+                    shortTitle: 'Possible Footnote Typo',
+                    explanation: `Footnote marker [^${key}] closely matches library entry [^${fuzzyMatch.citekey}].`,
+                    suggestedFix: `[^${fuzzyMatch.citekey}]`,
+                    fixOptions: [
+                      { label: `Fix Typo -> [^${fuzzyMatch.citekey}]`, action: 'replace', replacementText: `[^${fuzzyMatch.citekey}]` },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
+                    type: 'author_typo_fuzzy',
+                    message: `Possible typo in [^${key}]. Did you mean [^${fuzzyMatch.citekey}]?`,
+                  });
+                }
+              } else {
+                const id = `${file.path}::${lineIdx + 1}::[^${key}]::unresolved`;
+                if (!dismissed.has(id)) {
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx + 1,
+                    lineContent: displayLine,
+                    rawCitation: `[^${key}]`,
+                    citekey: key,
+                    severity: 'error',
+                    shortTitle: 'Unresolved Footnote Reference',
+                    explanation: `Footnote marker [^${key}] has no matching entry in your reference library.`,
+                    fixOptions: [
+                      { label: '+ Create Reference Entry', action: 'create_entry' },
+                      { label: 'Purge from Note', action: 'purge' },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
+                    type: 'unresolved',
+                    message: `Reference [^${key}] not found in library.`,
+                  });
+                }
               }
             }
           }
@@ -489,6 +642,13 @@ export class ProjectIndexer {
                     lineContent: displayLine,
                     rawCitation: rawGroup,
                     suggestedFix: expected,
+                    severity: 'warning',
+                    shortTitle: 'Footnote Mode Mismatch',
+                    explanation: `Citation should be in footnote format [^key] when Footnote Mode is enabled.`,
+                    fixOptions: [
+                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
                     type: 'format_mismatch',
                     message: `Expected footnote citation in Footnote Mode.`,
                   });
@@ -505,6 +665,13 @@ export class ProjectIndexer {
                     lineContent: displayLine,
                     rawCitation: rawGroup,
                     suggestedFix: expected,
+                    severity: 'warning',
+                    shortTitle: 'Expected Citekey Format',
+                    explanation: `Citation group should be in citekey format [@key] for this project.`,
+                    fixOptions: [
+                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
                     type: 'format_mismatch',
                     message: `Expected citekey format for ${rawGroup}.`,
                   });
@@ -521,9 +688,41 @@ export class ProjectIndexer {
                     lineContent: displayLine,
                     rawCitation: rawGroup,
                     suggestedFix: expected,
+                    severity: 'warning',
+                    shortTitle: `${targetStyle.toUpperCase()} Style Mismatch`,
+                    explanation: `Citation group should follow ${targetStyle.toUpperCase()} formatting standard.`,
+                    fixOptions: [
+                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
                     type: 'format_mismatch',
                     message: `Expected ${targetStyle.toUpperCase()} format for ${rawGroup}.`,
                   });
+                }
+              } else if (groupRefs.length > 1) {
+                const expected = CitationEngine.formatMultiInBody(groupRefs, targetFormat, targetStyle);
+                if (rawGroup !== expected) {
+                  const id = `${file.path}::${lineIdx + 1}::${rawGroup}::compounded_order`;
+                  if (!dismissed.has(id)) {
+                    lintWarnings.push({
+                      id,
+                      filePath: file.path,
+                      fileName: file.basename,
+                      lineNumber: lineIdx + 1,
+                      lineContent: displayLine,
+                      rawCitation: rawGroup,
+                      suggestedFix: expected,
+                      severity: 'info',
+                      shortTitle: 'Unsorted Compounded Citation',
+                      explanation: `Citations in group ${rawGroup} are not sorted alphabetically by first author.`,
+                      fixOptions: [
+                        { label: `Re-order -> ${expected}`, action: 'replace', replacementText: expected },
+                        { label: 'Dismiss', action: 'dismiss' }
+                      ],
+                      type: 'compounded_order_mismatch',
+                      message: `Citations should be sorted alphabetically: ${expected}`,
+                    });
+                  }
                 }
               }
             }
@@ -559,6 +758,13 @@ export class ProjectIndexer {
                     lineContent: displayLine,
                     rawCitation: match[0],
                     suggestedFix: `[^${ref.citekey}]`,
+                    severity: 'warning',
+                    shortTitle: 'Narrative Citation in Footnote Mode',
+                    explanation: `Narrative citation "${match[0]}" should be converted to [^${ref.citekey}] in Footnote Mode.`,
+                    fixOptions: [
+                      { label: `Convert to [^${ref.citekey}]`, action: 'replace', replacementText: `[^${ref.citekey}]` },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
                     type: 'format_mismatch',
                     message: `Expected [^${ref.citekey}] in Footnote Mode.`,
                   });
@@ -659,6 +865,13 @@ export class ProjectIndexer {
                   citekey: key,
                   definitionSnippet: currentDefText,
                   suggestedFix: "",
+                  severity: 'warning',
+                  shortTitle: 'Orphan Footnote Definition',
+                  explanation: `Footnote definition [^${key}] declared at bottom, but never cited in markdown body text.`,
+                  fixOptions: [
+                    { label: 'Remove Orphan Definition', action: 'purge' },
+                    { label: 'Dismiss', action: 'dismiss' }
+                  ],
                   type: 'orphan_definition',
                   message: `Footnote definition [^${key}] declared at bottom, but not cited in markdown body.`,
                 });
@@ -678,6 +891,13 @@ export class ProjectIndexer {
                   rawCitation: currentDefLine,
                   citekey: key,
                   suggestedFix: expectedBib,
+                  severity: 'warning',
+                  shortTitle: 'Footnote Prefix in Standard Mode',
+                  explanation: `Footnote prefix [^${key}]: should be converted to standard un-prefixed ${targetStyle.toUpperCase()} reference entry.`,
+                  fixOptions: [
+                    { label: `Convert to Standard Entry`, action: 'replace', replacementText: expectedBib },
+                    { label: 'Dismiss', action: 'dismiss' }
+                  ],
                   type: 'format_mismatch',
                   message: `Convert [^${key}]: stub to standard ${targetStyle.toUpperCase()} reference entry.`,
                 });
@@ -686,7 +906,9 @@ export class ProjectIndexer {
             } else {
               const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, footnoteIndex);
               if (currentDefLine !== expectedDef) {
-                const id = `${file.path}::def::${key}::style_mismatch`;
+                // Check if tampered vs style mismatch
+                const isTampered = currentDefText.length > 5 && !expectedDef.includes(currentDefText);
+                const id = `${file.path}::def::${key}::${isTampered ? 'tampered' : 'style'}_mismatch`;
                 if (!dismissed.has(id)) {
                   const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
                   lintWarnings.push({
@@ -698,8 +920,19 @@ export class ProjectIndexer {
                     rawCitation: currentDefLine,
                     citekey: key,
                     suggestedFix: expectedDef,
-                    type: 'style_mismatch',
-                    message: `Definition style does not match bucket standard (${targetStyle.toUpperCase()}).`,
+                    severity: 'warning',
+                    shortTitle: isTampered ? 'Tampered Footnote Text' : 'Definition Style Mismatch',
+                    explanation: isTampered 
+                      ? `Footnote text was manually edited and differs from the canonical reference data.`
+                      : `Definition style does not match project standard (${targetStyle.toUpperCase()}).`,
+                    fixOptions: [
+                      { label: `Restore Canonical Definition`, action: 'replace', replacementText: expectedDef },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
+                    type: isTampered ? 'tampered_definition' : 'style_mismatch',
+                    message: isTampered 
+                      ? `Footnote definition text differs from reference library data.`
+                      : `Definition style does not match bucket standard (${targetStyle.toUpperCase()}).`,
                   });
                 }
               }
@@ -707,28 +940,66 @@ export class ProjectIndexer {
             }
           } else {
             // Check if this unresolved key was already logged from in-body scan
-            const existingWarning = lintWarnings.find(w => w.filePath === file.path && w.type === 'unresolved' && (w.citekey === key || w.rawCitation === `[^${key}]` || w.rawCitation === `[@${key}]`));
+            const existingWarning = lintWarnings.find(w => w.filePath === file.path && (w.type === 'unresolved' || w.type === 'author_typo_fuzzy') && (w.citekey === key || w.rawCitation === `[^${key}]` || w.rawCitation === `[@${key}]`));
             if (existingWarning) {
               existingWarning.definitionSnippet = currentDefText;
             } else {
-              const id = `${file.path}::def::${key}::unresolved`;
-              if (!dismissed.has(id)) {
-                const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
-                lintWarnings.push({
-                  id,
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
-                  lineContent: currentDefLine,
-                  rawCitation: currentDefLine,
-                  citekey: key,
-                  definitionSnippet: currentDefText,
-                  suggestedFix: "",
-                  type: isCitedInBody ? 'unresolved' : 'orphan_definition',
-                  message: isCitedInBody 
-                    ? `Reference [^${key}] not found in library.`
-                    : `Footnote definition [^${key}] not in library and not cited in markdown body.`,
-                });
+              const fuzzyMatch = findFuzzyRef(key);
+              if (fuzzyMatch) {
+                const id = `${file.path}::def::${key}::typo`;
+                if (!dismissed.has(id)) {
+                  const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                    lineContent: currentDefLine,
+                    rawCitation: currentDefLine,
+                    citekey: key,
+                    definitionSnippet: currentDefText,
+                    suggestedFix: `[^${fuzzyMatch.citekey}]: ${CitationEngine.formatFootnoteDefinition(fuzzyMatch, targetStyle, 1).replace(/^\[\^[^\]]+\]:\s*/, '')}`,
+                    severity: 'warning',
+                    shortTitle: 'Possible Footnote Def Typo',
+                    explanation: `Footnote definition key [^${key}] closely matches library reference [^${fuzzyMatch.citekey}].`,
+                    fixOptions: [
+                      { label: `Fix Key -> [^${fuzzyMatch.citekey}]`, action: 'replace', replacementText: `[^${fuzzyMatch.citekey}]: ${currentDefText}` },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
+                    type: 'author_typo_fuzzy',
+                    message: `Possible typo in [^${key}]: definition. Did you mean [^${fuzzyMatch.citekey}]?`,
+                  });
+                }
+              } else {
+                const id = `${file.path}::def::${key}::unresolved`;
+                if (!dismissed.has(id)) {
+                  const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                  lintWarnings.push({
+                    id,
+                    filePath: file.path,
+                    fileName: file.basename,
+                    lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
+                    lineContent: currentDefLine,
+                    rawCitation: currentDefLine,
+                    citekey: key,
+                    definitionSnippet: currentDefText,
+                    suggestedFix: "",
+                    severity: 'error',
+                    shortTitle: isCitedInBody ? 'Unresolved Footnote Definition' : 'Orphan Unresolved Definition',
+                    explanation: isCitedInBody 
+                      ? `Footnote [^${key}] not found in reference library.`
+                      : `Footnote definition [^${key}] not in library and not cited in markdown body.`,
+                    fixOptions: [
+                      { label: '+ Create Reference Entry', action: 'create_entry' },
+                      { label: 'Purge from Note', action: 'purge' },
+                      { label: 'Dismiss', action: 'dismiss' }
+                    ],
+                    type: isCitedInBody ? 'unresolved' : 'orphan_definition',
+                    message: isCitedInBody 
+                      ? `Reference [^${key}] not found in library.`
+                      : `Footnote definition [^${key}] not in library and not cited in markdown body.`,
+                  });
+                }
               }
             }
           }

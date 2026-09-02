@@ -1,14 +1,17 @@
 import { App, Modal, Notice, setIcon, TFile } from 'obsidian';
-import { LintWarning, ReferenceMetadata } from '../types';
+import { LintWarning, LintSeverity, ReferenceMetadata } from '../types';
+import { LintEngine } from '../lintEngine';
 import { ReferenceEditorModal } from './ReferenceEditorModal';
 import { StorageManager } from '../storageManager';
 
 export class FixInconsistenciesModal extends Modal {
   private warnings: LintWarning[];
+  private openWarningIds: Set<string> = new Set();
   private selectedIds: Set<string>;
   private storageManager: StorageManager;
   private onApplyFixes: (selectedWarnings: LintWarning[]) => Promise<void>;
   private onRefresh: () => Promise<void>;
+  private activeSeverityFilter: 'all' | 'error' | 'warning' | 'info' = 'all';
 
   constructor(
     app: App,
@@ -26,289 +29,282 @@ export class FixInconsistenciesModal extends Modal {
   }
 
   onOpen() {
-    this.titleEl.setText("Citation Diagnostics & Corrections");
+    this.titleEl.setText('Citation Diagnostics & Corrections');
     this.renderModal();
   }
 
   private renderModal() {
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.addClass("citation-modal-body");
-
-    const fixableWarnings = this.warnings.filter(w => w.suggestedFix !== undefined);
-    const unresolvedWarnings = this.warnings.filter(w => w.type === 'unresolved');
+    contentEl.addClass('citation-modal-body');
 
     if (this.warnings.length === 0) {
-      const emptyBox = contentEl.createDiv({ cls: "citation-empty-clean" });
-      setIcon(emptyBox.createDiv({ cls: "empty-icon" }), "check-circle");
-      emptyBox.createEl("h3", { text: "No citation inconsistencies found" });
-      emptyBox.createEl("p", { cls: "status-hint", text: "All citations across linked documents align with bucket standards." });
+      const emptyBox = contentEl.createDiv({ cls: 'citation-empty-clean' });
+      setIcon(emptyBox.createDiv({ cls: 'empty-icon' }), 'check-circle');
+      emptyBox.createEl('h3', { text: 'No citation inconsistencies found' });
+      emptyBox.createEl('p', { cls: 'status-hint', text: 'All citations and definitions across linked documents align with project standards.' });
       return;
     }
 
-    // 1. FORMAT & STYLE MISMATCHES SECTION
-    if (fixableWarnings.length > 0) {
-      const fixableCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
-      const fHead = fixableCard.createDiv({ cls: "section-card-header-flex" });
-      fHead.style.display = "flex";
-      fHead.style.alignItems = "center";
-      fHead.style.justifyContent = "space-between";
-      fHead.style.marginBottom = "6px";
+    // 1. SEVERITY FILTER TABS & STATS BAR
+    const filterBar = contentEl.createDiv({ cls: 'citation-modal-section-card' });
+    filterBar.style.padding = '8px 10px';
+    filterBar.style.marginBottom = '8px';
 
-      fHead.createEl("div", { 
-        cls: "section-card-title", 
-        text: `Formatting & Style Mismatches (${fixableWarnings.length})` 
+    const topFilterFlex = filterBar.createDiv();
+    topFilterFlex.style.display = 'flex';
+    topFilterFlex.style.alignItems = 'center';
+    topFilterFlex.style.justifyContent = 'space-between';
+
+    const tabGroup = topFilterFlex.createDiv({ cls: 'citation-pill-tab-group' });
+    tabGroup.style.display = 'flex';
+    tabGroup.style.gap = '4px';
+
+    const errorCount = this.warnings.filter(w => w.severity === 'error' || (!w.severity && w.type === 'unresolved')).length;
+    const warnCount = this.warnings.filter(w => w.severity === 'warning' || (!w.severity && w.type !== 'unresolved' && w.type !== 'compounded_order_mismatch')).length;
+    const infoCount = this.warnings.filter(w => w.severity === 'info' || w.type === 'compounded_order_mismatch' || w.type === 'unformatted_prose_mention').length;
+
+    const tabs: Array<{ id: 'all' | 'error' | 'warning' | 'info'; label: string; count: number }> = [
+      { id: 'all', label: 'All Issues', count: this.warnings.length },
+      { id: 'error', label: 'Errors', count: errorCount },
+      { id: 'warning', label: 'Warnings', count: warnCount },
+      { id: 'info', label: 'Suggestions', count: infoCount },
+    ];
+
+    for (const tab of tabs) {
+      const tabBtn = tabGroup.createEl('button', {
+        cls: `citation-mini-btn ${this.activeSeverityFilter === tab.id ? 'mod-cta' : ''}`,
+        text: `${tab.label} (${tab.count})`,
       });
-
-      const selectAllBtn = fHead.createEl("button", { 
-        cls: "citation-mini-btn", 
-        text: this.selectedIds.size === fixableWarnings.length ? "Deselect All" : "Select All" 
-      });
-      selectAllBtn.style.width = "auto";
-      selectAllBtn.style.padding = "2px 8px";
-      selectAllBtn.addEventListener("click", () => {
-        if (this.selectedIds.size === fixableWarnings.length) {
-          this.selectedIds.clear();
-        } else {
-          fixableWarnings.forEach(w => this.selectedIds.add(w.id));
-        }
-        this.renderModal();
-      });
-
-      const fixList = fixableCard.createDiv({ cls: "citation-diff-list-container" });
-      fixList.style.maxHeight = "28vh";
-      fixList.style.overflowY = "auto";
-      fixList.style.display = "flex";
-      fixList.style.flexDirection = "column";
-      fixList.style.gap = "6px";
-
-      for (const w of fixableWarnings) {
-        const row = fixList.createDiv({ cls: "citation-diff-card" });
-        row.style.background = "var(--background-secondary)";
-        row.style.border = "1px solid var(--background-modifier-border)";
-        row.style.borderRadius = "var(--radius-s)";
-        row.style.padding = "6px 8px";
-        row.style.display = "flex";
-        row.style.flexDirection = "column";
-        row.style.gap = "3px";
-
-        const topFlex = row.createDiv({ cls: "diff-top-flex" });
-        topFlex.style.display = "flex";
-        topFlex.style.alignItems = "center";
-        topFlex.style.justifyContent = "space-between";
-
-        const leftCheck = topFlex.createDiv({ cls: "diff-check-wrap" });
-        leftCheck.style.display = "flex";
-        leftCheck.style.alignItems = "center";
-        leftCheck.style.gap = "6px";
-
-        const cb = leftCheck.createEl("input", { type: "checkbox" });
-        cb.checked = this.selectedIds.has(w.id);
-        cb.addEventListener("change", () => {
-          if (cb.checked) this.selectedIds.add(w.id);
-          else this.selectedIds.delete(w.id);
-          applyBtn.setText(`Apply Selected Fixes (${this.selectedIds.size})`);
-          applyBtn.disabled = this.selectedIds.size === 0;
-        });
-
-        const fileLink = leftCheck.createSpan({ cls: "diff-file-name", text: `${w.fileName}:${w.lineNumber}` });
-        fileLink.style.fontWeight = "600";
-        fileLink.style.cursor = "pointer";
-        fileLink.addEventListener("click", () => {
-          const fileObj = this.app.vault.getAbstractFileByPath(w.filePath);
-          if (fileObj instanceof TFile) this.app.workspace.getLeaf().openFile(fileObj);
-        });
-
-        const typeBadge = topFlex.createSpan({ 
-          cls: "status-badge-pill", 
-          text: w.type === 'format_mismatch' ? "Format" : (w.type === 'style_mismatch' ? "Style" : "Orphan") 
-        });
-        typeBadge.style.fontSize = "9px";
-        typeBadge.style.padding = "1px 5px";
-
-        const diffWrap = row.createDiv({ cls: "diff-content-flex" });
-        diffWrap.style.display = "flex";
-        diffWrap.style.alignItems = "center";
-        diffWrap.style.gap = "6px";
-        diffWrap.style.fontSize = "11px";
-
-        const oldSpan = diffWrap.createSpan({ cls: "diff-old" });
-        oldSpan.style.color = "var(--text-error, #ef4444)";
-        oldSpan.style.textDecoration = "line-through";
-        oldSpan.createEl("code", { text: w.rawCitation });
-
-        diffWrap.createSpan({ text: " → ", cls: "diff-arrow" });
-
-        const newSpan = diffWrap.createSpan({ cls: "diff-new" });
-        newSpan.style.fontWeight = "600";
-        if (w.suggestedFix === "") {
-          newSpan.style.color = "var(--text-warning, #eab308)";
-          newSpan.createEl("em", { text: "(Remove orphan definition)" });
-        } else {
-          newSpan.style.color = "var(--text-success, #22c55e)";
-          newSpan.createEl("code", { text: w.suggestedFix || "" });
-        }
-      }
-
-      const applyRow = fixableCard.createDiv({ cls: "apply-row" });
-      applyRow.style.display = "flex";
-      applyRow.style.justifyContent = "flex-end";
-      applyRow.style.marginTop = "8px";
-
-      const applyBtn = applyRow.createEl("button", { 
-        cls: "mod-cta", 
-        text: `Apply Selected Fixes (${this.selectedIds.size})` 
-      });
-      applyBtn.disabled = this.selectedIds.size === 0;
-      applyBtn.addEventListener("click", async () => {
-        applyBtn.disabled = true;
-        applyBtn.setText("Applying...");
-        const toApply = fixableWarnings.filter(w => this.selectedIds.has(w.id));
-        await this.onApplyFixes(toApply);
-        this.warnings = this.warnings.filter(w => !this.selectedIds.has(w.id));
+      tabBtn.style.width = 'auto';
+      tabBtn.style.padding = '2px 8px';
+      tabBtn.addEventListener('click', () => {
+        this.activeSeverityFilter = tab.id;
         this.renderModal();
       });
     }
 
-    // 2. UNRESOLVED REFERENCES & STUBS SECTION
-    if (unresolvedWarnings.length > 0) {
-      const unresCard = contentEl.createDiv({ cls: "citation-modal-section-card" });
-      unresCard.createEl("div", { 
-        cls: "section-card-title", 
-        text: `Unresolved References & Stubs (${unresolvedWarnings.length})` 
+    // Batch selection toggles
+    const batchActions = topFilterFlex.createDiv();
+    batchActions.style.display = 'flex';
+    batchActions.style.gap = '6px';
+
+    const filteredWarnings = this.warnings.filter(w => {
+      if (this.activeSeverityFilter === 'all') return true;
+      if (this.activeSeverityFilter === 'error') return w.severity === 'error' || (!w.severity && w.type === 'unresolved');
+      if (this.activeSeverityFilter === 'warning') return w.severity === 'warning' || (!w.severity && w.type !== 'unresolved' && w.type !== 'compounded_order_mismatch');
+      if (this.activeSeverityFilter === 'info') return w.severity === 'info' || w.type === 'compounded_order_mismatch' || w.type === 'unformatted_prose_mention';
+      return true;
+    });
+
+    const fixableInFilter = filteredWarnings.filter(w => w.suggestedFix !== undefined && w.suggestedFix !== '');
+
+    if (fixableInFilter.length > 0) {
+      const selectAllBtn = batchActions.createEl('button', {
+        cls: 'citation-mini-btn',
+        text: this.selectedIds.size === fixableInFilter.length ? 'Deselect All' : 'Select All',
       });
-      unresCard.createEl("div", { 
-        cls: "section-card-desc", 
-        text: "These citekeys were found in notes but do not exist in your reference library." 
+      selectAllBtn.style.width = 'auto';
+      selectAllBtn.style.padding = '2px 8px';
+      selectAllBtn.addEventListener('click', () => {
+        if (this.selectedIds.size === fixableInFilter.length) {
+          this.selectedIds.clear();
+        } else {
+          fixableInFilter.forEach(w => this.selectedIds.add(w.id));
+        }
+        this.renderModal();
+      });
+    }
+
+    // 2. INTERACTIVE LINT ACCORDION LIST
+    const listContainer = contentEl.createDiv({ cls: 'citation-lint-accordion-list' });
+
+    for (const w of filteredWarnings) {
+      const isOpen = this.openWarningIds.has(w.id);
+      const item = listContainer.createDiv({ cls: `citation-lint-accordion-item ${isOpen ? 'open' : ''}` });
+
+      // Accordion Header
+      const header = item.createDiv({ cls: 'lint-accordion-header' });
+
+      // Header Left: [>] [Severity Icon] [Short Title]
+      const hLeft = header.createDiv({ cls: 'lint-header-left' });
+      const chevronSpan = hLeft.createSpan({ cls: 'lint-chevron-icon' });
+      setIcon(chevronSpan, isOpen ? 'chevron-down' : 'chevron-right');
+
+      const sev = w.severity || (w.type === 'unresolved' ? 'error' : (w.type === 'compounded_order_mismatch' ? 'info' : 'warning'));
+      const sevBadge = hLeft.createSpan({ cls: `lint-severity-badge severity-${sev}` });
+      if (sev === 'error') {
+        setIcon(sevBadge, 'alert-circle');
+      } else if (sev === 'info') {
+        setIcon(sevBadge, 'info');
+      } else {
+        setIcon(sevBadge, 'alert-triangle');
+      }
+
+      const shortTitle = w.shortTitle || (w.type === 'format_mismatch' ? 'Format Mismatch' : (w.type === 'style_mismatch' ? 'Style Mismatch' : (w.type === 'orphan_definition' ? 'Orphan Definition' : 'Unresolved Reference')));
+      hLeft.createSpan({ cls: 'lint-short-title', text: shortTitle });
+
+      // Header Right: [File:Line] [Dismiss (Trash/X) Button]
+      const hRight = header.createDiv({ cls: 'lint-header-right' });
+
+      const fileBadge = hRight.createSpan({ cls: 'lint-file-badge', text: `${w.fileName}:${w.lineNumber}` });
+      fileBadge.title = 'Click to open file in workspace leaf';
+      fileBadge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const fileObj = this.app.vault.getAbstractFileByPath(w.filePath);
+        if (fileObj instanceof TFile) this.app.workspace.getLeaf().openFile(fileObj);
       });
 
-      const unresList = unresCard.createDiv({ cls: "citation-unres-list-container" });
-      unresList.style.maxHeight = "28vh";
-      unresList.style.overflowY = "auto";
-      unresList.style.display = "flex";
-      unresList.style.flexDirection = "column";
-      unresList.style.gap = "6px";
-      unresList.style.marginTop = "6px";
+      const dismissBtn = hRight.createEl('button', { cls: 'lint-header-dismiss-btn', title: 'Dismiss this issue' });
+      setIcon(dismissBtn, 'trash-2');
+      dismissBtn.addEventListener('click', async (e) => {
+        e.stopPropagation();
+        await this.storageManager.saveDismissedLint(w.id);
+        this.warnings = this.warnings.filter(item => item.id !== w.id);
+        this.renderModal();
+        new Notice('Issue dismissed.');
+      });
 
-      for (const w of unresolvedWarnings) {
-        const row = unresList.createDiv({ cls: "citation-diff-card" });
-        row.style.background = "var(--background-secondary)";
-        row.style.border = "1px solid var(--background-modifier-border)";
-        row.style.borderRadius = "var(--radius-s)";
-        row.style.padding = "8px";
-        row.style.display = "flex";
-        row.style.flexDirection = "column";
-        row.style.gap = "4px";
+      // Header Click Toggle Accordion
+      header.addEventListener('click', () => {
+        if (this.openWarningIds.has(w.id)) {
+          this.openWarningIds.delete(w.id);
+        } else {
+          this.openWarningIds.add(w.id);
+        }
+        this.renderModal();
+      });
 
-        const topRow = row.createDiv({ cls: "unres-top-row" });
-        topRow.style.display = "flex";
-        topRow.style.alignItems = "center";
-        topRow.style.justifyContent = "space-between";
+      // Accordion Body (When Expanded)
+      if (isOpen) {
+        const body = item.createDiv({ cls: 'lint-accordion-body' });
 
-        const leftInfo = topRow.createDiv();
-        const fileLink = leftInfo.createSpan({ cls: "diff-file-name", text: `${w.fileName}:${w.lineNumber}` });
-        fileLink.style.fontWeight = "600";
-        fileLink.style.cursor = "pointer";
-        fileLink.addEventListener("click", () => {
-          const fileObj = this.app.vault.getAbstractFileByPath(w.filePath);
-          if (fileObj instanceof TFile) this.app.workspace.getLeaf().openFile(fileObj);
-        });
+        // 1. Explanation row
+        const explBox = body.createDiv({ cls: 'lint-explanation-box' });
+        explBox.createSpan({ text: w.explanation || w.message });
 
-        leftInfo.createEl("code", { text: ` ${w.rawCitation} ` });
+        // 2. Solution & Diff row
+        if (w.suggestedFix !== undefined || w.definitionSnippet) {
+          const solBox = body.createDiv({ cls: 'lint-solution-box' });
+          solBox.createDiv({ cls: 'lint-solution-label', text: 'Proposed Correction:' });
 
-        const actionBtns = topRow.createDiv({ cls: "unres-action-btns" });
-        actionBtns.style.display = "flex";
-        actionBtns.style.gap = "4px";
+          const diffWrap = solBox.createDiv({ cls: 'lint-diff-preview' });
+          if (w.rawCitation) {
+            const oldEl = diffWrap.createSpan({ cls: 'diff-old' });
+            oldEl.style.color = 'var(--text-error, #ef4444)';
+            oldEl.style.textDecoration = 'line-through';
+            oldEl.createEl('code', { text: w.rawCitation });
+            diffWrap.createSpan({ text: '  →  ', cls: 'diff-arrow' });
+          }
 
-        // Create Reference Button
-        const createBtn = actionBtns.createEl("button", { cls: "citation-mini-btn", text: "+ Create Entry" });
-        createBtn.style.width = "auto";
-        createBtn.style.padding = "2px 8px";
-        createBtn.style.background = "var(--interactive-accent)";
-        createBtn.style.color = "var(--text-on-accent)";
-        createBtn.addEventListener("click", () => {
-          const key = w.citekey || w.rawCitation.replace(/^\[\^?|\]$/g, '').replace(/^@/, '');
-          new ReferenceEditorModal(
-            this.app,
-            {
-              citekey: key,
-              title: w.definitionSnippet || `Reference ${key}`,
-              authors: ["Author"],
-              year: new Date().getFullYear(),
-              type: "journal",
-              projects: []
-            },
-            async (newRef) => {
-              await this.storageManager.saveReference(newRef);
-              await this.onRefresh();
-              this.warnings = this.warnings.filter(item => item.id !== w.id);
-              this.renderModal();
-              new Notice(`Created reference entry [${newRef.citekey}]`);
-            },
-            true
-          ).open();
-        });
+          const newEl = diffWrap.createSpan({ cls: 'diff-new' });
+          newEl.style.fontWeight = '600';
+          if (w.suggestedFix === '') {
+            newEl.style.color = 'var(--text-warning, #eab308)';
+            newEl.createEl('em', { text: '(Remove uncited orphan definition)' });
+          } else {
+            newEl.style.color = 'var(--text-success, #22c55e)';
+            newEl.createEl('code', { text: w.suggestedFix || '' });
+          }
+        }
 
-        // Purge from Note Button
-        const purgeBtn = actionBtns.createEl("button", { cls: "citation-mini-btn btn-danger", text: "Purge" });
-        purgeBtn.style.width = "auto";
-        purgeBtn.style.padding = "2px 6px";
-        purgeBtn.title = "Remove this reference token and definition from note";
-        purgeBtn.addEventListener("click", async () => {
-          const fileObj = this.app.vault.getAbstractFileByPath(w.filePath);
-          if (fileObj instanceof TFile) {
-            let content = await this.app.vault.read(fileObj);
-            const key = (w.citekey || w.rawCitation.replace(/^\[\^?|\]:?.*$/g, '').replace(/^@/, '')).trim();
-            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // 3. Actions Row
+        const actionsRow = body.createDiv({ cls: 'lint-actions-row' });
 
-            // 1. Remove in-body occurrences: [^key], [@key]
-            content = content.replace(new RegExp(`\\[\\^${escapedKey}\\](?!:)`, 'g'), '');
-            content = content.replace(new RegExp(`\\[@${escapedKey}\\]`, 'g'), '');
+        if (w.suggestedFix !== undefined) {
+          const applySingleBtn = actionsRow.createEl('button', { cls: 'mod-cta citation-mini-btn', text: 'Apply Fix' });
+          applySingleBtn.style.width = 'auto';
+          applySingleBtn.style.padding = '3px 10px';
+          applySingleBtn.addEventListener('click', async () => {
+            applySingleBtn.disabled = true;
+            applySingleBtn.setText('Applying...');
+            await LintEngine.applyLintFix(this.app, w);
+            this.warnings = this.warnings.filter(item => item.id !== w.id);
+            await this.onRefresh();
+            this.renderModal();
+            new Notice('Fix applied successfully.');
+          });
+        }
 
-            // 2. Remove footnote definition line (including any indented continuation lines)
-            const fnDefRegex = new RegExp(`^\\s*\\[\\^${escapedKey}\\]:.*$(\\r?\\n[ \\t]+.*$)*\\r?\\n?`, 'gm');
-            content = content.replace(fnDefRegex, '');
+        if (w.type === 'unresolved' || w.type === 'author_typo_fuzzy') {
+          const createBtn = actionsRow.createEl('button', { cls: 'citation-mini-btn', text: '+ Create Entry' });
+          createBtn.style.width = 'auto';
+          createBtn.style.padding = '3px 8px';
+          createBtn.style.background = 'var(--interactive-accent)';
+          createBtn.style.color = 'var(--text-on-accent)';
+          createBtn.addEventListener('click', () => {
+            const key = w.citekey || w.rawCitation.replace(/^\[\^?|\]$/g, '').replace(/^@/, '');
+            new ReferenceEditorModal(
+              this.app,
+              {
+                citekey: key,
+                title: w.definitionSnippet || `Reference ${key}`,
+                authors: ['Author'],
+                year: new Date().getFullYear(),
+                type: 'journal',
+                projects: []
+              },
+              async (newRef) => {
+                await this.storageManager.saveReference(newRef);
+                await this.onRefresh();
+                this.warnings = this.warnings.filter(item => item.id !== w.id);
+                this.renderModal();
+                new Notice(`Created reference entry [${newRef.citekey}]`);
+              },
+              true
+            ).open();
+          });
+        }
 
-            // 3. If definitionSnippet or plain rawCitation is present, also purge matching un-prefixed line
-            const snippetToPurge = w.definitionSnippet || (!w.rawCitation.startsWith('[^') && !w.rawCitation.startsWith('[@') ? w.rawCitation : "");
-            if (snippetToPurge && snippetToPurge.length > 5) {
-              const escapedSnippet = snippetToPurge.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              content = content.replace(new RegExp(`^.*${escapedSnippet}.*$\\r?\\n?`, 'gm'), '');
-            }
-
-            await this.app.vault.modify(fileObj, content);
+        if (w.type === 'orphan_definition' || w.type === 'unresolved') {
+          const purgeBtn = actionsRow.createEl('button', { cls: 'citation-mini-btn btn-danger', text: 'Purge' });
+          purgeBtn.style.width = 'auto';
+          purgeBtn.style.padding = '3px 8px';
+          purgeBtn.title = 'Remove this token and definition from note';
+          purgeBtn.addEventListener('click', async () => {
+            await LintEngine.applyLintFix(this.app, w, { label: 'Purge', action: 'purge' });
             await this.onRefresh();
             this.warnings = this.warnings.filter(item => item.id !== w.id);
             this.renderModal();
-            new Notice(`Purged reference [${key}] from ${w.fileName}`);
-          }
-        });
+            new Notice(`Purged reference from ${w.fileName}`);
+          });
+        }
 
-        // Dismiss Button
-        const dismissBtn = actionBtns.createEl("button", { cls: "citation-mini-btn", text: "Dismiss" });
-        dismissBtn.style.width = "auto";
-        dismissBtn.style.padding = "2px 6px";
-        dismissBtn.title = "Dismiss this warning";
-        dismissBtn.addEventListener("click", async () => {
+        const dismissRowBtn = actionsRow.createEl('button', { cls: 'citation-mini-btn', text: 'Dismiss' });
+        dismissRowBtn.style.width = 'auto';
+        dismissRowBtn.style.padding = '3px 8px';
+        dismissRowBtn.addEventListener('click', async () => {
           await this.storageManager.saveDismissedLint(w.id);
           this.warnings = this.warnings.filter(item => item.id !== w.id);
           this.renderModal();
-          new Notice("Warning dismissed.");
+          new Notice('Issue dismissed.');
         });
-
-        if (w.definitionSnippet) {
-          const snippetDiv = row.createDiv({ cls: "status-hint" });
-          snippetDiv.style.fontSize = "10.5px";
-          snippetDiv.createSpan({ text: "Note definition text: " });
-          snippetDiv.createEl("em", { text: `"${w.definitionSnippet}"` });
-        }
       }
     }
 
-    // Modal Close Footer
-    const footerRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
-    const closeBtn = footerRow.createEl("button", { text: "Close" });
-    closeBtn.addEventListener("click", () => this.close());
+    // 3. FOOTER BUTTONS CONTAINER
+    const footerRow = contentEl.createDiv({ cls: 'modal-button-container citation-modal-buttons' });
+
+    if (fixableInFilter.length > 0) {
+      const batchApplyBtn = footerRow.createEl('button', {
+        cls: 'mod-cta',
+        text: `Apply Selected Fixes (${this.selectedIds.size})`,
+      });
+      batchApplyBtn.disabled = this.selectedIds.size === 0;
+      batchApplyBtn.addEventListener('click', async () => {
+        batchApplyBtn.disabled = true;
+        batchApplyBtn.setText('Applying...');
+        const toApply = this.warnings.filter(w => this.selectedIds.has(w.id));
+        await LintEngine.batchApplyFixes(this.app, toApply);
+        this.warnings = this.warnings.filter(w => !this.selectedIds.has(w.id));
+        await this.onRefresh();
+        this.renderModal();
+        new Notice('Applied selected fixes.');
+      });
+    }
+
+    const closeBtn = footerRow.createEl('button', { text: 'Close' });
+    closeBtn.addEventListener('click', () => this.close());
   }
 
   onClose() {

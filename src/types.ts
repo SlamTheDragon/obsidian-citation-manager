@@ -105,6 +105,26 @@ export interface CitationOccurrence {
   rawCitation: string;
 }
 
+export type LintSeverity = 'error' | 'warning' | 'info';
+
+export type LintWarningType = 
+  | 'unresolved' 
+  | 'format_mismatch' 
+  | 'style_mismatch' 
+  | 'orphan_definition'
+  | 'author_typo_fuzzy'
+  | 'tampered_definition'
+  | 'numeric_order_mismatch'
+  | 'unformatted_prose_mention'
+  | 'compounded_order_mismatch'
+  | 'bibliography_order_mismatch';
+
+export interface LintFixOption {
+  label: string;
+  replacementText?: string;
+  action: 'replace' | 'create_entry' | 'purge' | 'sort' | 'dismiss' | 'info_only';
+}
+
 export interface LintWarning {
   id: string; // Hash of file path, line, rawCitation, and type
   filePath: string;
@@ -113,9 +133,13 @@ export interface LintWarning {
   lineContent: string;
   rawCitation: string;
   citekey?: string;
+  severity?: LintSeverity;
+  shortTitle?: string;
+  explanation?: string;
   definitionSnippet?: string;
   suggestedFix?: string;
-  type: 'unresolved' | 'format_mismatch' | 'style_mismatch' | 'orphan_definition';
+  fixOptions?: LintFixOption[];
+  type: LintWarningType;
   message: string;
 }
 
