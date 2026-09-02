@@ -1,0 +1,150 @@
+// CollectionTransferModal Styles (Authoritative from 412bfbf)
+/* 4. Two-Column Collection Transfer Modal */
+.citation-collection-transfer-modal {
+  width: 90vw !important;
+  max-width: 960px !important;
+}
+
+.citation-transfer-header-card {
+  margin-bottom: 8px;
+}
+
+.transfer-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 6px 0;
+}
+
+.citation-transfer-search-row {
+  margin-bottom: 8px;
+}
+
+.citation-transfer-search-input {
+  width: 100%;
+  padding: 6px 10px;
+  font-size: 12px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+}
+
+.citation-transfer-instruction {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+  font-style: italic;
+}
+
+.citation-transfer-columns-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  min-height: 380px;
+  max-height: 520px;
+  margin-bottom: 12px;
+}
+
+.citation-transfer-column {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.column-header {
+  padding: 8px 12px;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.column-header h4 {
+  margin: 0;
+  font-size: 12px;
+  color: var(--text-normal);
+}
+
+.column-cards-list {
+  padding: 8px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.column-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+  color: var(--text-faint);
+  font-size: 11px;
+  text-align: center;
+  font-style: italic;
+}
+
+.citation-transfer-card {
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 8px 10px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.citation-transfer-card:hover {
+  border-color: var(--interactive-accent);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.citation-transfer-card.card-transfer-add:hover {
+  border-color: #10b981;
+}
+
+.citation-transfer-card.card-transfer-remove:hover {
+  border-color: #ef4444;
+}
+
+.transfer-card-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.transfer-action-indicator {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.transfer-action-indicator svg {
+  width: 12px;
+  height: 12px;
+}
+
+.citation-transfer-card:hover .transfer-action-indicator {
+  color: var(--text-accent);
+}
+
+.transfer-card-title {
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-normal);
+  line-height: 1.35;
+}
+
+.transfer-card-author-year {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+

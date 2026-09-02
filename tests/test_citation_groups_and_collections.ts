@@ -1,5 +1,5 @@
-import { ReferenceMetadata, CitationCollection, DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID } from '../src/types';
-import { StorageManager } from '../src/storageManager';
+import { ReferenceMetadata, CitationCollection, DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID } from '../src/backend/types';
+import { StorageManager } from '../src/backend/storageManager';
 
 console.log("================================================================================");
 console.log("  TESTING CITATION GROUPS, COLLECTIONS, DESIGN FLOW & ENTRY POINT BRANCHES     ");

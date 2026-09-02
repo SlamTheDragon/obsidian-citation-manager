@@ -126,7 +126,7 @@ export interface CitationCollection {
 
 ## 4. Plugin Settings Schema (`CitationManagerSettings`)
 
-Stored in plugin `data.json` and synchronized with `.references/settings.json`:
+Stored in plugin standard `data.json`:
 
 ```typescript
 export interface CitationManagerSettings {

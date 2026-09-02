@@ -1,5 +1,5 @@
-import { FormatPropagator } from '../src/indexing/formatPropagator';
-import { ReferenceMetadata, ProjectRecord } from '../src/types';
+import { FormatPropagator } from '../src/backend/indexing/formatPropagator';
+import { ReferenceMetadata, ProjectRecord } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING COMPILE PROJECT CORPUS BATCH EXPORT SIMULATION                        ");

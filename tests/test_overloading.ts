@@ -1,5 +1,5 @@
-import { CitationEngine } from '../src/citationEngine';
-import { ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING CITATION OVERLOADING & IN-PLACE MERGING AT CURSOR                     ");

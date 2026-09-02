@@ -1,5 +1,5 @@
-import { CitationEngine } from '../src/citationEngine';
-import { ReferenceMetadata, ProjectRecord } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ReferenceMetadata, ProjectRecord } from '../src/backend/types';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {

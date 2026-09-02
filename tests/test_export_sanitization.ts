@@ -1,5 +1,5 @@
-import { CitationEngine } from '../src/citationEngine';
-import { ReferenceMetadata } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ReferenceMetadata } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING IEEE BRACKET OVERLOADING & EXPORT SANITIZATION                        ");

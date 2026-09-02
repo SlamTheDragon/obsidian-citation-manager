@@ -1,7 +1,7 @@
-﻿import { CitationEngine } from '../src/citationEngine';
-import { ProjectIndexer } from '../src/projectIndexer';
-import { LintEngine } from '../src/lintEngine';
-import { ReferenceMetadata, ProjectRecord, CitationStyle, InBodyFormat, LintWarning } from '../src/types';
+﻿import { CitationEngine } from '../src/backend/citationEngine';
+import { ProjectIndexer } from '../src/backend/projectIndexer';
+import { LintEngine } from '../src/backend/lintEngine';
+import { ReferenceMetadata, ProjectRecord, CitationStyle, InBodyFormat, LintWarning } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING FORMATTING INSERTION, FOOTNOTE GOVERNANCE & CROSS-REFERENCE LINTING   ");

@@ -1,7 +1,7 @@
-import { CitationEngine } from '../src/citationEngine';
-import { MetadataResolvers } from '../src/metadataResolvers';
-import { ProjectIndexer } from '../src/projectIndexer';
-import { CitationStyle, InBodyFormat, ReferenceMetadata } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { MetadataResolvers } from '../src/backend/metadataResolvers';
+import { ProjectIndexer } from '../src/backend/projectIndexer';
+import { CitationStyle, InBodyFormat, ReferenceMetadata } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  BIDIRECTIONAL LENS & MUTATION TESTING (BX/MT) SUITE                           ");

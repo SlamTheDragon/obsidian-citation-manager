@@ -1,6 +1,6 @@
-import { CitationEngine } from '../src/citationEngine';
-import { MetadataResolvers } from '../src/metadataResolvers';
-import { ProjectIndexer } from '../src/projectIndexer';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { MetadataResolvers } from '../src/backend/metadataResolvers';
+import { ProjectIndexer } from '../src/backend/projectIndexer';
 
 console.log("==================================================");
 console.log("  CITATION STUDIO READINESS & VERIFICATION SUITE  ");

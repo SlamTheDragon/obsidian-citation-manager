@@ -1,0 +1,24 @@
+// ==========================================================================
+// Obsidian Citation Manager Master Stylesheet
+// Modular SCSS Bundler Target
+// ==========================================================================
+
+@use "variables";
+@use "base";
+@use "../CitationManagerView/CitationManagerView.module";
+@use "../CitationCardRenderer/CitationCardRenderer.module";
+@use "../FixInconsistenciesModal/FixInconsistenciesModal.module";
+@use "../ReferenceEditorModal/ReferenceEditorModal.module";
+@use "../InsertCitationModal/InsertCitationModal.module";
+@use "../PDFImportModal/PDFImportModal.module";
+@use "../BibliographyModal/BibliographyModal.module";
+@use "../ExportPublicationModal/ExportPublicationModal.module";
+@use "../CitationNotesModal/CitationNotesModal.module";
+@use "../CollectionTransferModal/CollectionTransferModal.module";
+@use "../CollectionEditorModal/CollectionEditorModal.module";
+@use "../MoveToCollectionModal/MoveToCollectionModal.module";
+@use "../UsageLocationsModal/UsageLocationsModal.module";
+@use "../PromptModal/PromptModal.module";
+@use "../ConfirmModal/ConfirmModal.module";
+@use "../editorSuggest/editorSuggest.module";
+@use "../settingsTab/settingsTab.module";

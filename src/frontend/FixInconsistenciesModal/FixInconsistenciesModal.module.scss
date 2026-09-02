@@ -1,0 +1,192 @@
+// FixInconsistenciesModal Diagnostics Styles (Authoritative from 412bfbf with scrollability)
+.citation-lint-accordion-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 48vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+  width: 100%;
+  box-sizing: border-box;
+  padding-right: 2px;
+}
+
+.citation-lint-accordion-item {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  overflow: hidden;
+  transition: all 0.15s ease;
+  width: 100%;
+  box-sizing: border-box;
+
+  &.open {
+    border-color: var(--interactive-accent);
+    background: var(--background-secondary-alt);
+  }
+}
+
+.lint-accordion-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.12s ease;
+  gap: 8px;
+
+  &:hover {
+    background: var(--background-modifier-hover);
+  }
+}
+
+.lint-header-left {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  flex: 1;
+  min-width: 0;
+}
+
+.lint-item-checkbox {
+  margin: 0;
+  cursor: pointer;
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
+  accent-color: var(--interactive-accent);
+}
+
+.lint-chevron-icon svg {
+  width: 12px;
+  height: 12px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.lint-severity-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+
+  svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  &.severity-error svg {
+    color: var(--text-error, #ef4444);
+  }
+
+  &.severity-warning svg {
+    color: var(--text-warning, #eab308);
+  }
+
+  &.severity-info svg {
+    color: var(--text-accent, #3b82f6);
+  }
+}
+
+.lint-short-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.lint-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.lint-file-badge {
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  color: var(--text-muted);
+  background: var(--background-primary);
+  padding: 2px 6px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  cursor: pointer;
+
+  &:hover {
+    color: var(--text-accent);
+    border-color: var(--interactive-accent);
+  }
+}
+
+.lint-header-dismiss-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-muted);
+  border-radius: var(--radius-s);
+  transition: all 0.15s ease;
+
+  &:hover {
+    color: var(--text-error, #ef4444);
+    background: rgba(239, 68, 68, 0.1);
+  }
+
+  svg {
+    width: 13px;
+    height: 13px;
+  }
+}
+
+.lint-accordion-body {
+  padding: 10px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  background: var(--background-primary);
+  overflow: hidden;
+}
+
+.lint-explanation-box {
+  font-size: 11.5px;
+  color: var(--text-normal);
+  line-height: 1.45;
+}
+
+.lint-solution-box {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 6px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lint-solution-label {
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.lint-diff-preview {
+  font-size: 11px;
+  font-family: var(--font-monospace);
+  word-break: break-all;
+}
+
+.lint-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+}

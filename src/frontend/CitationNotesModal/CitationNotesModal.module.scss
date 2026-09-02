@@ -1,0 +1,25 @@
+// CitationNotesModal Styles
+.notes-editor-container {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.notes-textarea {
+  width: 100%;
+  min-height: 220px;
+  font-family: var(--font-text);
+  font-size: 12px;
+  line-height: 1.5;
+  padding: 8px 10px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+  resize: vertical;
+
+  &:focus {
+    border-color: var(--interactive-accent);
+  }
+}

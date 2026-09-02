@@ -46,7 +46,7 @@ if (srcViolations.length > 0) {
 assert(srcViolations.length === 0, `Zero Unicode Emojis in src/ (Found ${srcViolations.length} violations)`);
 
 // 2. Facade Integrity Audit: ProjectIndexer Facade Exports
-import { ProjectIndexer } from '../src/projectIndexer';
+import { ProjectIndexer } from '../src/backend/projectIndexer';
 const indexerProto = ProjectIndexer.prototype;
 assert(typeof indexerProto.indexProject === 'function', "ProjectIndexer.indexProject exists");
 assert(typeof indexerProto.propagateFormatChange === 'function', "ProjectIndexer.propagateFormatChange exists");
@@ -55,8 +55,8 @@ assert(typeof indexerProto.compileProjectCorpus === 'function', "ProjectIndexer.
 assert(typeof ProjectIndexer.compileDocumentText === 'function', "ProjectIndexer.compileDocumentText exists");
 
 // 3. CSL Engine Style Generators Audit
-import { CSLFormatters } from '../src/csl/cslFormatters';
-import { CitationEngine } from '../src/citationEngine';
+import { CSLFormatters } from '../src/backend/csl/cslFormatters';
+import { CitationEngine } from '../src/backend/citationEngine';
 
 assert(typeof CSLFormatters.formatAPA7 === 'function', "CSLFormatters.formatAPA7 exists");
 assert(typeof CSLFormatters.formatIEEE === 'function', "CSLFormatters.formatIEEE exists");
@@ -67,10 +67,10 @@ assert(typeof CitationEngine.formatBibliographyEntry === 'function', "CitationEn
 assert(typeof CitationEngine.formatInBody === 'function', "CitationEngine.formatInBody exists");
 
 // 4. Citation Collections & UI Modals Invariants Audit
-import { DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID } from '../src/types';
-import { CollectionTransferModal } from '../src/views/CollectionTransferModal';
-import { CollectionEditorModal } from '../src/views/CollectionEditorModal';
-import { MoveToCollectionModal } from '../src/views/MoveToCollectionModal';
+import { DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID } from '../src/backend/types';
+import { CollectionTransferModal } from '../src/frontend/CollectionTransferModal';
+import { CollectionEditorModal } from '../src/frontend/CollectionEditorModal';
+import { MoveToCollectionModal } from '../src/frontend/MoveToCollectionModal';
 
 assert(DEFAULT_COLLECTION_ID === 'default', "DEFAULT_COLLECTION_ID is 'default'");
 assert(DEFAULT_COLLECTION.isDefault === true, "DEFAULT_COLLECTION isDefault is true");

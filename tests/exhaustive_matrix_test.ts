@@ -1,6 +1,6 @@
-import { CitationEngine } from '../src/citationEngine';
-import { ProjectRecord, ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/types';
-import { ProjectIndexer } from '../src/projectIndexer';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ProjectRecord, ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/backend/types';
+import { ProjectIndexer } from '../src/backend/projectIndexer';
 
 console.log("================================================================================");
 console.log("  EXHAUSTIVE 100-ITERATION FORMATTING & LINTING MATRIX TEST SUITE               ");

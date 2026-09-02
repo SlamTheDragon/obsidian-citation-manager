@@ -1,6 +1,6 @@
-import { LintEngine } from '../src/lintEngine';
-import { CitationEngine } from '../src/citationEngine';
-import { ReferenceMetadata, LintWarning, LintSeverity } from '../src/types';
+import { LintEngine } from '../src/backend/lintEngine';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ReferenceMetadata, LintWarning, LintSeverity } from '../src/backend/types';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {

@@ -45,7 +45,7 @@ git push origin main --tags
 
 ### Step 3: GitHub Actions Release
 When you push the tag, GitHub Actions runs automatically:
-1. Builds the production bundle and runs all 26 test suites.
+1. Builds the production bundle and runs all 27 test suites.
 2. Packages `dist/main.js`, `dist/manifest.json`, `dist/styles.css`, and `citation-manager.zip`.
 3. Creates a GitHub Release and attaches the release assets.
 
@@ -68,7 +68,7 @@ Add this entry in alphabetical order by `id`:
     "id": "citation-manager",
     "name": "Citation Manager",
     "author": "SlamTheDragon",
-    "description": "Project-centric, local-first academic reference manager, live citation indexer, linter, and bibliography studio with .references folder integration.",
+    "description": "Project-centric, local-first academic reference manager, live citation indexer, linter, and bibliography tools with .references folder integration.",
     "repo": "SlamTheDragon/obsidian-citation-manager"
   }
 ```

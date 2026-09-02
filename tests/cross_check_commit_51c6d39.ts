@@ -1,10 +1,10 @@
-import { CitationEngine } from '../src/citationEngine';
-import { CSLFormatters } from '../src/csl/cslFormatters';
-import { CSLSorter } from '../src/csl/cslSorter';
-import { BibTeXGenerator } from '../src/csl/bibtexGenerator';
-import { MarkdownMasker } from '../src/indexing/markdownMasker';
-import { LintEngine } from '../src/lintEngine';
-import { ReferenceMetadata } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { CSLFormatters } from '../src/backend/csl/cslFormatters';
+import { CSLSorter } from '../src/backend/csl/cslSorter';
+import { BibTeXGenerator } from '../src/backend/csl/bibtexGenerator';
+import { MarkdownMasker } from '../src/backend/indexing/markdownMasker';
+import { LintEngine } from '../src/backend/lintEngine';
+import { ReferenceMetadata } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  CROSS-CHECK FROM COMMIT 51c6d39 TO VERIFY 100% BEHAVIORAL PARITY             ");

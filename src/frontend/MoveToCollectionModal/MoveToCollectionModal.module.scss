@@ -1,0 +1,80 @@
+// MoveToCollectionModal Styles (Authoritative from 412bfbf)
+/* 5. Single Move Citation Modal */
+.citation-move-modal {
+  width: 90vw !important;
+  max-width: 500px !important;
+  margin: 0 auto;
+}
+
+.citation-move-collection-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  margin-bottom: 12px;
+}
+
+.citation-move-collection-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  cursor: pointer;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.citation-move-collection-item:hover {
+  background: var(--background-secondary);
+  border-color: var(--interactive-accent);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.citation-move-collection-item.current-active {
+  border-color: var(--interactive-accent);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.item-icon {
+  display: inline-flex;
+  align-items: center;
+  color: var(--text-accent);
+}
+
+.item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.item-text-col {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.item-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.item-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.item-count-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+

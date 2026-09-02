@@ -1,6 +1,6 @@
-import { CitationEngine } from '../src/citationEngine';
-import { MetadataResolvers } from '../src/metadataResolvers';
-import { ReferenceMetadata, ProjectRecord, ALL_PROJECTS_ID } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { MetadataResolvers } from '../src/backend/metadataResolvers';
+import { ReferenceMetadata, ProjectRecord, ALL_PROJECTS_ID } from '../src/backend/types';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {
@@ -186,7 +186,7 @@ assert(multiGroupInBody === "(Li et al., 2026; Norman, 2013; Vaswani & Shazeer, 
 const multiGroupIEEE = CitationEngine.formatMultiInBody([enrichedJournal, enrichedArxiv, enrichedBook], 'parenthetical', 'ieee', [1, 2, 3]);
 assert(multiGroupIEEE === "[1, 2, 3]", `Heterogeneous sources multi-citation IEEE: ${multiGroupIEEE}`);
 
-import { CitationCardRenderer } from '../src/views/components/CitationCardRenderer';
+import { CitationCardRenderer } from '../src/frontend/CitationCardRenderer';
 
 // --- SOURCE URL CARD CLICK RESOLUTION ---
 console.log("\n--- SOURCE URL CARD CLICK RESOLUTION ---");

@@ -1,0 +1,22 @@
+// ExportPublicationModal Styles
+.export-modal-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.export-folder-picker-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.export-folder-input {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 11.5px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  color: var(--text-normal);
+}

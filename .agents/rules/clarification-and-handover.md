@@ -14,3 +14,4 @@ trigger: always_on
   2. **Test & Verification Matrix**: Total passing test suites and assertion counts.
   3. **Git Release Status**: Latest commit hash, branch tracking status, and release tags.
   4. **Next Step Commands**: Exact shell commands for the user.
+  5. **Acknowledgement List**: A list of features implemented that the user needs to catch up. Await for acknowledgements before clearing them up. Stack non-acknowledged lists from previous responses.

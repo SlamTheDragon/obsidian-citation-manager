@@ -1,15 +1,16 @@
 {
   "name": "obsidian-citation-manager",
-  "version": "1.0.0",
-  "description": "Project-centric reference manager, live citation indexer, linter, and bibliography studio with local store folder integration for Obsidian.",
-  "main": "main.js",
+  "version": "1.0.1",
+  "description": "Project-centric reference manager, live citation indexer, linter, and bibliography tools with local store folder integration for Obsidian.",
+  "main": "dist/main.js",
   "scripts": {
-    "dev": "node esbuild.config.mjs",
-    "build": "node esbuild.config.mjs production",
-    "package": "node scripts/package.mjs",
-    "version:patch": "node scripts/version-bump.mjs patch",
-    "version:minor": "node scripts/version-bump.mjs minor",
-    "version:major": "node scripts/version-bump.mjs major",
+    "dev": "bun esbuild.config.mjs",
+    "build": "bun esbuild.config.mjs production",
+    "build:css": "bun x sass src/frontend/styles/main.scss public/styles.css --no-source-map",
+    "package": "bun scripts/package.mjs",
+    "version:patch": "bun scripts/version-bump.mjs patch",
+    "version:minor": "bun scripts/version-bump.mjs minor",
+    "version:major": "bun scripts/version-bump.mjs major",
     "test": "bun --preload ./tests/obsidian_mock.ts ./tests/run_all_tests.ts",
     "test:all": "bun --preload ./tests/obsidian_mock.ts ./tests/run_all_tests.ts"
   },
@@ -29,6 +30,7 @@
     "@types/node": "^26.4.1",
     "esbuild": "^0.24.0",
     "obsidian": "latest",
+    "sass": "^1.103.1",
     "tslib": "^2.7.0",
     "typescript": "^5.6.0"
   }

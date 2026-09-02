@@ -7,8 +7,8 @@ Thank you for contributing to Obsidian Citation Manager! Obey these guidelines t
 ## 1. Development Setup
 
 ### Prerequisites
-- [Node.js](https://nodejs.org/) (v18+)
-- [Bun](https://bun.sh/) (v1.1+)
+- [Node.js](https://nodejs.org/) (v26.7.0 LTS or v22.x LTS, `.nvmrc` provided)
+- [Bun](https://bun.sh/) (v1.3+)
 
 ### Installation
 ```bash
@@ -25,10 +25,13 @@ bun install
 ## 2. Building and Testing
 
 ```bash
-# Run all 26 test suites
+# Run all 27 automated test suites
 bun run test:all
 
-# Build production bundle
+# Compile modular Sass stylesheets
+bun run build:css
+
+# Build production bundle (auto-compiles SCSS & syncs to test vault)
 bun run build
 
 # Development watch mode
@@ -42,7 +45,7 @@ export OBSIDIAN_VAULT_DIR="/path/to/vault/.obsidian/plugins/citation-manager"
 bun run build
 
 # Windows PowerShell
-$env:OBSIDIAN_VAULT_DIR="C:\\path\\to\\vault\\.obsidian\\plugins\\citation-manager"
+$env:OBSIDIAN_VAULT_DIR="C:\path\to\vault\.obsidian\plugins\citation-manager"
 bun run build
 ```
 
@@ -53,5 +56,5 @@ bun run build
 1. **Zero Unicode Emojis**: Do not add Unicode emojis into UI buttons, status messages, notices, or logs. Use Lucide SVG icons (`setIcon(el, 'icon-name')`).
 2. **CSL Compliance**: Add unit tests in `tests/` for any formatting change to APA 7, IEEE, Harvard, Chicago, or Vancouver.
 3. **Markdown Storage**: Do not store citation metadata in binary files or external formats.
-4. **Static Assets**: Put static plugin assets (`manifest.json`, `styles.css`) in `public/`.
-5. **Pull Requests**: Make sure all 26 test suites pass (`bun run test:all`) before you submit pull requests.
+4. **Static Assets**: Put static plugin assets (`manifest.json`) in `public/`. Styles are authored in `src/frontend/styles/` and modular `.module.scss` files.
+5. **Pull Requests**: Make sure all 27 test suites pass (`bun run test:all`) and zero TypeScript errors exist before you submit pull requests.

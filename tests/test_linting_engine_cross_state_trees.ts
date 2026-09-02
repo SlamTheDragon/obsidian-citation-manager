@@ -1,6 +1,6 @@
-import { ProjectIndexer } from '../src/projectIndexer';
-import { CitationEngine } from '../src/citationEngine';
-import { ReferenceMetadata, ProjectRecord, ProjectHealthStats, ALL_PROJECTS_ID } from '../src/types';
+import { ProjectIndexer } from '../src/backend/projectIndexer';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ReferenceMetadata, ProjectRecord, ProjectHealthStats, ALL_PROJECTS_ID } from '../src/backend/types';
 
 function assert(cond: boolean, msg: string) {
   if (!cond) {

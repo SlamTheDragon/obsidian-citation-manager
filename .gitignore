@@ -4,4 +4,6 @@ dist/
 *.zip
 .references/
 .DS_Store
+.env
+
 

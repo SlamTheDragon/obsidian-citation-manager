@@ -1,5 +1,5 @@
-import { CitationEngine } from '../src/citationEngine';
-import { ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING BI-DIRECTIONAL FOOTNOTE MODE TOGGLE ACROSS ALL 7 CITATION STANDARDS   ");

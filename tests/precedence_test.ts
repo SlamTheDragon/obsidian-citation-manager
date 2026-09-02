@@ -1,5 +1,5 @@
-import { CitationEngine } from '../src/citationEngine';
-import { ProjectRecord, ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/types';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ProjectRecord, ReferenceMetadata, CitationStyle, InBodyFormat } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  SEMANTIC DISLOCATION & FOOTNOTE PRECEDENCE TEST SUITE                         ");

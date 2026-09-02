@@ -4,27 +4,19 @@ import { execSync } from 'child_process';
 
 const distDir = path.resolve('dist');
 
-console.log('[Package] Starting production build...');
-execSync('node esbuild.config.mjs production', { stdio: 'inherit' });
+console.log('[Package] Starting production build with Bun...');
+execSync('bun esbuild.config.mjs production', { stdio: 'inherit' });
 
-if (!fs.existsSync(distDir)) {
-  fs.mkdirSync(distDir, { recursive: true });
-}
+const requiredFiles = ['main.js', 'manifest.json', 'styles.css'];
 
-const filesToPackage = [
-  { src: 'main.js', dest: 'main.js' },
-  { src: 'public/manifest.json', dest: 'manifest.json' },
-  { src: 'public/styles.css', dest: 'styles.css' }
-];
-
-for (const item of filesToPackage) {
-  if (fs.existsSync(item.src)) {
-    fs.copyFileSync(item.src, path.join(distDir, item.dest));
-    console.log(`[Package] Copied ${item.src} -> dist/${item.dest}`);
+for (const file of requiredFiles) {
+  const filePath = path.join(distDir, file);
+  if (fs.existsSync(filePath) && fs.statSync(filePath).size > 0) {
+    console.log(`[Package] Verified dist/${file} (${fs.statSync(filePath).size} bytes)`);
   } else {
-    console.error(`[Package] Error: missing required release file ${item.src}`);
+    console.error(`[Package] Error: missing or empty required release file dist/${file}`);
     process.exit(1);
   }
 }
 
-console.log('[Package] Successfully packaged release files in dist/!');
+console.log('[Package] Successfully built and verified all release files in dist/!');

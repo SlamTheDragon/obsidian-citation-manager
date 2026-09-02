@@ -1,16 +1,16 @@
 import { Plugin, WorkspaceLeaf, Notice, MarkdownView, Menu, Editor, TFile, normalizePath } from 'obsidian';
-import { CitationManagerSettings, DEFAULT_SETTINGS, ALL_PROJECTS_ID } from './types';
-import { StorageManager } from './storageManager';
-import { ProjectIndexer } from './projectIndexer';
-import { CitationManagerView, VIEW_TYPE_CITATION_MANAGER } from './views/CitationManagerView';
-import { InsertCitationModal } from './views/InsertCitationModal';
-import { BibliographyModal } from './views/BibliographyModal';
-import { ExportPublicationModal } from './views/ExportPublicationModal';
-import { ReferenceEditorModal } from './views/ReferenceEditorModal';
-import { CitationManagerSettingTab } from './settingsTab';
-import { CitationEditorSuggest } from './editorSuggest';
-import { MetadataResolvers } from './metadataResolvers';
-import { Logger } from './logger';
+import { CitationManagerSettings, DEFAULT_SETTINGS, ALL_PROJECTS_ID } from './backend/types';
+import { StorageManager } from './backend/storageManager';
+import { ProjectIndexer } from './backend/projectIndexer';
+import { CitationManagerView, VIEW_TYPE_CITATION_MANAGER } from './frontend/CitationManagerView';
+import { InsertCitationModal } from './frontend/InsertCitationModal';
+import { BibliographyModal } from './frontend/BibliographyModal';
+import { ExportPublicationModal } from './frontend/ExportPublicationModal';
+import { ReferenceEditorModal } from './frontend/ReferenceEditorModal';
+import { CitationManagerSettingTab } from './frontend/settingsTab';
+import { CitationEditorSuggest } from './frontend/editorSuggest';
+import { MetadataResolvers } from './backend/metadataResolvers';
+import { Logger } from './backend/logger';
 
 export default class CitationManagerPlugin extends Plugin {
   declare settings: CitationManagerSettings;
@@ -111,20 +111,11 @@ export default class CitationManagerPlugin extends Plugin {
       })
     );
 
-    // Register File Watchers with Bidirectional Settings Sync
+    // Register File Watchers for Reference Folder Changes
     this.registerEvent(
       this.app.vault.on('modify', async (file) => {
-        if (file instanceof TFile) {
-          const expectedSettings = normalizePath(`${this.settings.referencesFolder}/settings.json`);
-          if (file.path === expectedSettings) {
-            if (!this.storageManager?.isWritingSettings) {
-              Logger.debug("External change in .references/settings.json detected. Reloading settings...");
-              await this.loadSettings();
-              this.refreshOpenViews();
-            }
-          } else if (file.path.startsWith(this.settings.referencesFolder)) {
-            this.refreshOpenViews();
-          }
+        if (file instanceof TFile && file.path.startsWith(this.settings.referencesFolder)) {
+          this.refreshOpenViews();
         }
       })
     );
@@ -314,14 +305,6 @@ export default class CitationManagerPlugin extends Plugin {
 
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    try {
-      if (this.storageManager) {
-        const vaultSettings = await this.storageManager.loadSerializedSettings();
-        if (vaultSettings) {
-          this.settings = Object.assign({}, this.settings, vaultSettings);
-        }
-      }
-    } catch {}
 
     // Sanitize any legacy project records
     if (Array.isArray(this.settings.projects)) {
@@ -338,10 +321,5 @@ export default class CitationManagerPlugin extends Plugin {
 
   async saveSettings() {
     await this.saveData(this.settings);
-    try {
-      if (this.storageManager) {
-        await this.storageManager.saveSerializedSettings(this.settings);
-      }
-    } catch {}
   }
 }

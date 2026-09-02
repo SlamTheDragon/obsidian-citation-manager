@@ -1,13 +1,13 @@
 ---
 name: citation-studio
-description: Universal academic citation manager, literature indexer, and bi-directional reference studio for Obsidian and markdown knowledge vaults. Governs automated DOI resolution, PDF binary metadata extraction, tamper-proof Markdown parsing, live footnote sync, multi-standard bibliography generation (APA 7, IEEE, Harvard, Chicago, Vancouver), and publication export pipeline.
+description: Universal academic citation manager and literature indexer plugin for Obsidian and markdown knowledge vaults. Governs automated DOI resolution, PDF binary metadata extraction, tamper-proof Markdown parsing, live footnote sync, multi-standard bibliography generation (APA 7, IEEE, Harvard, Chicago, Vancouver), and publication export pipeline.
 ---
 
-# Citation Studio: Architectural Blueprint & Plugin Structure
+# Citation Manager: Architectural Blueprint & Plugin Structure
 
 ## 1. Core Tenets & Bucket Architecture
 
-1. **Zero External Lock-In**: Citations stored locally as YAML-frontmatter markdown notes (`.references/<citekey>.md`) with raw attachments (`.references/attachments/<citekey>.pdf`) and serialized settings in `.references/settings.json`.
+1. **Zero External Lock-In**: Citations stored locally as YAML-frontmatter markdown notes (`.references/<citekey>.md`) with raw attachments (`.references/attachments/<citekey>.pdf`) and plugin settings in standard Obsidian `data.json`.
 2. **Citation Buckets**: Projects are represented as **Citation Buckets** (`ProjectRecord`), declared via YAML frontmatter (`citation-manager: ["BucketName"]`) and managed with 1-click status bar affordances.
 3. **Single Unified Citation Standard**: In-body format and bibliography style are governed by a single dropdown per bucket (`APA 7`, `APA 7 Narrative`, `IEEE [1]`, `Harvard`, `Chicago`, `Vancouver`, `Pandoc Citekey [@key]`).
 4. **Direct Editor Insertion & Global Footnote Mode**: Active drafting insertions use Obsidian Editor API (`editor.replaceRange`). Never rewrite open files asynchronously via `vault.modify` or `trim()` to prevent external modification alerts and whitespace loss. Footnote Mode is a global toggle that propagates note updates on demand.
@@ -19,49 +19,38 @@ description: Universal academic citation manager, literature indexer, and bi-dir
 ```
 obsidian-citation-manager/
 ├── src/
-│   ├── types.ts                     # TypeScript interfaces (ReferenceMetadata, ProjectRecord, ProjectExportSettings)
-│   ├── logger.ts                    # Ring-buffered in-memory execution logger
-│   ├── storageManager.ts            # Vault adapter I/O (.references/*.md, attachments/*.pdf, settings.json)
-│   ├── projectIndexer.ts            # High-level Facade for document indexing & corpus management
-│   ├── citationEngine.ts            # High-level Facade for CSL formatting & bibliography generation
-│   ├── metadataResolvers.ts         # High-level Facade for multi-identifier metadata resolution
-│   ├── lintEngine.ts                # Diagnostic linter engine, Levenshtein distance & fuzzy remediation
-│   ├── editorSuggest.ts             # Obsidian native autocomplete trigger ([@query, \cite{query)
-│   ├── settingsTab.ts               # Vault configuration tab
-│   ├── main.ts                      # Plugin lifecycle, file watchers, commands, context menus
-│   ├── csl/                         # CSL Sub-package
-│   │   ├── cslFormatters.ts         # Style formatting engines (APA 7, IEEE, Harvard, Chicago, Vancouver, Video)
-│   │   ├── cslSorter.ts             # Multi-tier academic reference sorting
-│   │   └── bibtexGenerator.ts       # BibTeX serializer with ISSN/ISBN/DOI/abstract support
-│   ├── indexing/                    # Indexing & Propagation Sub-package
-│   │   ├── formatPropagator.ts      # Multi-document format propagation, footnote sync & corpus export
-│   │   ├── markdownMasker.ts        # AST code, math, comment & frontmatter masking
-│   │   └── pdfScanner.ts            # Binary stream DOI & arXiv scanner
-│   ├── resolvers/                   # Identifiers Resolvers Sub-package
-│   │   ├── doiResolver.ts           # CrossRef / DataCite / SemanticScholar resolver
-│   │   ├── arxivResolver.ts         # arXiv API & DOI resolver
-│   │   ├── isbnResolver.ts          # OpenLibrary book metadata resolver
-│   │   ├── urlResolver.ts           # OpenGraph / YouTube / Webpage metadata scraper
-│   │   └── bibtexResolver.ts        # Balanced-brace BibTeX parser with LaTeX accent cleaning
-│   └── views/
-│       ├── components/              # View Subcomponents
-│       │   └── CitationCardRenderer.ts # Card & chip UI renderer
-│       ├── CitationManagerView.ts   # Main sidebar view (Header, Search Island, Cards, Health/Stats Diagnostics Accordion)
-│       ├── ReferenceEditorModal.ts  # Add/Edit citation modal with interactive author chips & PDF dropzone
-│       ├── InsertCitationModal.ts   # Multi-citation suggest modal with format dropdown & chips
-│       ├── ExportPublicationModal.ts# Publication export modal with vault folder picker
-│       ├── FixInconsistenciesModal.ts# Live-refreshing linter decision tree & batch fix modal
-│       ├── PDFImportModal.ts        # Drag & drop PDF importer with binary DOI extraction
-│       ├── BibliographyModal.ts     # Standalone bibliography generator with clipboard/note export
-│       ├── UsageLocationsModal.ts   # Deletion guard & occurrence inspector
-│       ├── PromptModal.ts           # Native autofocus prompt dialog
-│       └── ConfirmModal.ts          # Native destructive confirmation dialog
-├── tests/                           # 20 In-Repo Automated Test Suites (750+ Assertions)
-│   ├── obsidian_mock.ts             # Mock Obsidian API harness
-│   ├── run_all_tests.ts             # Master test suite runner (`bun run test:all`)
-│   └── ...                          # Domain-specific verification suites
-├── styles.css                       # Unified minimal styling (responsive flexbox, zero layout shift)
-└── esbuild.config.mjs               # Bun/Node production bundling pipeline
+│   ├── backend/                     # Core Business Logic, Storage & CSL Engines
+│   │   ├── types.ts                 # TypeScript interfaces (ReferenceMetadata, ProjectRecord, ProjectExportSettings)
+│   │   ├── logger.ts                # Ring-buffered in-memory execution logger
+│   │   ├── storageManager.ts        # Vault adapter I/O (.references/*.md, attachments/*.pdf, data.json)
+│   │   ├── projectIndexer.ts        # High-level Facade for document indexing & corpus management
+│   │   ├── citationEngine.ts        # High-level Facade for CSL formatting & bibliography generation
+│   │   ├── metadataResolvers.ts     # High-level Facade for multi-identifier metadata resolution
+│   │   ├── lintEngine.ts            # Diagnostic linter engine, Levenshtein distance & fuzzy remediation
+│   │   ├── csl/                     # CSL Sub-package (Formatters, Sorter, BibTeX Generator)
+│   │   ├── indexing/                # Indexing Sub-package (FormatPropagator, MarkdownMasker, PDFScanner)
+│   │   └── resolvers/               # Identifier Resolvers (DOI, arXiv, ISBN, URL, BibTeX)
+│   ├── frontend/                    # Decoupled UI Components & Modular SCSS
+│   │   ├── styles/                  # Global SCSS Tokens & Mixins (_variables.scss, _base.scss, main.scss)
+│   │   ├── CitationManagerView/     # Main sidebar view (.ts, .module.scss, index.ts)
+│   │   ├── CitationCardRenderer/    # Card & chip UI renderer (.ts, .module.scss, index.ts)
+│   │   ├── FixInconsistenciesModal/ # Diagnostics accordion modal (.ts, .module.scss, index.ts)
+│   │   ├── ReferenceEditorModal/    # Add/Edit citation modal (.ts, .module.scss, index.ts)
+│   │   ├── InsertCitationModal/     # Multi-citation suggest modal (.ts, .module.scss, index.ts)
+│   │   ├── PDFImportModal/          # PDF dropzone & DOI scanner (.ts, .module.scss, index.ts)
+│   │   ├── BibliographyModal/       # Bibliography modal (.ts, .module.scss, index.ts)
+│   │   ├── ExportPublicationModal/  # Publication export modal (.ts, .module.scss, index.ts)
+│   │   ├── CitationNotesModal/      # In-card notes modal (.ts, .module.scss, index.ts)
+│   │   ├── CollectionEditorModal/   # Collection manager modal (.ts, .module.scss, index.ts)
+│   │   ├── CollectionTransferModal/ # Transfer modal (.ts, .module.scss, index.ts)
+│   │   ├── MoveToCollectionModal/   # Move citation modal (.ts, .module.scss, index.ts)
+│   │   ├── editorSuggest/           # Autocomplete suggester (.ts, .module.scss, index.ts)
+│   │   ├── settingsTab/             # Plugin configuration tab (.ts, .module.scss, index.ts)
+│   │   └── index.ts                 # Master frontend barrel export
+│   └── main.ts                      # Plugin lifecycle, file watchers, commands, context menus
+├── tests/                           # 27 In-Repo Automated Test Suites (1,920+ Assertions)
+├── public/styles.css                # Compiled production stylesheet
+└── esbuild.config.mjs               # Bun/Node production bundling & SCSS pipeline
 ```
 
 ### 2.1 Architectural Invariants & Coding Guardrails

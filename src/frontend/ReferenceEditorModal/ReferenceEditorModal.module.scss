@@ -1,0 +1,321 @@
+// ReferenceEditorModal Styles (Authoritative from 412bfbf)
+/* ========================================================
+   MODALS: Clean Native Architecture & Zero-Misalignment Forms
+   ======================================================== */
+
+.citation-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Section Cards inside Modals */
+.citation-modal-section-card {
+  background: var(--background-secondary-alt);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 10px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.section-card-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-normal);
+  margin-bottom: 3px;
+}
+.section-card-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+.fetch-input-row {
+  display: flex;
+  gap: 6px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.fetch-text-input {
+  flex: 1;
+  padding: 5px 8px;
+  font-size: 11px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  outline: none;
+  box-sizing: border-box;
+}
+.fetch-text-input:focus {
+  border-color: var(--interactive-accent);
+}
+
+/* Unified Form Controls with Stacked Typography */
+.citation-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 4px;
+  margin-bottom: 4px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.citation-form-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.citation-label-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.citation-form-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.citation-form-input {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  height: 30px;
+  font-size: 11px;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 4px 8px;
+  outline: none;
+  color: var(--text-normal);
+}
+.citation-form-input:focus {
+  border-color: var(--interactive-accent);
+}
+
+.citation-key-readonly {
+  background-color: var(--background-secondary) !important;
+  color: var(--text-muted) !important;
+  cursor: default !important;
+  border-style: dashed !important;
+  font-family: var(--font-monospace, monospace);
+  font-weight: 600;
+  user-select: all;
+}
+
+.citation-form-select {
+  width: 100% !important;
+  box-sizing: border-box !important;
+  height: 30px;
+  font-size: 11px;
+  background-color: var(--background-primary) !important;
+  border: 1px solid var(--background-modifier-border) !important;
+  border-radius: var(--radius-s) !important;
+  padding: 4px 26px 4px 8px !important;
+  outline: none;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  background-repeat: no-repeat !important;
+  background-position: right 8px center !important;
+  background-size: 10px 10px !important;
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="%23888888" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>') !important;
+  cursor: pointer;
+  color: var(--text-normal);
+}
+.citation-form-select:focus {
+  border-color: var(--interactive-accent) !important;
+}
+
+.citation-form-textarea {
+  width: 100% !important;
+  min-width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  font-size: 11px;
+  font-family: inherit;
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  padding: 8px 10px;
+  outline: none;
+  resize: vertical;
+  line-height: 1.4;
+  color: var(--text-normal);
+}
+.citation-form-textarea:focus {
+  border-color: var(--interactive-accent);
+}
+
+.citation-form-grid-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.citation-form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Author Chips Input Container */
+.author-chips-input-container {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.author-chips-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  background: var(--background-primary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 4px 6px;
+  min-height: 34px;
+  box-sizing: border-box;
+  cursor: text;
+  width: 100%;
+}
+.author-chips-wrap:focus-within {
+  border-color: var(--interactive-accent);
+}
+
+.author-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  padding: 2px 7px;
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1.2;
+}
+
+.chip-remove-btn {
+  cursor: pointer;
+  font-size: 9.5px;
+  opacity: 0.8;
+  transition: opacity 0.15s;
+  padding-left: 2px;
+}
+.chip-remove-btn:hover {
+  opacity: 1;
+  font-weight: bold;
+}
+
+.author-chip-inline-input {
+  border: none !important;
+  background: transparent !important;
+  padding: 2px 4px !important;
+  font-size: 11px !important;
+  outline: none !important;
+  flex: 1;
+  min-width: 110px;
+  box-shadow: none !important;
+  color: var(--text-normal);
+}
+
+/* Modal Accordions with Smooth Animated Transition */
+.citation-modal-accordion-card {
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary-alt);
+  overflow: hidden;
+  transition: border-color 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.accordion-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.accordion-header-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.accordion-title-text {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.accordion-icon-wrap svg {
+  width: 13px;
+  height: 13px;
+  color: var(--text-muted);
+}
+
+.accordion-body-collapse {
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0 12px;
+  transition: max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, padding 0.3s ease;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.citation-modal-accordion-card.open .accordion-body-collapse {
+  max-height: 600px;
+  opacity: 1;
+  padding: 4px 12px 12px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* Preview Box */
+.preview-section-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-normal);
+  margin-top: 4px;
+}
+
+.citation-modal-preview-box {
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-family: var(--font-monospace);
+  font-size: 10px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.preview-row {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+}
+.preview-label {
+  font-weight: 600;
+  color: var(--text-accent);
+}
+.preview-content {
+  color: var(--text-normal);
+  line-height: 1.35;
+  word-break: break-word;
+}
+

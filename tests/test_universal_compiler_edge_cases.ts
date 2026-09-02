@@ -1,6 +1,6 @@
-import { FormatPropagator } from '../src/indexing/formatPropagator';
-import { CitationEngine } from '../src/citationEngine';
-import { ReferenceMetadata } from '../src/types';
+import { FormatPropagator } from '../src/backend/indexing/formatPropagator';
+import { CitationEngine } from '../src/backend/citationEngine';
+import { ReferenceMetadata } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING UNIVERSAL CITATION COMPILER EDGE CASES & INPUT FORMS                 ");

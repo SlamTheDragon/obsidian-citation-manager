@@ -1,0 +1,27 @@
+// ==========================================================================
+// Design Tokens & Variable Mixins for Citation Manager
+// ==========================================================================
+
+$radius-sm: var(--radius-s, 4px);
+$radius-md: var(--radius-m, 6px);
+$radius-lg: var(--radius-l, 8px);
+$radius-pill: 9999px;
+
+$font-interface: var(--font-interface);
+$font-ui-small: var(--font-ui-small, 12px);
+$font-monospace: var(--font-monospace, monospace);
+
+$color-accent: var(--interactive-accent);
+$color-accent-hover: var(--interactive-accent-hover);
+$color-text-normal: var(--text-normal);
+$color-text-muted: var(--text-muted);
+$color-text-accent: var(--text-accent);
+$color-text-error: var(--text-error, #ef4444);
+$color-text-warning: var(--text-warning, #eab308);
+$color-text-success: var(--text-success, #22c55e);
+
+$bg-primary: var(--background-primary);
+$bg-secondary: var(--background-secondary);
+$bg-secondary-alt: var(--background-secondary-alt);
+$bg-modifier-hover: var(--background-modifier-hover);
+$bg-modifier-border: var(--background-modifier-border);

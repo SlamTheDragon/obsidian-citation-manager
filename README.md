@@ -1,10 +1,10 @@
 # Obsidian Citation Manager
 
 [![Obsidian Plugin](https://img.shields.io/badge/Obsidian-Plugin-blue.svg)](https://obsidian.md)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Academic Standards](https://img.shields.io/badge/CSL-APA7%20%7C%20IEEE%20%7C%20Harvard%20%7C%20Chicago%20%7C%20Vancouver-green.svg)](https://citationstyles.org/)
 
-A project-centric academic reference manager, live citation indexer, diagnostic linter, and publication export studio for [Obsidian](https://obsidian.md). Uses a local `.references/` folder to store notes.
+A project-centric academic reference manager, live citation indexer, diagnostic linter, and publication export plugin for [Obsidian](https://obsidian.md). Uses a local `.references/` folder to store notes.
 
 ---
 
@@ -18,7 +18,7 @@ A project-centric academic reference manager, live citation indexer, diagnostic 
 - **Diagnostic Linter Engine**: Scans linked documents in real time for orphan definitions, missing citekeys, and style mismatches. Offers batch repair controls.
 - **Obsidian Footnotes Companion**: Draft notes with `[^citekey]` footnote callouts. Converts footnotes to target citation styles during export.
 - **Surfing and Web Viewer Support**: Opens external study sources (DOI, arXiv, URL) directly in Surfing tabs or in the native Obsidian Web Viewer.
-- **Publication Export Studio**: Cleans internal tags, converts footnotes into citations, creates sorted bibliographies, and exports standalone notes.
+- **Publication Export Pipeline**: Cleans internal tags, converts footnotes into citations, creates sorted bibliographies, and exports standalone notes.
 
 ---
 
@@ -58,7 +58,7 @@ flowchart LR
         direction TB
         E1["<b>In-App Browser</b><br/>Surfing &amp; Web Viewer"]
         E2["<b>Live Bibliography</b><br/>Auto-sorted reference list"]
-        E3["<b>Export Studio</b><br/>Clean standalone notes"]
+        E3["<b>Export Pipeline</b><br/>Clean standalone notes"]
     end
 
     S1 --> S2 --> S3 --> S4 --> S5
@@ -131,7 +131,7 @@ flowchart LR
 | `Citation Manager: Link File to Bucket` | — | Links the active document to the active bucket. |
 | `Citation Manager: Generate Bibliography` | — | Shows the bibliography modal for the active bucket. |
 | `Citation Manager: Resync Notes in Bucket` | — | Verifies and syncs footnote definitions. |
-| `Citation Manager: Export for Publication` | — | Opens the publication export studio. |
+| `Citation Manager: Export for Publication` | — | Opens the publication export modal. |
 
 ---
 
@@ -139,6 +139,7 @@ flowchart LR
 
 Technical specifications and guides are available in the [`docs/`](./docs/) directory:
 
+- [**Environment & Runtime Guide**](./docs/ENVIRONMENT.md): Node.js LTS, NVM configuration, and Bun execution matrix.
 - [**Architecture & Subsystem Decomposition**](./docs/ARCHITECTURE.md): Class layout, data flows, and state machines.
 - [**Schema Specifications**](./docs/SCHEMAS.md): TypeScript and JSON schemas for references, buckets, collections, and settings.
 - [**CSL Academic Standards Guide**](./docs/STANDARDS.md): Formatting rules for APA 7, IEEE, Harvard, Chicago, and Vancouver.
@@ -157,7 +158,10 @@ This project is licensed under the [MIT License](./LICENSE).
 ## Development
 
 ```bash
-# Build production bundle with Bun
+# Run all 27 automated test suites
+bun run test:all
+
+# Build production bundle with Bun (auto-compiles modular Sass)
 bun run build
 
 # Watch mode for active development

@@ -1,0 +1,28 @@
+// editorSuggest Styles (Authoritative from 412bfbf)
+/* 6. Vertical Modal Settings */
+.citation-modal-vertical-card {
+  margin-top: 8px;
+}
+
+.citation-modal-vertical-setting {
+  flex-direction: column !important;
+  align-items: stretch !important;
+  gap: 6px;
+}
+
+.citation-modal-vertical-setting .setting-item-info {
+  margin-bottom: 4px;
+}
+
+.citation-modal-vertical-setting .setting-item-control {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.citation-modal-vertical-setting textarea {
+  width: 100% !important;
+  min-height: 75px !important;
+  resize: vertical;
+}
+
+

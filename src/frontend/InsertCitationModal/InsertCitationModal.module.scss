@@ -1,0 +1,47 @@
+// InsertCitationModal Styles
+.citation-insert-modal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+
+.citation-insert-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 10px;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-secondary);
+  cursor: pointer;
+  transition: all 0.12s ease;
+
+  &:hover {
+    background: var(--background-modifier-hover);
+    border-color: var(--interactive-accent);
+  }
+
+  &.selected {
+    background: rgba(var(--interactive-accent-rgb, 59, 130, 246), 0.12);
+    border-color: var(--interactive-accent);
+  }
+}
+
+.citation-insert-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.citation-insert-title {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--text-normal);
+}
+
+.citation-insert-authors {
+  font-size: 10.5px;
+  color: var(--text-muted);
+}

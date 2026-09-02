@@ -1,4 +1,4 @@
-import { ReferenceMetadata, ProjectRecord, CitationCollection, DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID, ALL_PROJECTS_ID } from '../src/types';
+import { ReferenceMetadata, ProjectRecord, CitationCollection, DEFAULT_COLLECTION, DEFAULT_COLLECTION_ID, ALL_PROJECTS_ID } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING EXHAUSTIVE COMBINATORIAL MATRIX & VARIABLE STATE PERMUTATIONS        ");

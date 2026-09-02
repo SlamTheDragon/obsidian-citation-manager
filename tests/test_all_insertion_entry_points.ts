@@ -1,6 +1,6 @@
-﻿import { CitationEngine } from '../src/citationEngine';
-import { CSLFormatters } from '../src/csl/cslFormatters';
-import { ReferenceMetadata, ProjectRecord, CitationStyle, InBodyFormat } from '../src/types';
+﻿import { CitationEngine } from '../src/backend/citationEngine';
+import { CSLFormatters } from '../src/backend/csl/cslFormatters';
+import { ReferenceMetadata, ProjectRecord, CitationStyle, InBodyFormat } from '../src/backend/types';
 
 console.log("================================================================================");
 console.log("  TESTING CITATION INSERTION, CAPITALIZATION & FORMATTING ACROSS ENTRY POINTS   ");
