@@ -561,7 +561,8 @@ export class PDFImportModal extends Modal {
       const chip = chipsWrap.createSpan({ cls: "author-chip" });
       chip.createSpan({ cls: "author-name", text: author });
       
-      const removeBtn = chip.createSpan({ cls: "chip-remove-btn", text: "✕" });
+      const removeBtn = chip.createSpan({ cls: "chip-remove-btn" });
+      setIcon(removeBtn, "x");
       removeBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         this.ref.authors.splice(i, 1);

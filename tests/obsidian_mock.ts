@@ -9,6 +9,14 @@ mock.module('obsidian', () => ({
   WorkspaceLeaf: class {},
   MarkdownView: class {},
   Modal: class {},
+  Setting: class {
+    setName(n: string) { return this; }
+    setDesc(d: string) { return this; }
+    addText(cb: any) { cb({ setPlaceholder: () => {}, setValue: () => {}, onChange: () => {} }); return this; }
+    addTextArea(cb: any) { cb({ setPlaceholder: () => {}, setValue: () => {}, onChange: () => {} }); return this; }
+    addToggle(cb: any) { cb({ setValue: () => {}, onChange: () => {} }); return this; }
+    addDropdown(cb: any) { cb({ addOption: () => {}, setValue: () => {}, onChange: () => {} }); return this; }
+  },
   setIcon: () => {},
   parseYaml: (s: string) => ({}),
   stringifyYaml: (o: any) => ''
