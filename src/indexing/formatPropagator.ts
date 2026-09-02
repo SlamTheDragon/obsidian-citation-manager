@@ -535,8 +535,42 @@ export class FormatPropagator {
       }
     });
 
-    // 3. Resolve Individual Footnote Callouts [^key]
+    // 3. Resolve Narrative Citations: Author (Year) -> Author [1] / Author (1) / Author [^key]
+    const narrativeRegex = /\b([\p{Lu}][\p{L}\s&]+(?:\s+et\s+al\.)?)\s+\((19\d{2}|20\d{2})\)/gu;
+    result = result.replace(narrativeRegex, (fullMatch, authorStr, yearStr) => {
+      const cleanAuthor = authorStr.replace(/\s+et\s+al\./i, '').trim().toLowerCase();
+      const parts = cleanAuthor.split(/[\s,&]+/).filter(Boolean).map((p: string) => p.replace(/[^a-z0-9]/g, ''));
+      
+      let matchedRef: ReferenceMetadata | null = null;
+      for (const r of allReferences.values()) {
+        if (r.year && String(r.year) === yearStr && r.authors && r.authors.length > 0) {
+          const firstAuthor = r.authors[0].split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+          if (parts.includes(firstAuthor)) {
+            matchedRef = r;
+            break;
+          }
+        }
+      }
+
+      if (!matchedRef) return fullMatch;
+
+      const idx = indexMap.get(matchedRef.citekey) || 1;
+      if (isFootnoteMode) {
+        return `${authorStr} [^${matchedRef.citekey}]`;
+      } else if (style === 'ieee') {
+        return `${authorStr} [${idx}]`;
+      } else if (style === 'vancouver') {
+        return `${authorStr} (${idx})`;
+      } else {
+        return `${authorStr} (${yearStr})`;
+      }
+    });
+
+    // 4. Resolve Individual Footnote Callouts [^key] and Definitions
+    const citedKeysInDoc: string[] = [];
+
     for (const [key, ref] of allReferences.entries()) {
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const globalIdx = indexMap.get(key) || 1;
       let inBodyFormatted = "";
       if (isFootnoteMode) {
@@ -549,22 +583,28 @@ export class FormatPropagator {
         inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical', style);
       }
 
-      const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
+      const footnoteCallRegex = new RegExp(`\\[\\^${escapedKey}\\](?!:)`, 'g');
+      if (footnoteCallRegex.test(result)) {
+        citedKeysInDoc.push(key);
+      }
       result = result.replace(footnoteCallRegex, inBodyFormatted);
 
       if (!isFootnoteMode && cleanFootnotes) {
-        const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
+        const fnCleanRegex = new RegExp(`^\\s*\\[\\^${escapedKey}\\]:.*$\\n?`, 'gm');
         result = result.replace(fnCleanRegex, "");
       } else if (isFootnoteMode) {
         const expectedDef = CitationEngine.formatFootnoteDefinition(ref, style, globalIdx);
-        const fnDefRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$`, 'm');
+        const fnDefRegex = new RegExp(`^\\s*\\[\\^${escapedKey}\\]:.*$`, 'm');
         if (fnDefRegex.test(result)) {
           result = result.replace(fnDefRegex, expectedDef);
+        } else if (citedKeysInDoc.includes(key)) {
+          // Append missing footnote definition
+          result = result.trimEnd() + '\n\n' + expectedDef + '\n';
         }
       }
     }
 
-    // 4. Overloaded Adjacent Citation Coalescing across all standards
+    // 5. Overloaded Adjacent Citation Coalescing across all standards
     if (!isFootnoteMode) {
       if (style === 'ieee') {
         // Coalesce [1][2] or [1] [2] or [1, 2][3] -> [1, 2, 3]
@@ -576,7 +616,7 @@ export class FormatPropagator {
         });
       } else if (style === 'vancouver') {
         // Coalesce (1)(2) or (1) (2) or (1, 2)(3) -> (1, 2, 3)
-        const adjacentParenRegex = /\((\d+(?:\s*,\s*\d+)*)\)(?:\s*\((d+(?:\s*,\s*\d+)*)\))+/g;
+        const adjacentParenRegex = /\((\d+(?:\s*,\s*\d+)*)\)(?:\s*\((\d+(?:\s*,\s*\d+)*)\))+/g;
         result = result.replace(adjacentParenRegex, (match) => {
           const numMatches = match.match(/\d+/g) || [];
           const numbers = Array.from(new Set(numMatches.map(n => parseInt(n)))).sort((a, b) => a - b);
