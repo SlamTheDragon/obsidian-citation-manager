@@ -25,41 +25,43 @@ A project-centric academic reference manager, live citation indexer, diagnostic 
 ## Architectural Workflow
 
 ```mermaid
-flowchart TD
-    subgraph INGESTION["1. Reference Ingestion & Attachment"]
-        I1["<b>Search Island</b><br/>Type DOI, arXiv, ISBN, URL &rarr; Enter"]
-        I2["<b>+ New Citation CTA</b><br/>Manual creation or quick identifier resolution"]
-        I3["<b>PDF Dropzone</b><br/>Drag &amp; drop PDF binary &rarr; Auto DOI scan &amp; verification"]
+flowchart LR
+    subgraph S1["1. Ingestion"]
+        direction TB
+        I1["<b>Search Island</b><br/>DOI / arXiv / URL / ISBN"]
+        I2["<b>+ New Citation</b><br/>Manual or quick resolution"]
+        I3["<b>PDF Dropzone</b><br/>Auto DOI scan &amp; match"]
     end
 
-    subgraph SCOPE["2. Buckets & Collections"]
-        B1["<b>Citation Buckets</b><br/>Isolate literature &amp; styles by manuscript scope"]
-        B2["<b>Citation Collections</b><br/>Cross-bucket tags &amp; two-column transfer modal"]
-        B3["<b>Linked Documents Bar</b><br/>One-click note linking &amp; frontmatter binding"]
+    subgraph S2["2. Scope"]
+        direction TB
+        B1["<b>Citation Buckets</b><br/>Manuscript style isolation"]
+        B2["<b>Collections</b><br/>Cross-bucket group tags"]
+        B3["<b>Linked Notes</b><br/>Direct file binding"]
     end
 
-    subgraph DRAFTING["3. Drafting & In-Text Insertion"]
-        D1["<b>In-Editor Autocomplete</b><br/>Type <code>[@</code>, <code>\\cite{</code>, or <code>((</code> anywhere"]
-        D2["<b>Insert Citation Modal</b><br/>Fuzzy search &bull; Shift+Click multi-citation chips"]
-        D3["<b>Footnote Mode Toggle</b><br/>Draft non-destructively with <code>[^citekey]</code>"]
+    subgraph S3["3. Drafting"]
+        direction TB
+        D1["<b>Autocomplete</b><br/><code>[@</code>, <code>\\cite{</code>, <code>((</code>"]
+        D2["<b>Insert Modal</b><br/>Multi-citation chips"]
+        D3["<b>Footnotes</b><br/><code>[^citekey]</code> drafting"]
     end
 
-    subgraph DIAGNOSTICS["4. Diagnostics & Linter Engine"]
-        L1["<b>Real-time Telemetry</b><br/>Total, In-Text Instances, Used vs. Unused"]
-        L2["<b>Interactive Accordion</b><br/>Format mismatches, orphan definitions, unlinked stubs"]
-        L3["<b>Fix Inconsistencies Modal</b><br/>Checkbox batch fixes, stub creation, and purging"]
+    subgraph S4["4. Diagnostics"]
+        direction TB
+        L1["<b>Telemetry</b><br/>Usage &amp; instance counters"]
+        L2["<b>Linter Accordion</b><br/>Format mismatches"]
+        L3["<b>Batch Fix Modal</b><br/>1-Click repair"]
     end
 
-    subgraph EXPORT["5. Publication Studio & Browser"]
-        E1["<b>Surfing &amp; Web Viewer</b><br/>Click card to browse DOI/arXiv inside Obsidian"]
-        E2["<b>Live Bibliography Preview</b><br/>Real-time sorted reference list for cited items"]
-        E3["<b>Export for Publication</b><br/>Footnote conversion, frontmatter cleaning &amp; export"]
+    subgraph S5["5. Export"]
+        direction TB
+        E1["<b>In-App Browser</b><br/>Surfing &amp; Web Viewer"]
+        E2["<b>Live Bibliography</b><br/>Auto-sorted reference list"]
+        E3["<b>Export Studio</b><br/>Clean standalone notes"]
     end
 
-    INGESTION --> SCOPE
-    SCOPE --> DRAFTING
-    DRAFTING --> DIAGNOSTICS
-    DIAGNOSTICS --> EXPORT
+    S1 --> S2 --> S3 --> S4 --> S5
 ```
 
 ---
