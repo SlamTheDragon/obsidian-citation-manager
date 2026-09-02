@@ -13,7 +13,8 @@
     "esModuleInterop": true,
     "inlineSourceMap": true,
     "inlineSources": true,
-    "lib": ["DOM", "ES2022", "ESNext"]
+    "lib": ["DOM", "ES2022", "ESNext"],
+    "types": ["node"]
   },
   "include": ["src/**/*.ts"]
 }
