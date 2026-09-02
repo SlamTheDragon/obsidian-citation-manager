@@ -1,6 +1,19 @@
-import { App, TFile, normalizePath, MarkdownView } from 'obsidian';
-import { ProjectRecord, ReferenceMetadata, ProjectHealthStats, CitationOccurrence, CitationStyle, InBodyFormat, ALL_PROJECTS_ID } from './types';
+import { App, TFile, normalizePath } from 'obsidian';
+import { 
+  ProjectRecord, 
+  ReferenceMetadata, 
+  ProjectHealthStats, 
+  CitationOccurrence, 
+  CitationStyle, 
+  InBodyFormat, 
+  LintWarning,
+  ALL_PROJECTS_ID 
+} from './types';
 import { CitationEngine } from './citationEngine';
+import { LintEngine } from './lintEngine';
+import { PDFScanner } from './indexing/pdfScanner';
+import { MarkdownMasker } from './indexing/markdownMasker';
+import { FormatPropagator } from './indexing/formatPropagator';
 import { Logger } from './logger';
 
 export class ProjectIndexer {
@@ -11,76 +24,38 @@ export class ProjectIndexer {
   }
 
   /**
-   * Scans up to 2MB of a PDF ArrayBuffer to extract DOI, arXiv ID, or XMP metadata streams.
+   * Static facade for PDF scanning
    */
   static extractDOIFromBuffer(buffer: ArrayBuffer): string | null {
-    try {
-      const sliceSize = Math.min(buffer.byteLength, 2 * 1024 * 1024);
-      const uint8 = new Uint8Array(buffer, 0, sliceSize);
-      const text = new TextDecoder('utf-8', { fatal: false }).decode(uint8);
-
-      // 1. XMP metadata XML tags
-      const xmpDoiMatch = text.match(/<(?:prism:doi|dc:identifier|pdfx:doi|crossref:doi)[^>]*>([^<]+)<\//i);
-      if (xmpDoiMatch) {
-        const clean = xmpDoiMatch[1].replace(/^doi:\s*/i, "").trim();
-        if (clean.startsWith("10.")) {
-          Logger.debug(`Extracted DOI from XMP stream: ${clean}`);
-          return clean;
-        }
-      }
-
-      // 2. Standard DOI URL prefixes
-      const urlDoiMatch = text.match(/(?:https?:\/\/(?:dx\.)?doi\.org\/|\/DOI\s*\()(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
-      if (urlDoiMatch) {
-        const clean = urlDoiMatch[1].trim().replace(/[,;.)>\]]+$/, "");
-        Logger.debug(`Extracted DOI from URL prefix: ${clean}`);
-        return clean;
-      }
-
-      // 3. Raw DOI pattern
-      const rawMatch = text.match(/(10\.\d{4,9}\/[-._;()/:A-Za-z0-9]+)/i);
-      if (rawMatch) {
-        const clean = rawMatch[1].trim().replace(/[,;.)>\]]+$/, "");
-        if (clean.length > 7 && clean.includes("/")) {
-          Logger.debug(`Extracted DOI from PDF binary: ${clean}`);
-          return clean;
-        }
-      }
-
-      // 4. arXiv ID fallback
-      const arxivMatch = text.match(/arxiv\s*[:\/]\s*(\d{4}\.\d{4,5}(?:v\d+)?)/i);
-      if (arxivMatch) {
-        return arxivMatch[1].trim();
-      }
-    } catch (e) {
-      Logger.warn("Failed extracting DOI from PDF buffer:", e);
-    }
-    return null;
+    return PDFScanner.extractDOIFromBuffer(buffer);
   }
 
   /**
-   * Retrieves all TFiles associated with a project (via YAML frontmatter 'citation-manager' OR registry list)
-   * If in "All References", only includes files belonging to declared projects (not the entire vault).
+   * Static facade for markdown masking
+   */
+  static maskIgnoredMarkdown(content: string): string {
+    return MarkdownMasker.maskIgnoredMarkdown(content);
+  }
+
+  /**
+   * Retrieves all TFiles associated with a project
    */
   getProjectFiles(
     project: ProjectRecord | null, 
-    referencesFolder: string = ".references",
+    referencesFolder: string = '.references',
     allKnownProjects?: ProjectRecord[]
   ): TFile[] {
     const matchedFiles: TFile[] = [];
     const allMarkdownFiles = this.app.vault.getMarkdownFiles();
     const cleanRefFolder = normalizePath(referencesFolder);
-
     const isAll = !project || project.id === ALL_PROJECTS_ID;
 
     for (const file of allMarkdownFiles) {
       if (file.path.startsWith(cleanRefFolder)) continue;
-
       const cache = this.app.metadataCache.getFileCache(file);
       const fm = cache?.frontmatter;
 
       if (isAll) {
-        // "All References" strictly scans only files declared in at least one project
         let hasAnyProjectFrontmatter = false;
         if (fm) {
           const fmProjects = fm['citation-manager'] || fm['citation_manager'] || fm['citation-project'] || fm['citation_project'] || fm['citation_projects'];
@@ -89,7 +64,6 @@ export class ProjectIndexer {
           }
         }
         const isInAnyProjectRegistry = allKnownProjects?.some(p => p.registeredFiles && p.registeredFiles.includes(file.path));
-
         if (hasAnyProjectFrontmatter || isInAnyProjectRegistry) {
           matchedFiles.push(file);
         }
@@ -113,12 +87,10 @@ export class ProjectIndexer {
       }
 
       const matchedInRegistry = project.registeredFiles && project.registeredFiles.includes(file.path);
-
       if (matchedInFm || matchedInRegistry) {
         matchedFiles.push(file);
       }
     }
-
     return matchedFiles;
   }
 
@@ -137,7 +109,6 @@ export class ProjectIndexer {
         }
       }
     }
-
     return Boolean(project.registeredFiles && project.registeredFiles.includes(file.path));
   }
 
@@ -177,11 +148,10 @@ export class ProjectIndexer {
     });
   }
 
-  async deleteProjectGlobally(projectName: string, referencesFolder: string = ".references"): Promise<number> {
+  async deleteProjectGlobally(projectName: string, referencesFolder: string = '.references'): Promise<number> {
     let count = 0;
     const allMarkdown = this.app.vault.getMarkdownFiles();
     const cleanRef = normalizePath(referencesFolder);
-
     for (const file of allMarkdown) {
       if (file.path.startsWith(cleanRef)) continue;
       const cache = this.app.metadataCache.getFileCache(file);
@@ -198,33 +168,12 @@ export class ProjectIndexer {
   }
 
   /**
-   * Masks code blocks, inline code, HTML comments, LaTeX math blocks, and frontmatter
-   * to ensure academic citations are extracted without false positives from mathematical
-   * notation, programming snippets, comments, or YAML.
-   */
-  static maskIgnoredMarkdown(content: string): string {
-    // 1. Mask frontmatter
-    let masked = content.replace(/^---[\s\S]*?---\n?/m, (match) => ' '.repeat(match.length));
-    // 2. Mask fenced code blocks (backticks or tildes)
-    masked = masked.replace(/(?:```|~~~)[^`~]*?[\s\S]*?(?:```|~~~)/g, (match) => ' '.repeat(match.length));
-    // 3. Mask HTML comments <!-- ... -->
-    masked = masked.replace(/<!--[\s\S]*?-->/g, (match) => ' '.repeat(match.length));
-    // 4. Mask LaTeX display math $$ ... $$
-    masked = masked.replace(/\$\$[\s\S]*?\$\$/g, (match) => ' '.repeat(match.length));
-    // 5. Mask LaTeX inline math $ ... $
-    masked = masked.replace(/\$(?!\s)[^\$\n]+(?<!\s)\$/g, (match) => ' '.repeat(match.length));
-    // 6. Mask inline code ` ... `
-    masked = masked.replace(/`[^`\n]+`/g, (match) => ' '.repeat(match.length));
-    return masked;
-  }
-
-  /**
-   * Scans project documents and computes ProjectHealthStats
+   * Scans project documents and computes ProjectHealthStats with full diagnostic rules
    */
   async indexProject(
     project: ProjectRecord,
     allReferences: Map<string, ReferenceMetadata>,
-    referencesFolder: string = ".references",
+    referencesFolder: string = '.references',
     allKnownProjects?: ProjectRecord[],
     dismissedLints?: Set<string>,
     globalFootnoteMode?: boolean
@@ -253,10 +202,10 @@ export class ProjectIndexer {
       if (ref.authors && ref.authors.length > 0 && ref.year) {
         const firstAuthor = ref.authors[0].split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
         const y = String(ref.year).trim();
-        authorYearIndex.set(`${firstAuthor}_${y}`, key);
+        authorYearIndex.set(firstAuthor + '_' + y, key);
         if (ref.authors.length > 1) {
           const secondAuthor = ref.authors[1].split(',')[0].trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-          authorYearIndex.set(`${firstAuthor}_${secondAuthor}_${y}`, key);
+          authorYearIndex.set(firstAuthor + '_' + secondAuthor + '_' + y, key);
         }
       }
       authorYearIndex.set(key.toLowerCase(), key);
@@ -264,51 +213,11 @@ export class ProjectIndexer {
 
     const resolveAuthorYearKey = (authorStr: string, yearStr: string): string | null => {
       const y = yearStr.trim();
-      const cleanAuthor = authorStr.replace(/\s+et\s+al\./i, "").trim().toLowerCase();
+      const cleanAuthor = authorStr.replace(/\s+et\s+al\./i, '').trim().toLowerCase();
       const parts = cleanAuthor.split(/[\s,&]+/).filter(Boolean).map(p => p.replace(/[^a-z0-9]/g, ''));
       if (parts.length === 0) return null;
-      if (parts.length === 1) {
-        return authorYearIndex.get(`${parts[0]}_${y}`) || null;
-      }
-      return authorYearIndex.get(`${parts[0]}_${parts[1]}_${y}`) || authorYearIndex.get(`${parts[0]}_${y}`) || null;
-    };
-
-    const levenshtein = (s1: string, s2: string): number => {
-      const a = s1.toLowerCase();
-      const b = s2.toLowerCase();
-      const matrix: number[][] = [];
-      for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-      for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-      for (let i = 1; i <= b.length; i++) {
-        for (let j = 1; j <= a.length; j++) {
-          if (b.charAt(i - 1) === a.charAt(j - 1)) {
-            matrix[i][j] = matrix[i - 1][j - 1];
-          } else {
-            matrix[i][j] = Math.min(
-              matrix[i - 1][j - 1] + 1,
-              matrix[i][j - 1] + 1,
-              matrix[i - 1][j] + 1
-            );
-          }
-        }
-      }
-      return matrix[b.length][a.length];
-    };
-
-    const findFuzzyRef = (queryKey: string): ReferenceMetadata | null => {
-      const cleanQuery = queryKey.toLowerCase().replace(/[^a-z0-9]/g, '');
-      let candidate: ReferenceMetadata | null = null;
-      let minDistance = 3;
-
-      for (const ref of allReferences.values()) {
-        const cleanRefKey = ref.citekey.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const dist = levenshtein(cleanQuery, cleanRefKey);
-        if (dist > 0 && dist < minDistance) {
-          minDistance = dist;
-          candidate = ref;
-        }
-      }
-      return candidate;
+      if (parts.length === 1) return authorYearIndex.get(parts[0] + '_' + y) || null;
+      return authorYearIndex.get(parts[0] + '_' + parts[1] + '_' + y) || authorYearIndex.get(parts[0] + '_' + y) || null;
     };
 
     for (const file of files) {
@@ -319,7 +228,6 @@ export class ProjectIndexer {
         const lines = maskedContent.split('\n');
         const inBodyKeysInFile = new Set<string>();
 
-        // Pre-build numeric index mapping for IEEE [N] and Vancouver (N) from bottom reference entries
         const numericIndexToKeyMap = new Map<number, string>();
         rawLines.forEach((l) => {
           const trimmed = l.trim();
@@ -351,7 +259,7 @@ export class ProjectIndexer {
           let match: RegExpExecArray | null;
           const displayLine = (rawLines[lineIdx] || lineText).trim();
 
-          // 1. Citekeys in bracket groups [@key] or [@key1; @key2]
+          // 1. Citekeys in bracket groups
           bracketCitekeyGroupRegex.lastIndex = 0;
           while ((match = bracketCitekeyGroupRegex.exec(lineText)) !== null) {
             const rawGroup = match[0];
@@ -368,17 +276,12 @@ export class ProjectIndexer {
                 groupRefs.push(ref);
                 inBodyKeysInFile.add(ref.citekey.toLowerCase());
                 if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
-                referenceUsageMap[key].push({
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: lineIdx + 1,
-                  lineContent: displayLine,
-                });
+                referenceUsageMap[key].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
               } else {
-                unresolvedCitations.push({ rawCitation: `@${key}`, file: file.path, line: lineIdx + 1 });
-                const fuzzyMatch = findFuzzyRef(key);
+                unresolvedCitations.push({ rawCitation: '@' + key, file: file.path, line: lineIdx + 1 });
+                const fuzzyMatch = LintEngine.findFuzzyRef(key, allReferences);
                 if (fuzzyMatch) {
-                  const id = `${file.path}::${lineIdx + 1}::@${key}::typo`;
+                  const id = file.path + '::' + (lineIdx + 1) + '::@' + key + '::typo';
                   if (!dismissed.has(id)) {
                     lintWarnings.push({
                       id,
@@ -386,22 +289,22 @@ export class ProjectIndexer {
                       fileName: file.basename,
                       lineNumber: lineIdx + 1,
                       lineContent: displayLine,
-                      rawCitation: `@${key}`,
+                      rawCitation: '@' + key,
                       citekey: key,
                       severity: 'warning',
                       shortTitle: 'Possible Citekey Typo',
-                      explanation: `Found "@${key}" which closely matches library entry "@${fuzzyMatch.citekey}".`,
-                      suggestedFix: `@${fuzzyMatch.citekey}`,
+                      explanation: 'Found "@' + key + '" which closely matches library entry "@' + fuzzyMatch.citekey + '".',
+                      suggestedFix: '@' + fuzzyMatch.citekey,
                       fixOptions: [
-                        { label: `Fix Typo -> @${fuzzyMatch.citekey}`, action: 'replace', replacementText: `@${fuzzyMatch.citekey}` },
+                        { label: 'Fix Typo -> @' + fuzzyMatch.citekey, action: 'replace', replacementText: '@' + fuzzyMatch.citekey },
                         { label: 'Dismiss', action: 'dismiss' }
                       ],
                       type: 'author_typo_fuzzy',
-                      message: `Possible typo in @${key}. Did you mean @${fuzzyMatch.citekey}?`,
+                      message: 'Possible typo in @' + key + '. Did you mean @' + fuzzyMatch.citekey + '?',
                     });
                   }
                 } else {
-                  const id = `${file.path}::${lineIdx + 1}::@${key}::unresolved`;
+                  const id = file.path + '::' + (lineIdx + 1) + '::@' + key + '::unresolved';
                   if (!dismissed.has(id)) {
                     lintWarnings.push({
                       id,
@@ -409,18 +312,18 @@ export class ProjectIndexer {
                       fileName: file.basename,
                       lineNumber: lineIdx + 1,
                       lineContent: displayLine,
-                      rawCitation: `@${key}`,
+                      rawCitation: '@' + key,
                       citekey: key,
                       severity: 'error',
                       shortTitle: 'Unresolved Reference',
-                      explanation: `Citekey "@${key}" is not registered in your connected reference library.`,
+                      explanation: 'Citekey "@' + key + '" is not registered in your connected reference library.',
                       fixOptions: [
                         { label: '+ Create Reference Entry', action: 'create_entry' },
                         { label: 'Purge from Note', action: 'purge' },
                         { label: 'Dismiss', action: 'dismiss' }
                       ],
                       type: 'unresolved',
-                      message: `Citekey @${key} is not registered in any connected reference library.`,
+                      message: 'Citekey @' + key + ' is not registered in any connected reference library.',
                     });
                   }
                 }
@@ -429,7 +332,7 @@ export class ProjectIndexer {
 
             if (groupRefs.length > 0) {
               if (isFootnoteMode) {
-                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                const id = file.path + '::' + (lineIdx + 1) + '::' + rawGroup + '::format_mismatch';
                 if (!dismissed.has(id)) {
                   const expected = CitationEngine.formatMultiInBody(groupRefs, 'footnote', targetStyle);
                   lintWarnings.push({
@@ -442,18 +345,15 @@ export class ProjectIndexer {
                     suggestedFix: expected,
                     severity: 'warning',
                     shortTitle: 'Footnote Mode Mismatch',
-                    explanation: `Citation should be in footnote format [^key] when Footnote Mode is enabled.`,
-                    fixOptions: [
-                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Citation should be in footnote format [^key] when Footnote Mode is enabled.',
+                    fixOptions: [{ label: 'Convert to ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'format_mismatch',
-                    message: `Expected footnote citation in Footnote Mode.`,
+                    message: 'Expected footnote citation in Footnote Mode.',
                   });
                 }
               } else if (targetFormat !== 'citekey') {
                 const expected = CitationEngine.formatMultiInBody(groupRefs, targetFormat, targetStyle);
-                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                const id = file.path + '::' + (lineIdx + 1) + '::' + rawGroup + '::format_mismatch';
                 if (!dismissed.has(id)) {
                   lintWarnings.push({
                     id,
@@ -465,20 +365,16 @@ export class ProjectIndexer {
                     suggestedFix: expected,
                     severity: 'warning',
                     shortTitle: 'Format Mismatch',
-                    explanation: `Citation format should match project format (${targetFormat}).`,
-                    fixOptions: [
-                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Citation format should match project format (' + targetFormat + ').',
+                    fixOptions: [{ label: 'Convert to ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'format_mismatch',
-                    message: `Expected ${targetFormat} citation for ${rawGroup}.`,
+                    message: 'Expected ' + targetFormat + ' citation for ' + rawGroup + '.',
                   });
                 }
               } else if (groupRefs.length > 1) {
-                // Check if citekey group is sorted alphabetically
                 const expected = CitationEngine.formatMultiInBody(groupRefs, 'citekey', targetStyle);
                 if (rawGroup !== expected) {
-                  const id = `${file.path}::${lineIdx + 1}::${rawGroup}::compounded_order`;
+                  const id = file.path + '::' + (lineIdx + 1) + '::' + rawGroup + '::compounded_order';
                   if (!dismissed.has(id)) {
                     lintWarnings.push({
                       id,
@@ -490,13 +386,10 @@ export class ProjectIndexer {
                       suggestedFix: expected,
                       severity: 'info',
                       shortTitle: 'Unsorted Compounded Citation',
-                      explanation: `Citekeys in group ${rawGroup} are not sorted alphabetically.`,
-                      fixOptions: [
-                        { label: `Re-order -> ${expected}`, action: 'replace', replacementText: expected },
-                        { label: 'Dismiss', action: 'dismiss' }
-                      ],
+                      explanation: 'Citekeys in group ' + rawGroup + ' are not sorted alphabetically.',
+                      fixOptions: [{ label: 'Re-order -> ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                       type: 'compounded_order_mismatch',
-                      message: `Citekeys in compounded group should be sorted alphabetically: ${expected}`,
+                      message: 'Citekeys in compounded group should be sorted alphabetically: ' + expected,
                     });
                   }
                 }
@@ -514,17 +407,11 @@ export class ProjectIndexer {
               const ref = allReferences.get(key)!;
               inBodyKeysInFile.add(ref.citekey.toLowerCase());
               if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
-              referenceUsageMap[key].push({
-                filePath: file.path,
-                fileName: file.basename,
-                lineNumber: lineIdx + 1,
-                lineContent: displayLine,
-              });
+              referenceUsageMap[key].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
 
-              // Lint check: If Footnote mode is OFF, flag as mismatch
               if (!isFootnoteMode) {
                 const expected = CitationEngine.formatInBody(ref, targetFormat, targetStyle);
-                const id = `${file.path}::${lineIdx + 1}::[^${key}]::format_mismatch`;
+                const id = file.path + '::' + (lineIdx + 1) + '::[^' + key + ']::format_mismatch';
                 if (!dismissed.has(id)) {
                   lintWarnings.push({
                     id,
@@ -532,25 +419,22 @@ export class ProjectIndexer {
                     fileName: file.basename,
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
-                    rawCitation: `[^${key}]`,
+                    rawCitation: '[^' + key + ']',
                     citekey: key,
                     suggestedFix: expected,
                     severity: 'warning',
                     shortTitle: 'Footnote Callout in Standard Mode',
-                    explanation: `Footnote marker [^${key}] found while Footnote Mode is disabled.`,
-                    fixOptions: [
-                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Footnote marker [^' + key + '] found while Footnote Mode is disabled.',
+                    fixOptions: [{ label: 'Convert to ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'format_mismatch',
-                    message: `Expected ${targetFormat} citation for [^${key}] (Footnote Mode is disabled).`,
+                    message: 'Expected ' + targetFormat + ' citation for [^' + key + '] (Footnote Mode is disabled).',
                   });
                 }
               }
             } else {
-              const fuzzyMatch = findFuzzyRef(key);
+              const fuzzyMatch = LintEngine.findFuzzyRef(key, allReferences);
               if (fuzzyMatch) {
-                const id = `${file.path}::${lineIdx + 1}::[^${key}]::typo`;
+                const id = file.path + '::' + (lineIdx + 1) + '::[^' + key + ']::typo';
                 if (!dismissed.has(id)) {
                   lintWarnings.push({
                     id,
@@ -558,22 +442,19 @@ export class ProjectIndexer {
                     fileName: file.basename,
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
-                    rawCitation: `[^${key}]`,
+                    rawCitation: '[^' + key + ']',
                     citekey: key,
                     severity: 'warning',
                     shortTitle: 'Possible Footnote Typo',
-                    explanation: `Footnote marker [^${key}] closely matches library entry [^${fuzzyMatch.citekey}].`,
-                    suggestedFix: `[^${fuzzyMatch.citekey}]`,
-                    fixOptions: [
-                      { label: `Fix Typo -> [^${fuzzyMatch.citekey}]`, action: 'replace', replacementText: `[^${fuzzyMatch.citekey}]` },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Footnote marker [^' + key + '] closely matches library entry [^' + fuzzyMatch.citekey + '].',
+                    suggestedFix: '[^' + fuzzyMatch.citekey + ']',
+                    fixOptions: [{ label: 'Fix Typo -> [^' + fuzzyMatch.citekey + ']', action: 'replace', replacementText: '[^' + fuzzyMatch.citekey + ']' }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'author_typo_fuzzy',
-                    message: `Possible typo in [^${key}]. Did you mean [^${fuzzyMatch.citekey}]?`,
+                    message: 'Possible typo in [^' + key + ']. Did you mean [^' + fuzzyMatch.citekey + ']?',
                   });
                 }
               } else {
-                const id = `${file.path}::${lineIdx + 1}::[^${key}]::unresolved`;
+                const id = file.path + '::' + (lineIdx + 1) + '::[^' + key + ']::unresolved';
                 if (!dismissed.has(id)) {
                   lintWarnings.push({
                     id,
@@ -581,25 +462,21 @@ export class ProjectIndexer {
                     fileName: file.basename,
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
-                    rawCitation: `[^${key}]`,
+                    rawCitation: '[^' + key + ']',
                     citekey: key,
                     severity: 'error',
                     shortTitle: 'Unresolved Footnote Reference',
-                    explanation: `Footnote marker [^${key}] has no matching entry in your reference library.`,
-                    fixOptions: [
-                      { label: '+ Create Reference Entry', action: 'create_entry' },
-                      { label: 'Purge from Note', action: 'purge' },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Footnote marker [^' + key + '] has no matching entry in your reference library.',
+                    fixOptions: [{ label: '+ Create Reference Entry', action: 'create_entry' }, { label: 'Purge from Note', action: 'purge' }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'unresolved',
-                    message: `Reference [^${key}] not found in library.`,
+                    message: 'Reference [^' + key + '] not found in library.',
                   });
                 }
               }
             }
           }
 
-          // 3. Parenthetical Groups (Author, Year) or (AuthorA, Year; AuthorB, Year)
+          // 3. Parenthetical Groups
           parentheticalGroupRegex.lastIndex = 0;
           while ((match = parentheticalGroupRegex.exec(lineText)) !== null) {
             const rawGroup = match[0];
@@ -619,19 +496,14 @@ export class ProjectIndexer {
                   inBodyKeysInFile.add(matchedKey.toLowerCase());
                   inBodyKeysInFile.add(ref.citekey.toLowerCase());
                   if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
-                  referenceUsageMap[matchedKey].push({
-                    filePath: file.path,
-                    fileName: file.basename,
-                    lineNumber: lineIdx + 1,
-                    lineContent: displayLine,
-                  });
+                  referenceUsageMap[matchedKey].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
                 }
               }
             }
 
             if (groupRefs.length > 0) {
               if (isFootnoteMode) {
-                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                const id = file.path + '::' + (lineIdx + 1) + '::' + rawGroup + '::format_mismatch';
                 if (!dismissed.has(id)) {
                   const expected = CitationEngine.formatMultiInBody(groupRefs, 'footnote', targetStyle);
                   lintWarnings.push({
@@ -644,17 +516,14 @@ export class ProjectIndexer {
                     suggestedFix: expected,
                     severity: 'warning',
                     shortTitle: 'Footnote Mode Mismatch',
-                    explanation: `Citation should be in footnote format [^key] when Footnote Mode is enabled.`,
-                    fixOptions: [
-                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Citation should be in footnote format [^key] when Footnote Mode is enabled.',
+                    fixOptions: [{ label: 'Convert to ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'format_mismatch',
-                    message: `Expected footnote citation in Footnote Mode.`,
+                    message: 'Expected footnote citation in Footnote Mode.',
                   });
                 }
               } else if (targetFormat === 'citekey') {
-                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                const id = file.path + '::' + (lineIdx + 1) + '::' + rawGroup + '::format_mismatch';
                 if (!dismissed.has(id)) {
                   const expected = CitationEngine.formatMultiInBody(groupRefs, 'citekey', targetStyle);
                   lintWarnings.push({
@@ -667,18 +536,15 @@ export class ProjectIndexer {
                     suggestedFix: expected,
                     severity: 'warning',
                     shortTitle: 'Expected Citekey Format',
-                    explanation: `Citation group should be in citekey format [@key] for this project.`,
-                    fixOptions: [
-                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Citation group should be in citekey format [@key] for this project.',
+                    fixOptions: [{ label: 'Convert to ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'format_mismatch',
-                    message: `Expected citekey format for ${rawGroup}.`,
+                    message: 'Expected citekey format for ' + rawGroup + '.',
                   });
                 }
               } else if (targetStyle === 'ieee' || targetStyle === 'vancouver') {
                 const expected = CitationEngine.formatMultiInBody(groupRefs, targetFormat, targetStyle);
-                const id = `${file.path}::${lineIdx + 1}::${rawGroup}::format_mismatch`;
+                const id = file.path + '::' + (lineIdx + 1) + '::' + rawGroup + '::format_mismatch';
                 if (!dismissed.has(id) && rawGroup !== expected) {
                   lintWarnings.push({
                     id,
@@ -689,20 +555,17 @@ export class ProjectIndexer {
                     rawCitation: rawGroup,
                     suggestedFix: expected,
                     severity: 'warning',
-                    shortTitle: `${targetStyle.toUpperCase()} Style Mismatch`,
-                    explanation: `Citation group should follow ${targetStyle.toUpperCase()} formatting standard.`,
-                    fixOptions: [
-                      { label: `Convert to ${expected}`, action: 'replace', replacementText: expected },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    shortTitle: targetStyle.toUpperCase() + ' Style Mismatch',
+                    explanation: 'Citation group should follow ' + targetStyle.toUpperCase() + ' formatting standard.',
+                    fixOptions: [{ label: 'Convert to ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'format_mismatch',
-                    message: `Expected ${targetStyle.toUpperCase()} format for ${rawGroup}.`,
+                    message: 'Expected ' + targetStyle.toUpperCase() + ' format for ' + rawGroup + '.',
                   });
                 }
               } else if (groupRefs.length > 1) {
                 const expected = CitationEngine.formatMultiInBody(groupRefs, targetFormat, targetStyle);
                 if (rawGroup !== expected) {
-                  const id = `${file.path}::${lineIdx + 1}::${rawGroup}::compounded_order`;
+                  const id = file.path + '::' + (lineIdx + 1) + '::' + rawGroup + '::compounded_order';
                   if (!dismissed.has(id)) {
                     lintWarnings.push({
                       id,
@@ -714,13 +577,10 @@ export class ProjectIndexer {
                       suggestedFix: expected,
                       severity: 'info',
                       shortTitle: 'Unsorted Compounded Citation',
-                      explanation: `Citations in group ${rawGroup} are not sorted alphabetically by first author.`,
-                      fixOptions: [
-                        { label: `Re-order -> ${expected}`, action: 'replace', replacementText: expected },
-                        { label: 'Dismiss', action: 'dismiss' }
-                      ],
+                      explanation: 'Citations in group ' + rawGroup + ' are not sorted alphabetically by first author.',
+                      fixOptions: [{ label: 'Re-order -> ' + expected, action: 'replace', replacementText: expected }, { label: 'Dismiss', action: 'dismiss' }],
                       type: 'compounded_order_mismatch',
-                      message: `Citations should be sorted alphabetically: ${expected}`,
+                      message: 'Citations should be sorted alphabetically: ' + expected,
                     });
                   }
                 }
@@ -728,7 +588,7 @@ export class ProjectIndexer {
             }
           }
 
-          // 4. Narrative Citations: Author et al. (Year)
+          // 4. Narrative Citations
           narrativeRegex.lastIndex = 0;
           while ((match = narrativeRegex.exec(lineText)) !== null) {
             const authorStr = match[1];
@@ -740,15 +600,10 @@ export class ProjectIndexer {
               inBodyKeysInFile.add(matchedKey.toLowerCase());
               inBodyKeysInFile.add(ref.citekey.toLowerCase());
               if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
-              referenceUsageMap[matchedKey].push({
-                filePath: file.path,
-                fileName: file.basename,
-                lineNumber: lineIdx + 1,
-                lineContent: displayLine,
-              });
+              referenceUsageMap[matchedKey].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
 
               if (isFootnoteMode) {
-                const id = `${file.path}::${lineIdx + 1}::${match[0]}::format_mismatch`;
+                const id = file.path + '::' + (lineIdx + 1) + '::' + match[0] + '::format_mismatch';
                 if (!dismissed.has(id)) {
                   lintWarnings.push({
                     id,
@@ -757,25 +612,21 @@ export class ProjectIndexer {
                     lineNumber: lineIdx + 1,
                     lineContent: displayLine,
                     rawCitation: match[0],
-                    suggestedFix: `[^${ref.citekey}]`,
+                    suggestedFix: '[^' + ref.citekey + ']',
                     severity: 'warning',
                     shortTitle: 'Narrative Citation in Footnote Mode',
-                    explanation: `Narrative citation "${match[0]}" should be converted to [^${ref.citekey}] in Footnote Mode.`,
-                    fixOptions: [
-                      { label: `Convert to [^${ref.citekey}]`, action: 'replace', replacementText: `[^${ref.citekey}]` },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Narrative citation "' + match[0] + '" should be converted to [^' + ref.citekey + '] in Footnote Mode.',
+                    fixOptions: [{ label: 'Convert to [^' + ref.citekey + ']', action: 'replace', replacementText: '[^' + ref.citekey + ']' }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'format_mismatch',
-                    message: `Expected [^${ref.citekey}] in Footnote Mode.`,
+                    message: 'Expected [^' + ref.citekey + '] in Footnote Mode.',
                   });
                 }
               }
             }
           }
 
-          // 5. Numeric in-body citations (IEEE [1], [1, 2] or Vancouver (1), (1, 2)) when Footnote Mode is OFF
+          // 5. Numeric in-body citations
           if (!isFootnoteMode && (targetStyle === 'ieee' || targetStyle === 'vancouver')) {
-            // Narrative numeric: Chen et al. [1] or Chen et al. (1)
             const narrativeNumericRegex = /\b([\p{Lu}][\p{L}\s&]+(?:\s+et\s+al\.)?)\s*(?:\[(\d+)\]|\((\d+)\))/gu;
             let numMatch: RegExpExecArray | null;
             while ((numMatch = narrativeNumericRegex.exec(lineText)) !== null) {
@@ -788,16 +639,10 @@ export class ProjectIndexer {
                 inBodyKeysInFile.add(matchedKey.toLowerCase());
                 inBodyKeysInFile.add(ref.citekey.toLowerCase());
                 if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
-                referenceUsageMap[matchedKey].push({
-                  filePath: file.path,
-                  fileName: file.basename,
-                  lineNumber: lineIdx + 1,
-                  lineContent: displayLine,
-                });
+                referenceUsageMap[matchedKey].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
               }
             }
 
-            // Parenthetical numeric: [1] or [1, 2] or (1) or (1, 2)
             const numericGroupRegex = targetStyle === 'ieee' ? /\[(\d+(?:\s*,\s*\d+)*)\]/g : /\((\d+(?:\s*,\s*\d+)*)\)/g;
             while ((numMatch = numericGroupRegex.exec(lineText)) !== null) {
               const nums = numMatch[1].split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
@@ -809,12 +654,7 @@ export class ProjectIndexer {
                   inBodyKeysInFile.add(matchedKey.toLowerCase());
                   inBodyKeysInFile.add(ref.citekey.toLowerCase());
                   if (!referenceUsageMap[matchedKey]) referenceUsageMap[matchedKey] = [];
-                  referenceUsageMap[matchedKey].push({
-                    filePath: file.path,
-                    fileName: file.basename,
-                    lineNumber: lineIdx + 1,
-                    lineContent: displayLine,
-                  });
+                  referenceUsageMap[matchedKey].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
                 }
               }
             }
@@ -828,33 +668,24 @@ export class ProjectIndexer {
         while ((defMatch = fnDefRegex.exec(rawContent)) !== null) {
           const key = defMatch[1];
           const currentDefLine = defMatch[0].trim();
-          const currentDefText = defMatch[2]?.trim() || "";
+          const currentDefText = defMatch[2]?.trim() || '';
           const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
             r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
           );
-
-          const isCitedInBody = inBodyKeysInFile.has(key.toLowerCase()) || 
-                                (ref ? inBodyKeysInFile.has(ref.citekey.toLowerCase()) : false);
+          const isCitedInBody = inBodyKeysInFile.has(key.toLowerCase()) || (ref ? inBodyKeysInFile.has(ref.citekey.toLowerCase()) : false);
 
           if (ref) {
-            // Count citation presence from footnote body if not already recorded from in-body marker
             if (!referenceUsageMap[ref.citekey] || referenceUsageMap[ref.citekey].length === 0) {
               if (!referenceUsageMap[ref.citekey]) referenceUsageMap[ref.citekey] = [];
-              const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
-              referenceUsageMap[ref.citekey].push({
-                filePath: file.path,
-                fileName: file.basename,
-                lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1,
-                lineContent: currentDefLine,
-              });
+              const lineIdx = rawLines.findIndex(l => l.includes('[^' + key + ']:'));
+              referenceUsageMap[ref.citekey].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx >= 0 ? lineIdx + 1 : 1, lineContent: currentDefLine });
               totalCitationsInFiles++;
             }
 
             if (!isCitedInBody) {
-              // Lint condition: citation declared on footnote, but not in markdown body
-              const id = `${file.path}::def::${key}::orphan_definition`;
+              const id = file.path + '::def::' + key + '::orphan_definition';
               if (!dismissed.has(id)) {
-                const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                const lineIdx = rawLines.findIndex(l => l.includes('[^' + key + ']:'));
                 lintWarnings.push({
                   id,
                   filePath: file.path,
@@ -864,24 +695,20 @@ export class ProjectIndexer {
                   rawCitation: currentDefLine,
                   citekey: key,
                   definitionSnippet: currentDefText,
-                  suggestedFix: "",
+                  suggestedFix: '',
                   severity: 'warning',
                   shortTitle: 'Orphan Footnote Definition',
-                  explanation: `Footnote definition [^${key}] declared at bottom, but never cited in markdown body text.`,
-                  fixOptions: [
-                    { label: 'Remove Orphan Definition', action: 'purge' },
-                    { label: 'Dismiss', action: 'dismiss' }
-                  ],
+                  explanation: 'Footnote definition [^' + key + '] declared at bottom, but never cited in markdown body text.',
+                  fixOptions: [{ label: 'Remove Orphan Definition', action: 'purge' }, { label: 'Dismiss', action: 'dismiss' }],
                   type: 'orphan_definition',
-                  message: `Footnote definition [^${key}] declared at bottom, but not cited in markdown body.`,
+                  message: 'Footnote definition [^' + key + '] declared at bottom, but not cited in markdown body.',
                 });
               }
             } else if (!isFootnoteMode) {
-              // Footnote mode is OFF: bottom definitions should be formatted without the [^key]: prefix
               const expectedBib = CitationEngine.formatBibliographyEntry(ref, targetStyle, footnoteIndex);
-              const id = `${file.path}::def::${key}::footnote_prefix_in_standard_mode`;
+              const id = file.path + '::def::' + key + '::footnote_prefix_in_standard_mode';
               if (!dismissed.has(id)) {
-                const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                const lineIdx = rawLines.findIndex(l => l.includes('[^' + key + ']:'));
                 lintWarnings.push({
                   id,
                   filePath: file.path,
@@ -893,24 +720,20 @@ export class ProjectIndexer {
                   suggestedFix: expectedBib,
                   severity: 'warning',
                   shortTitle: 'Footnote Prefix in Standard Mode',
-                  explanation: `Footnote prefix [^${key}]: should be converted to standard un-prefixed ${targetStyle.toUpperCase()} reference entry.`,
-                  fixOptions: [
-                    { label: `Convert to Standard Entry`, action: 'replace', replacementText: expectedBib },
-                    { label: 'Dismiss', action: 'dismiss' }
-                  ],
+                  explanation: 'Footnote prefix [^' + key + ']: should be converted to standard un-prefixed ' + targetStyle.toUpperCase() + ' reference entry.',
+                  fixOptions: [{ label: 'Convert to Standard Entry', action: 'replace', replacementText: expectedBib }, { label: 'Dismiss', action: 'dismiss' }],
                   type: 'format_mismatch',
-                  message: `Convert [^${key}]: stub to standard ${targetStyle.toUpperCase()} reference entry.`,
+                  message: 'Convert [^' + key + ']: stub to standard ' + targetStyle.toUpperCase() + ' reference entry.',
                 });
               }
               footnoteIndex++;
             } else {
               const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, footnoteIndex);
               if (currentDefLine !== expectedDef) {
-                // Check if tampered vs style mismatch
                 const isTampered = currentDefText.length > 5 && !expectedDef.includes(currentDefText);
-                const id = `${file.path}::def::${key}::${isTampered ? 'tampered' : 'style'}_mismatch`;
+                const id = file.path + '::def::' + key + '::' + (isTampered ? 'tampered' : 'style') + '_mismatch';
                 if (!dismissed.has(id)) {
-                  const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                  const lineIdx = rawLines.findIndex(l => l.includes('[^' + key + ']:'));
                   lintWarnings.push({
                     id,
                     filePath: file.path,
@@ -923,32 +746,28 @@ export class ProjectIndexer {
                     severity: 'warning',
                     shortTitle: isTampered ? 'Tampered Footnote Text' : 'Definition Style Mismatch',
                     explanation: isTampered 
-                      ? `Footnote text was manually edited and differs from the canonical reference data.`
-                      : `Definition style does not match project standard (${targetStyle.toUpperCase()}).`,
-                    fixOptions: [
-                      { label: `Restore Canonical Definition`, action: 'replace', replacementText: expectedDef },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                      ? 'Footnote text was manually edited and differs from the canonical reference data.'
+                      : 'Definition style does not match project standard (' + targetStyle.toUpperCase() + ').',
+                    fixOptions: [{ label: 'Restore Canonical Definition', action: 'replace', replacementText: expectedDef }, { label: 'Dismiss', action: 'dismiss' }],
                     type: isTampered ? 'tampered_definition' : 'style_mismatch',
                     message: isTampered 
-                      ? `Footnote definition text differs from reference library data.`
-                      : `Definition style does not match bucket standard (${targetStyle.toUpperCase()}).`,
+                      ? 'Footnote definition text differs from reference library data.'
+                      : 'Definition style does not match bucket standard (' + targetStyle.toUpperCase() + ').',
                   });
                 }
               }
               footnoteIndex++;
             }
           } else {
-            // Check if this unresolved key was already logged from in-body scan
-            const existingWarning = lintWarnings.find(w => w.filePath === file.path && (w.type === 'unresolved' || w.type === 'author_typo_fuzzy') && (w.citekey === key || w.rawCitation === `[^${key}]` || w.rawCitation === `[@${key}]`));
+            const existingWarning = lintWarnings.find(w => w.filePath === file.path && (w.type === 'unresolved' || w.type === 'author_typo_fuzzy') && (w.citekey === key || w.rawCitation === '[^' + key + ']' || w.rawCitation === '[@' + key + ']'));
             if (existingWarning) {
               existingWarning.definitionSnippet = currentDefText;
             } else {
-              const fuzzyMatch = findFuzzyRef(key);
+              const fuzzyMatch = LintEngine.findFuzzyRef(key, allReferences);
               if (fuzzyMatch) {
-                const id = `${file.path}::def::${key}::typo`;
+                const id = file.path + '::def::' + key + '::typo';
                 if (!dismissed.has(id)) {
-                  const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                  const lineIdx = rawLines.findIndex(l => l.includes('[^' + key + ']:'));
                   lintWarnings.push({
                     id,
                     filePath: file.path,
@@ -958,22 +777,19 @@ export class ProjectIndexer {
                     rawCitation: currentDefLine,
                     citekey: key,
                     definitionSnippet: currentDefText,
-                    suggestedFix: `[^${fuzzyMatch.citekey}]: ${CitationEngine.formatFootnoteDefinition(fuzzyMatch, targetStyle, 1).replace(/^\[\^[^\]]+\]:\s*/, '')}`,
+                    suggestedFix: '[^' + fuzzyMatch.citekey + ']: ' + CitationEngine.formatFootnoteDefinition(fuzzyMatch, targetStyle, 1).replace(/^\\[\\^[^\\]]+\\]:\\s*/, ''),
                     severity: 'warning',
                     shortTitle: 'Possible Footnote Def Typo',
-                    explanation: `Footnote definition key [^${key}] closely matches library reference [^${fuzzyMatch.citekey}].`,
-                    fixOptions: [
-                      { label: `Fix Key -> [^${fuzzyMatch.citekey}]`, action: 'replace', replacementText: `[^${fuzzyMatch.citekey}]: ${currentDefText}` },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                    explanation: 'Footnote definition key [^' + key + '] closely matches library reference [^' + fuzzyMatch.citekey + '].',
+                    fixOptions: [{ label: 'Fix Key -> [^' + fuzzyMatch.citekey + ']', action: 'replace', replacementText: '[^' + fuzzyMatch.citekey + ']: ' + currentDefText }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'author_typo_fuzzy',
-                    message: `Possible typo in [^${key}]: definition. Did you mean [^${fuzzyMatch.citekey}]?`,
+                    message: 'Possible typo in [^' + key + ']: definition. Did you mean [^' + fuzzyMatch.citekey + ']?',
                   });
                 }
               } else {
-                const id = `${file.path}::def::${key}::unresolved`;
+                const id = file.path + '::def::' + key + '::unresolved';
                 if (!dismissed.has(id)) {
-                  const lineIdx = rawLines.findIndex(l => l.includes(`[^${key}]:`));
+                  const lineIdx = rawLines.findIndex(l => l.includes('[^' + key + ']:'));
                   lintWarnings.push({
                     id,
                     filePath: file.path,
@@ -983,21 +799,17 @@ export class ProjectIndexer {
                     rawCitation: currentDefLine,
                     citekey: key,
                     definitionSnippet: currentDefText,
-                    suggestedFix: "",
+                    suggestedFix: '',
                     severity: 'error',
                     shortTitle: isCitedInBody ? 'Unresolved Footnote Definition' : 'Orphan Unresolved Definition',
                     explanation: isCitedInBody 
-                      ? `Footnote [^${key}] not found in reference library.`
-                      : `Footnote definition [^${key}] not in library and not cited in markdown body.`,
-                    fixOptions: [
-                      { label: '+ Create Reference Entry', action: 'create_entry' },
-                      { label: 'Purge from Note', action: 'purge' },
-                      { label: 'Dismiss', action: 'dismiss' }
-                    ],
+                      ? 'Footnote [^' + key + '] not found in reference library.'
+                      : 'Footnote definition [^' + key + '] not in library and not cited in markdown body.',
+                    fixOptions: [{ label: '+ Create Reference Entry', action: 'create_entry' }, { label: 'Purge from Note', action: 'purge' }, { label: 'Dismiss', action: 'dismiss' }],
                     type: isCitedInBody ? 'unresolved' : 'orphan_definition',
                     message: isCitedInBody 
-                      ? `Reference [^${key}] not found in library.`
-                      : `Footnote definition [^${key}] not in library and not cited in markdown body.`,
+                      ? 'Reference [^' + key + '] not found in library.'
+                      : 'Footnote definition [^' + key + '] not in library and not cited in markdown body.',
                   });
                 }
               }
@@ -1005,14 +817,12 @@ export class ProjectIndexer {
           }
         }
 
-        // 5. Plain un-prefixed reference entries at document bottom (for Standard / Footnote Mode)
+        // 5. Plain un-prefixed reference entries at document bottom
         for (const [key, ref] of allReferences.entries()) {
           const isCitedInBody = inBodyKeysInFile.has(key.toLowerCase()) || inBodyKeysInFile.has(ref.citekey.toLowerCase());
-          
-          // Search for matching plain reference line in the document
           const lineIdx = rawLines.findIndex(l => {
             const trimmed = l.trim();
-            if (trimmed.startsWith("[^")) return false; // Handled by footnote def scanner
+            if (trimmed.startsWith('[^')) return false;
             if (ref.title && ref.title.length > 5 && trimmed.includes(ref.title)) return true;
             if (ref.doi && ref.doi.length > 5 && trimmed.includes(ref.doi)) return true;
             return false;
@@ -1020,21 +830,14 @@ export class ProjectIndexer {
 
           if (lineIdx >= 0) {
             const currentLine = rawLines[lineIdx].trim();
-
             if (!referenceUsageMap[key] || referenceUsageMap[key].length === 0) {
               if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
-              referenceUsageMap[key].push({
-                filePath: file.path,
-                fileName: file.basename,
-                lineNumber: lineIdx + 1,
-                lineContent: currentLine,
-              });
+              referenceUsageMap[key].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: currentLine });
               totalCitationsInFiles++;
             }
 
             if (!isCitedInBody) {
-              // Orphan plain reference line: declared at bottom but not cited in body
-              const id = `${file.path}::plain::${key}::orphan_definition`;
+              const id = file.path + '::plain::' + key + '::orphan_definition';
               if (!dismissed.has(id)) {
                 lintWarnings.push({
                   id,
@@ -1045,15 +848,18 @@ export class ProjectIndexer {
                   rawCitation: currentLine,
                   citekey: key,
                   definitionSnippet: currentLine,
-                  suggestedFix: "",
+                  suggestedFix: '',
+                  severity: 'warning',
+                  shortTitle: 'Orphan Plain Reference Line',
+                  explanation: 'Plain reference line for "' + ref.citekey + '" declared at bottom, but never cited in body.',
+                  fixOptions: [{ label: 'Remove Reference Line', action: 'purge' }, { label: 'Dismiss', action: 'dismiss' }],
                   type: 'orphan_definition',
-                  message: `Reference for "${ref.citekey}" declared at bottom, but not cited in markdown body.`,
+                  message: 'Reference for "' + ref.citekey + '" declared at bottom, but not cited in markdown body.',
                 });
               }
             } else if (isFootnoteMode) {
-              // In footnote mode, plain references should be converted to [^key]: <Formatted>
               const expectedDef = CitationEngine.formatFootnoteDefinition(ref, targetStyle, 1);
-              const id = `${file.path}::plain::${key}::missing_footnote_prefix`;
+              const id = file.path + '::plain::' + key + '::missing_footnote_prefix';
               if (!dismissed.has(id)) {
                 lintWarnings.push({
                   id,
@@ -1064,15 +870,19 @@ export class ProjectIndexer {
                   rawCitation: currentLine,
                   citekey: key,
                   suggestedFix: expectedDef,
+                  severity: 'warning',
+                  shortTitle: 'Missing Footnote Prefix',
+                  explanation: 'Convert reference line to [^' + ref.citekey + ']: footnote definition in Footnote Mode.',
+                  fixOptions: [{ label: 'Convert to [^' + ref.citekey + ']:', action: 'replace', replacementText: expectedDef }, { label: 'Dismiss', action: 'dismiss' }],
                   type: 'format_mismatch',
-                  message: `Convert reference line to [^${ref.citekey}]: footnote definition in Footnote Mode.`,
+                  message: 'Convert reference line to [^' + ref.citekey + ']: footnote definition in Footnote Mode.',
                 });
               }
             }
           }
         }
       } catch (err) {
-        Logger.warn(`Failed indexing file: ${file.path}`, err);
+        Logger.warn('Failed indexing file: ' + file.path, err);
       }
     }
 
@@ -1085,11 +895,8 @@ export class ProjectIndexer {
     let unusedReferencesCount = 0;
 
     for (const key of relevantReferenceKeys) {
-      if (referenceUsageMap[key] && referenceUsageMap[key].length > 0) {
-        usedReferencesCount++;
-      } else {
-        unusedReferencesCount++;
-      }
+      if (referenceUsageMap[key] && referenceUsageMap[key].length > 0) usedReferencesCount++;
+      else unusedReferencesCount++;
     }
 
     const isAllProjects = (
@@ -1119,387 +926,76 @@ export class ProjectIndexer {
     };
   }
 
-  /**
-   * Propagates reference updates across linked project documents
-   */
   async syncReferenceUpdateAcrossDocuments(
     originalRef: ReferenceMetadata,
     updatedRef: ReferenceMetadata,
     project: ProjectRecord | null,
     style: CitationStyle = 'apa7',
-    referencesFolder: string = ".references"
+    referencesFolder: string = '.references'
   ): Promise<{ modifiedFiles: number; timeMs: number }> {
-    const t0 = performance.now();
-    let modifiedFiles = 0;
-
-    const files = this.getProjectFiles(project, referencesFolder);
-
-    const origKey = originalRef.citekey;
-    const newKey = updatedRef.citekey;
-
-    const origOldFootnote = CitationEngine.formatFootnoteDefinition(originalRef, style);
-    const newFootnote = CitationEngine.formatFootnoteDefinition(updatedRef, style);
-
-    const origParenthetical = CitationEngine.formatInBody(originalRef, 'parenthetical');
-    const newParenthetical = CitationEngine.formatInBody(updatedRef, 'parenthetical');
-
-    const origNarrative = CitationEngine.formatInBody(originalRef, 'narrative');
-    const newNarrative = CitationEngine.formatInBody(updatedRef, 'narrative');
-
-    for (const file of files) {
-      try {
-        let content = await this.app.vault.read(file);
-        let modified = false;
-
-        if (origKey !== newKey) {
-          const atCitekeyRegex = new RegExp(`@${origKey}\\b`, 'g');
-          if (atCitekeyRegex.test(content)) {
-            content = content.replace(atCitekeyRegex, `@${newKey}`);
-            modified = true;
-          }
-
-          const footnoteCallRegex = new RegExp(`\\[\\^${origKey}\\](?!:)`, 'g');
-          if (footnoteCallRegex.test(content)) {
-            content = content.replace(footnoteCallRegex, `[^${newKey}]`);
-            modified = true;
-          }
-
-          const footnoteDefRegex = new RegExp(`^\\[\\^${origKey}\\]:.*$`, 'gm');
-          if (footnoteDefRegex.test(content)) {
-            content = content.replace(footnoteDefRegex, newFootnote);
-            modified = true;
-          }
-        }
-
-        if (origOldFootnote !== newFootnote) {
-          const footnoteDefRegex = new RegExp(`^\\[\\^${newKey}\\]:.*$`, 'gm');
-          if (footnoteDefRegex.test(content)) {
-            content = content.replace(footnoteDefRegex, newFootnote);
-            modified = true;
-          }
-        }
-
-        if (origParenthetical !== newParenthetical && content.includes(origParenthetical)) {
-          content = content.split(origParenthetical).join(newParenthetical);
-          modified = true;
-        }
-
-        if (origNarrative !== newNarrative && content.includes(origNarrative)) {
-          content = content.split(origNarrative).join(newNarrative);
-          modified = true;
-        }
-
-        if (modified) {
-          await this.app.vault.modify(file, content);
-          modifiedFiles++;
-        }
-      } catch (err) {
-        Logger.warn(`Failed syncing update to file: ${file.path}`, err);
-      }
-    }
-
-    const elapsed = Math.round(performance.now() - t0);
-    return { modifiedFiles, timeMs: elapsed };
+    return FormatPropagator.syncReferenceUpdateAcrossDocuments(
+      this.app,
+      (p, r) => this.getProjectFiles(p, r),
+      originalRef,
+      updatedRef,
+      project,
+      style,
+      referencesFolder
+    );
   }
 
-  /**
-   * Propagates global Footnote Mode changes across all registered files
-   */
   async propagateFootnoteModeGlobally(
     enableFootnoteMode: boolean,
     allReferences: Map<string, ReferenceMetadata>,
     projects: ProjectRecord[],
-    referencesFolder: string = ".references"
+    referencesFolder: string = '.references'
   ): Promise<{ updatedFilesCount: number }> {
-    let totalUpdated = 0;
-    for (const proj of projects) {
-      const files = this.getProjectFiles(proj, referencesFolder);
-      const style = proj.citationStyle || 'apa7';
-      const targetFormat: InBodyFormat = (proj.inBodyFormat === ('footnote' as any) || !proj.inBodyFormat)
-        ? 'parenthetical'
-        : (proj.inBodyFormat as InBodyFormat);
-
-      for (const file of files) {
-        try {
-          let content = await this.app.vault.read(file);
-          let modified = false;
-
-          let fnIdx = 1;
-          for (const [key, ref] of allReferences.entries()) {
-            const targetInBody = enableFootnoteMode 
-              ? `[^${key}]` 
-              : CitationEngine.formatInBody(ref, targetFormat, style, fnIdx);
-
-            // 1. Citekey format [@key]
-            const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
-            if (citekeyRegex.test(content)) {
-              content = content.replace(citekeyRegex, targetInBody);
-              modified = true;
-            }
-
-            // 2. Footnote call [^key]
-            const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-            if (!enableFootnoteMode && footnoteCallRegex.test(content)) {
-              content = content.replace(footnoteCallRegex, targetInBody);
-              modified = true;
-            }
-
-            // 3. Match across all possible citation style variations in-body
-            const variations = [
-              CitationEngine.formatInBody(ref, 'parenthetical', 'apa7', fnIdx),
-              CitationEngine.formatInBody(ref, 'parenthetical', 'harvard', fnIdx),
-              CitationEngine.formatInBody(ref, 'parenthetical', 'chicago', fnIdx),
-              CitationEngine.formatInBody(ref, 'parenthetical', 'ieee', fnIdx),
-              CitationEngine.formatInBody(ref, 'parenthetical', 'vancouver', fnIdx),
-              CitationEngine.formatInBody(ref, 'narrative', 'apa7', fnIdx),
-              CitationEngine.formatInBody(ref, 'narrative', 'harvard', fnIdx),
-              CitationEngine.formatInBody(ref, 'narrative', 'chicago', fnIdx),
-              CitationEngine.formatInBody(ref, 'narrative', 'ieee', fnIdx),
-              CitationEngine.formatInBody(ref, 'narrative', 'vancouver', fnIdx),
-            ];
-
-            for (const v of variations) {
-              if (v && v.length > 0 && content.includes(v)) {
-                content = content.split(v).join(targetInBody);
-                modified = true;
-              }
-            }
-
-            // 4. Transform bottom definition / bibliography entry
-            if (enableFootnoteMode) {
-              const expectedDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIdx);
-              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
-              if (fnDefRegex.test(content)) {
-                const currentDef = content.match(fnDefRegex)?.[0];
-                if (currentDef !== expectedDef) {
-                  content = content.replace(fnDefRegex, expectedDef);
-                  modified = true;
-                }
-              } else if (ref.title && ref.title.length > 5 && content.includes(ref.title)) {
-                const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
-                content = content.replace(plainRegex, expectedDef);
-                modified = true;
-              }
-            } else {
-              const expectedBib = CitationEngine.formatBibliographyEntry(ref, style, fnIdx);
-              const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'm');
-              if (fnDefRegex.test(content)) {
-                content = content.replace(fnDefRegex, expectedBib);
-                modified = true;
-              } else if (ref.title && ref.title.length > 5 && content.includes(ref.title)) {
-                const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
-                const currentLine = content.match(plainRegex)?.[0];
-                if (currentLine && currentLine.trim() !== expectedBib.trim()) {
-                  content = content.replace(plainRegex, expectedBib);
-                  modified = true;
-                }
-              }
-            }
-
-            fnIdx++;
-          }
-
-          if (modified) {
-            await this.app.vault.modify(file, content);
-            totalUpdated++;
-          }
-        } catch (err) {
-          Logger.warn(`Failed propagating footnote mode for ${file.path}:`, err);
-        }
-      }
-    }
-    return { updatedFilesCount: totalUpdated };
+    return FormatPropagator.propagateFootnoteModeGlobally(
+      this.app,
+      (p, r) => this.getProjectFiles(p, r),
+      enableFootnoteMode,
+      allReferences,
+      projects,
+      referencesFolder
+    );
   }
 
-  /**
-   * Propagates in-text format change across project documents
-   */
   async propagateFormatChange(
     project: ProjectRecord,
     newFormat: InBodyFormat,
     allReferences: Map<string, ReferenceMetadata>,
     style: CitationStyle = 'apa7',
-    referencesFolder: string = ".references",
+    referencesFolder: string = '.references',
     globalFootnoteMode: boolean = false
   ): Promise<number> {
-    const files = this.getProjectFiles(project, referencesFolder);
-    let modifiedFiles = 0;
-
-    for (const file of files) {
-      try {
-        let content = await this.app.vault.read(file);
-        let modified = false;
-        let fnIdx = 1;
-
-        for (const [key, ref] of allReferences.entries()) {
-          const targetInBody = globalFootnoteMode ? `[^${key}]` : CitationEngine.formatInBody(ref, newFormat, style, fnIdx);
-
-          // 1. Citekey format [@key]
-          const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
-          if (citekeyRegex.test(content)) {
-            content = content.replace(citekeyRegex, targetInBody);
-            modified = true;
-          }
-
-          // 2. Footnote call [^key]
-          const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-          if (footnoteCallRegex.test(content)) {
-            content = content.replace(footnoteCallRegex, targetInBody);
-            modified = true;
-          }
-
-          // 3. Match across all possible citation style variations
-          const variations = [
-            CitationEngine.formatInBody(ref, 'parenthetical', 'apa7', fnIdx),
-            CitationEngine.formatInBody(ref, 'parenthetical', 'harvard', fnIdx),
-            CitationEngine.formatInBody(ref, 'parenthetical', 'chicago', fnIdx),
-            CitationEngine.formatInBody(ref, 'parenthetical', 'ieee', fnIdx),
-            CitationEngine.formatInBody(ref, 'parenthetical', 'vancouver', fnIdx),
-            CitationEngine.formatInBody(ref, 'narrative', 'apa7', fnIdx),
-            CitationEngine.formatInBody(ref, 'narrative', 'harvard', fnIdx),
-            CitationEngine.formatInBody(ref, 'narrative', 'chicago', fnIdx),
-            CitationEngine.formatInBody(ref, 'narrative', 'ieee', fnIdx),
-            CitationEngine.formatInBody(ref, 'narrative', 'vancouver', fnIdx),
-          ];
-
-          for (const v of variations) {
-            if (v && v.length > 0 && content.includes(v)) {
-              content = content.split(v).join(targetInBody);
-              modified = true;
-            }
-          }
-
-          // Transform bottom definitions / bibliography entries to the new style
-          if (globalFootnoteMode) {
-            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIdx);
-            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
-            if (fnDefRegex.test(content)) {
-              const currentDef = content.match(fnDefRegex)?.[0];
-              if (currentDef !== fnDef) {
-                content = content.replace(fnDefRegex, fnDef);
-                modified = true;
-              }
-            } else if (content.includes(`[^${key}]`) || modified) {
-              // Check if un-prefixed line exists
-              const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
-              if (plainRegex.test(content)) {
-                content = content.replace(plainRegex, fnDef);
-                modified = true;
-              }
-            }
-          } else {
-            // Standard mode: update bottom reference line to un-prefixed target style
-            const expectedBib = CitationEngine.formatBibliographyEntry(ref, style, fnIdx);
-            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:\\s*(.*)$`, 'm');
-            if (fnDefRegex.test(content)) {
-              content = content.replace(fnDefRegex, expectedBib);
-              modified = true;
-            } else if (ref.title && ref.title.length > 5 && content.includes(ref.title)) {
-              const escapedTitle = ref.title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-              const plainRegex = new RegExp(`^.*${escapedTitle}.*$`, 'm');
-              const currentLine = content.match(plainRegex)?.[0];
-              if (currentLine && currentLine.trim() !== expectedBib.trim()) {
-                content = content.replace(plainRegex, expectedBib);
-                modified = true;
-              }
-            }
-          }
-          fnIdx++;
-        }
-
-        if (modified) {
-          await this.app.vault.modify(file, content);
-          modifiedFiles++;
-        }
-      } catch (err) {
-        Logger.warn(`Failed propagating format change to file: ${file.path}`, err);
-      }
-    }
-
-    return modifiedFiles;
+    return FormatPropagator.propagateFormatChange(
+      this.app,
+      (p, r) => this.getProjectFiles(p, r),
+      project,
+      newFormat,
+      allReferences,
+      style,
+      referencesFolder,
+      globalFootnoteMode
+    );
   }
 
-  /**
-   * Syncs and transforms footnote definitions at the bottom of all project files to match the selected style.
-   */
   async syncFootnotesInRegisteredFiles(
     project: ProjectRecord,
     allReferences: Map<string, ReferenceMetadata>,
     style: CitationStyle = 'apa7',
-    referencesFolder: string = ".references"
+    referencesFolder: string = '.references'
   ): Promise<{ updatedFilesCount: number; updatedFootnotesCount: number; removedFootnotesCount: number }> {
-    const files = this.getProjectFiles(project, referencesFolder);
-    let updatedFilesCount = 0;
-    let updatedFootnotesCount = 0;
-    let removedFootnotesCount = 0;
-
-    const footnoteCallRegex = /\[\^([a-zA-Z0-9_:\.-]+)\](?!:)/g;
-    const existingDefRegex = /^\s*\[\^([a-zA-Z0-9_:\.-]+)\]:.*$/gm;
-
-    for (const file of files) {
-      try {
-        let content = await this.app.vault.read(file);
-        let modified = false;
-
-        const keysInFile = new Set<string>();
-
-        // Collect from in-body footnote calls [^key]
-        let match: RegExpExecArray | null;
-        footnoteCallRegex.lastIndex = 0;
-        while ((match = footnoteCallRegex.exec(content)) !== null) {
-          keysInFile.add(match[1]);
-        }
-
-        // Also collect from existing bottom definitions [^key]: ...
-        existingDefRegex.lastIndex = 0;
-        while ((match = existingDefRegex.exec(content)) !== null) {
-          keysInFile.add(match[1]);
-        }
-
-        let fnIndex = 1;
-        for (const key of keysInFile) {
-          const ref = allReferences.get(key) || Array.from(allReferences.values()).find(r => 
-            r.citekey.toLowerCase().replace(/[^a-z0-9]/g, '') === key.toLowerCase().replace(/[^a-z0-9]/g, '')
-          );
-
-          if (ref) {
-            const fnDef = CitationEngine.formatFootnoteDefinition(ref, style, fnIndex);
-            const fnDefRegex = new RegExp(`^\\s*\\[\\^${key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\]:.*$`, 'm');
-
-            if (fnDefRegex.test(content)) {
-              const currentDef = content.match(fnDefRegex)?.[0];
-              if (currentDef !== fnDef) {
-                content = content.replace(fnDefRegex, fnDef);
-                modified = true;
-                updatedFootnotesCount++;
-              }
-            } else if (project.enableFootnoteMode) {
-              content = content.trimEnd() + `\n\n${fnDef}\n`;
-              modified = true;
-              updatedFootnotesCount++;
-            }
-            fnIndex++;
-          }
-        }
-
-        if (modified) {
-          await this.app.vault.modify(file, content);
-          updatedFilesCount++;
-        }
-      } catch (err) {
-        Logger.warn(`Failed syncing footnotes for ${file.path}:`, err);
-      }
-    }
-
-    return { updatedFilesCount, updatedFootnotesCount, removedFootnotesCount };
+    return FormatPropagator.syncFootnotesInRegisteredFiles(
+      this.app,
+      (p, r) => this.getProjectFiles(p, r),
+      project,
+      allReferences,
+      style,
+      referencesFolder
+    );
   }
 
-  /**
-   * Generates formatted Bibliography for a project
-   */
   generateBibliography(
     project: ProjectRecord,
     allReferences: ReferenceMetadata[],
@@ -1507,199 +1003,6 @@ export class ProjectIndexer {
     onlyCited: boolean = false,
     stats?: ProjectHealthStats
   ): string {
-    let refsToInclude = allReferences;
-
-    if (project.id !== ALL_PROJECTS_ID && project.referenceIds.length > 0) {
-      refsToInclude = allReferences.filter(r => 
-        project.referenceIds.includes(r.citekey) || 
-        (r.projects && (r.projects.includes(project.id) || r.projects.includes(project.name)))
-      );
-    }
-
-    if (onlyCited && stats) {
-      refsToInclude = refsToInclude.filter(r => stats.referenceUsageMap[r.citekey]?.length > 0);
-    }
-
-    return CitationEngine.generateBibliography(refsToInclude, style, project.name);
-  }
-
-  /**
-   * Batch compiles all files in a project for Global Scope publication.
-   * Unifies sequential indexing (e.g. IEEE [1..N], Vancouver (1..N)) across all documents
-   * and exports both compiled notes and a master bibliography to the configured publication folder.
-   */
-  async compileProjectCorpus(
-    project: ProjectRecord,
-    allReferences: Map<string, ReferenceMetadata>,
-    style: CitationStyle = 'apa7',
-    publicationFolder: string = 'publication',
-    referencesFolder: string = '.references'
-  ): Promise<{ compiledFilesCount: number; totalCitationsCount: number; bibliographyPath: string }> {
-    const files = this.getProjectFiles(project, referencesFolder);
-    const pubDir = normalizePath(publicationFolder || 'publication');
-
-    // Ensure publication output folder exists
-    if (!(await this.app.vault.adapter.exists(pubDir))) {
-      await this.app.vault.createFolder(pubDir);
-    }
-
-    // 1. Build Global Reference Order across all project files
-    const globalCitekeyOrder: string[] = [];
-    const fileContents: Map<string, string> = new Map();
-
-    for (const file of files) {
-      try {
-        const content = await this.app.vault.read(file);
-        fileContents.set(file.path, content);
-
-        for (const [key, ref] of allReferences.entries()) {
-          const citekeyRegex = new RegExp(`\\[@${key}\\]`, 'g');
-          const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-          const parenthetical = CitationEngine.formatInBody(ref, 'parenthetical');
-
-          if (citekeyRegex.test(content) || footnoteCallRegex.test(content) || (parenthetical && content.includes(parenthetical))) {
-            if (!globalCitekeyOrder.includes(key)) {
-              globalCitekeyOrder.push(key);
-            }
-          }
-        }
-      } catch (err) {
-        Logger.warn(`Failed reading file during corpus compilation: ${file.path}`, err);
-      }
-    }
-
-    // Sort global citekeys alphabetically if Author-Date (APA, Harvard, Chicago)
-    if (style === 'apa7' || style === 'harvard' || style === 'chicago') {
-      globalCitekeyOrder.sort((a, b) => {
-        const refA = allReferences.get(a);
-        const refB = allReferences.get(b);
-        const nameA = refA?.authors?.[0] || a;
-        const nameB = refB?.authors?.[0] || b;
-        return nameA.localeCompare(nameB);
-      });
-    }
-
-    // Create Global Index Map
-    const globalIndexMap = new Map<string, number>();
-    globalCitekeyOrder.forEach((key, idx) => {
-      globalIndexMap.set(key, idx + 1);
-    });
-
-    let compiledFilesCount = 0;
-
-    // 2. Batch Compile and write every file into publication folder
-    const bracketGroupRegex = /\[([^\]]*@[a-zA-Z0-9_:\.-]+[^\]]*)\]/g;
-    const singleCitekeyRegex = /@([a-zA-Z0-9_:\.-]+)/g;
-
-    for (const file of files) {
-      let content = fileContents.get(file.path);
-      if (content === undefined) continue;
-
-      // Replace multi-citation or single-citation bracket groups
-      content = content.replace(bracketGroupRegex, (fullMatch, groupInner) => {
-        const keysInGroup: string[] = [];
-        let kMatch: RegExpExecArray | null;
-        singleCitekeyRegex.lastIndex = 0;
-        while ((kMatch = singleCitekeyRegex.exec(groupInner)) !== null) {
-          keysInGroup.push(kMatch[1]);
-        }
-
-        if (keysInGroup.length === 0) return fullMatch;
-
-        if (style === 'ieee') {
-          const numbers = keysInGroup.map(k => globalIndexMap.get(k)).filter(n => n !== undefined);
-          return numbers.length > 0 ? `[${numbers.join(', ')}]` : fullMatch;
-        } else if (style === 'vancouver') {
-          const numbers = keysInGroup.map(k => globalIndexMap.get(k)).filter(n => n !== undefined);
-          return numbers.length > 0 ? `(${numbers.join(', ')})` : fullMatch;
-        } else {
-          // APA 7 / Harvard / Chicago
-          const formattedParts = keysInGroup.map(k => {
-            const ref = allReferences.get(k);
-            if (!ref) return null;
-            const inBody = CitationEngine.formatInBody(ref, 'parenthetical');
-            return inBody.replace(/^\(|\)$/g, '');
-          }).filter(Boolean);
-          return formattedParts.length > 0 ? `(${formattedParts.join('; ')})` : fullMatch;
-        }
-      });
-
-      // Replace individual footnotes and clean footnote definitions
-      for (const [key, globalIdx] of globalIndexMap.entries()) {
-        const ref = allReferences.get(key);
-        if (!ref) continue;
-
-        let inBodyFormatted = "";
-        if (style === 'ieee') {
-          inBodyFormatted = `[${globalIdx}]`;
-        } else if (style === 'vancouver') {
-          inBodyFormatted = `(${globalIdx})`;
-        } else {
-          inBodyFormatted = CitationEngine.formatInBody(ref, 'parenthetical');
-        }
-
-        const footnoteCallRegex = new RegExp(`\\[\\^${key}\\](?!:)`, 'g');
-        content = content.replace(footnoteCallRegex, inBodyFormatted);
-
-        // Strip local footnote definition
-        const fnCleanRegex = new RegExp(`^\\s*\\[\\^${key}\\]:.*$\\n?`, 'gm');
-        content = content.replace(fnCleanRegex, "");
-      }
-
-      // Sanitization: Coalesce accidental adjacent bracket collisions for Markdown/PDF/Docs export
-      if (style === 'ieee') {
-        const adjacentBracketRegex = /\[(\d+(?:\s*,\s*\d+)*)\]\s*\[(\d+(?:\s*,\s*\d+)*)\]/g;
-        while (adjacentBracketRegex.test(content)) {
-          content = content.replace(adjacentBracketRegex, '[$1, $2]');
-        }
-      } else if (style === 'vancouver') {
-        const adjacentParenRegex = /\((\d+(?:\s*,\s*\d+)*)\)\s*\((\d+(?:\s*,\s*\d+)*)\)/g;
-        while (adjacentParenRegex.test(content)) {
-          content = content.replace(adjacentParenRegex, '($1, $2)');
-        }
-      }
-
-      content = content.replace(/\n{3,}$/, "\n\n");
-
-      // Strip citation manager frontmatter from exported publication note
-      content = ProjectIndexer.cleanExportFrontmatter(content);
-
-      // Write compiled file to publication folder
-      const targetOutPath = normalizePath(`${pubDir}/${file.name}`);
-      await this.app.vault.adapter.write(targetOutPath, content);
-      compiledFilesCount++;
-    }
-
-    // 3. Generate Master Global Bibliography file
-    const targetRefs = globalCitekeyOrder.map(k => allReferences.get(k)!).filter(Boolean);
-    const bibText = CitationEngine.generateBibliography(targetRefs, style, `References - ${project.name}`);
-    const bibFilePath = normalizePath(`${pubDir}/References - ${project.name}.md`);
-    await this.app.vault.adapter.write(bibFilePath, bibText);
-
-    return {
-      compiledFilesCount,
-      totalCitationsCount: globalCitekeyOrder.length,
-      bibliographyPath: bibFilePath
-    };
-  }
-
-  /**
-   * Cleans citation-manager tags from frontmatter so exported files in publication/
-   * are not indexed back into the citation project as source notes.
-   */
-  static cleanExportFrontmatter(content: string): string {
-    const fmMatch = content.match(/^---\r?\n([\s\S]*?)\r?\n---/);
-    if (!fmMatch) return content;
-
-    let fmBody = fmMatch[1];
-    // Remove citation-manager, citation_manager, citation-project lines (including multiline arrays)
-    fmBody = fmBody.replace(/^(?:citation-manager|citation_manager|citation-project|citation_project):\s*(?:\[[^\]]*\]|[^\r\n]*(\r?\n\s+-[^\r\n]*)*)\r?\n?/gm, "");
-    
-    // If frontmatter is now empty, remove the whole frontmatter block
-    if (!fmBody.trim()) {
-      return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n?/, "");
-    }
-    
-    return content.replace(/^---\r?\n[\s\S]*?\r?\n---/, `---\n${fmBody.trim()}\n---`);
+    return FormatPropagator.generateBibliography(project, allReferences, style, onlyCited, stats);
   }
 }

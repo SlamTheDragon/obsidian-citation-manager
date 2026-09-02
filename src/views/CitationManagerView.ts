@@ -12,6 +12,7 @@ import { PromptModal } from './PromptModal';
 import { ConfirmModal } from './ConfirmModal';
 import { ExportPublicationModal } from './ExportPublicationModal';
 import { CitationNotesModal } from './CitationNotesModal';
+import { CitationCardRenderer } from './components/CitationCardRenderer';
 import { Logger } from '../logger';
 
 export const VIEW_TYPE_CITATION_MANAGER = "citation-manager-view";
@@ -455,190 +456,23 @@ export class CitationManagerView extends ItemView {
     }
 
     for (const ref of filtered) {
-      this.renderReferenceCard(container, ref, project);
-    }
-  }
-
-  private renderReferenceCard(container: HTMLElement, ref: ReferenceMetadata, project: ProjectRecord | null) {
-    const card = container.createDiv({ cls: "citation-card" });
-
-    // Header
-    const cardHeader = card.createDiv({ cls: "citation-card-header" });
-    cardHeader.createSpan({ cls: `citation-type-badge type-${ref.type}`, text: ref.type.toUpperCase() });
-    cardHeader.createSpan({ cls: "citation-key-pill", text: ref.citekey });
-
-    // Usage & Notes badges
-    const occurrences = this.stats?.referenceUsageMap[ref.citekey] || [];
-    if (occurrences.length > 0) {
-      const usageBadge = cardHeader.createSpan({ 
-        cls: "citation-usage-pill used", 
-        text: `Cited (${occurrences.length}x)`,
-        title: "Click to see document occurrences" 
-      });
-      usageBadge.addEventListener("click", () => {
-        new UsageLocationsModal(this.app, ref.citekey, occurrences).open();
-      });
-    } else {
-      cardHeader.createSpan({ cls: "citation-usage-pill unused", text: "Unused" });
-    }
-
-    if (ref.userNotes && ref.userNotes.trim()) {
-      const notesPill = cardHeader.createSpan({ 
-        cls: "citation-notes-pill", 
-        text: "Notes",
-        title: "Click to view/edit literature notes" 
-      });
-      notesPill.addEventListener("click", () => {
-        new CitationNotesModal(this.app, ref, this.storageManager, async () => {
-          await this.refreshData();
-        }).open();
-      });
-    }
-
-    // Title & Authors
-    card.createDiv({ cls: "citation-card-title", text: ref.title });
-    const authorYear = card.createDiv({ cls: "citation-card-author-year" });
-    authorYear.createSpan({ text: (ref.authors || []).slice(0, 3).join(", ") + ((ref.authors?.length || 0) > 3 ? " et al." : "") });
-    authorYear.createSpan({ cls: "citation-year-dot", text: ` • ${ref.year}` });
-
-    if (ref.publication) {
-      card.createDiv({ cls: "citation-card-publication", text: ref.publication });
-    }
-
-    // Expandable In-Card Notes Accordion (Shows 'Notes' when collapsed, 25-35 chars of note content when opened)
-    const rawNotes = (ref.userNotes || "").trim();
-    const cleanNotes = rawNotes
-      .replace(/\s+/g, ' ')             // Normalize whitespace for single-line accordion snippet
-      .trim();
-
-    if (cleanNotes.length > 0) {
-      const accordion = card.createDiv({ cls: "citation-card-notes-accordion" });
-      const accHeader = accordion.createDiv({ cls: "citation-card-notes-header" });
-      const accChevron = accHeader.createSpan({ cls: "notes-accordion-icon" });
-      setIcon(accChevron, "chevron-right");
-      const accTitle = accHeader.createSpan({ cls: "notes-accordion-title", text: "Notes" });
-
-      const accBody = accordion.createDiv({ cls: "citation-card-notes-body" });
-      accBody.style.display = "none";
-
-      const previewLength = 30;
-      const previewText = cleanNotes.length > previewLength 
-        ? `${cleanNotes.slice(0, previewLength)}...` 
-        : cleanNotes;
-
-      const snippetEl = accBody.createDiv({ 
-        cls: "citation-card-note-snippet-text", 
-        text: `${previewText}`
-      });
-      snippetEl.title = "Click to open literature notes editor";
-      snippetEl.style.cursor = "pointer";
-      snippetEl.addEventListener("click", () => {
-        new CitationNotesModal(this.app, ref, this.storageManager, async () => {
-          await this.refreshData();
-        }).open();
-      });
-
-      let isOpen = false;
-      accHeader.addEventListener("click", () => {
-        isOpen = !isOpen;
-        if (isOpen) {
-          accordion.addClass("open");
-          accBody.style.display = "block";
-          setIcon(accChevron, "chevron-down");
-          accTitle.style.display = "none"; // Hide title when opened as requested
-        } else {
-          accordion.removeClass("open");
-          accBody.style.display = "none";
-          setIcon(accChevron, "chevron-right");
-          accTitle.style.display = "inline"; // Show title when collapsed
-        }
-      });
-    }
-
-    // Actions Row
-    const actionsRow = card.createDiv({ cls: "citation-card-actions" });
-
-    // Insert Button
-    const insertBtn = actionsRow.createEl("button", { cls: "citation-card-btn", title: "Insert Citation at Cursor" });
-    setIcon(insertBtn.createSpan({ cls: "btn-icon" }), "quote-glyph");
-    insertBtn.createSpan({ text: " Insert" });
-    insertBtn.addEventListener("click", async () => {
-      await this.insertCitationIntoActiveEditor(ref, project);
-    });
-
-    // Notes Button (Opens isolated literature note editor modal)
-    const notesBtn = actionsRow.createEl("button", { 
-      cls: `citation-card-btn ${ref.userNotes ? 'has-notes' : ''}`, 
-      title: "View & Edit Research Notes in Modal" 
-    });
-    setIcon(notesBtn.createSpan({ cls: "btn-icon" }), "file-text");
-    notesBtn.createSpan({ text: " Notes" });
-    notesBtn.addEventListener("click", () => {
-      new CitationNotesModal(this.app, ref, this.storageManager, async () => {
-        await this.refreshData();
-      }).open();
-    });
-
-    // Edit Button
-    const editBtn = actionsRow.createEl("button", { cls: "citation-card-btn", title: "Edit Reference Metadata" });
-    setIcon(editBtn.createSpan({ cls: "btn-icon" }), "edit-3");
-    editBtn.createSpan({ text: " Edit" });
-    editBtn.addEventListener("click", () => {
-      new ReferenceEditorModal(
+      CitationCardRenderer.renderCard(
         this.app,
+        container,
         ref,
-        async (updatedRef, origCitekey) => {
-          await this.storageManager.saveReference(updatedRef, origCitekey);
-          const res = await this.projectIndexer.syncReferenceUpdateAcrossDocuments(
-            ref,
-            updatedRef,
-            project,
-            project?.citationStyle || this.settings.defaultCitationStyle,
-            this.settings.referencesFolder
-          );
-          this.statusMessage = `[Updated citation across ${res.modifiedFiles} file(s) in ${res.timeMs}ms]`;
-          await this.refreshData();
+        project,
+        this.stats,
+        this.storageManager,
+        this.projectIndexer,
+        this.settings,
+        async (r) => {
+          await this.insertCitationIntoActiveEditor(r, project);
         },
-        false
-      ).open();
-    });
-
-    // PDF Button (Opens attached PDF reliably)
-    if (ref.pdfAttachment) {
-      const pdfBtn = actionsRow.createEl("button", { cls: "citation-card-btn", title: "Open Attached PDF" });
-      setIcon(pdfBtn.createSpan({ cls: "btn-icon" }), "paperclip");
-      pdfBtn.createSpan({ text: " PDF" });
-      pdfBtn.addEventListener("click", async () => {
-        await this.openAttachedPDF(ref);
-      });
-    }
-
-    // Delete Button
-    const deleteBtn = actionsRow.createEl("button", { cls: "citation-card-btn btn-danger", title: "Delete Reference" });
-    setIcon(deleteBtn.createSpan({ cls: "btn-icon" }), "trash-2");
-    deleteBtn.addEventListener("click", () => {
-      if (this.settings.blockDeletionIfInUse && this.stats) {
-        const check = this.projectIndexer.canDelete(ref.citekey, this.stats);
-        if (!check.allowed) {
-          new Notice(`Cannot delete [${ref.citekey}]: cited in ${check.occurrences.length} location(s).`);
-          new UsageLocationsModal(this.app, ref.citekey, check.occurrences).open();
-          return;
-        }
-      }
-
-      new ConfirmModal(
-        this.app,
-        `Delete Reference: ${ref.citekey}`,
-        `Delete '${ref.title}'? Permanently removes its entry.`,
-        "Delete",
-        true,
         async () => {
-          await this.storageManager.deleteReference(ref.citekey);
-          new Notice(`Deleted [${ref.citekey}]`);
           await this.refreshData();
         }
-      ).open();
-    });
+      );
+    }
   }
 
   private async openAttachedPDF(ref: ReferenceMetadata) {
