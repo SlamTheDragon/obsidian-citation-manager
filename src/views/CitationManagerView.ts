@@ -384,7 +384,8 @@ export class CitationManagerView extends ItemView {
                 new Notice(`Added citation [${newRef.citekey}]`);
                 await this.refreshData();
               },
-              true
+              true,
+              this.settings.collections || []
             ).open();
           } catch (err: any) {
             notice.hide();
@@ -841,7 +842,8 @@ export class CitationManagerView extends ItemView {
           this.currentSubpanel = 'citations';
           await this.refreshData();
         },
-        true
+        true,
+        this.settings.collections || []
       ).open();
     });
 
@@ -1338,7 +1340,8 @@ export class CitationManagerView extends ItemView {
                       new Notice("Created reference [" + newRef.citekey + "]");
                       await this.refreshData();
                     },
-                    true
+                    true,
+                    this.settings.collections || []
                   ).open();
                 });
               }
@@ -1629,7 +1632,8 @@ export class CitationManagerView extends ItemView {
       async () => {
         this.currentSubpanel = 'citations';
         await this.refreshData();
-      }
+      },
+      this.settings.collections || []
     ).open();
   }
 
