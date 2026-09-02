@@ -222,7 +222,53 @@ bun run test:all
   - `test_mode_toggle.ts`: Bi-Directional Footnote Mode Transitions Across 7 Standards
   - `test_propagation.ts`: Cross-Standard Vault In-Body Migrations
   - `exhaustive_matrix_test.ts`: 100-Iteration Combinatorial Permutation State Trees
-  - `precedence_test.ts`: Footnote Mode Precedence & Standard Authority
-  - `bx_mutation_test.ts`: Bidirectional Transformation & Mutation Testing
-  - `combinatorial_test.ts`: NIST CIT Interaction Testing (75 Configurations)
   - `test_corpus_sources_propagation.ts`: Multi-Source Corpus Resolver & Video/PDF Attachment Propagation
+  - `test_citation_groups_and_collections.ts`: Citation Groups, Dynamic Search Bar, 4-State Filter Island & Chip Dimensions
+  - `test_collections_and_filter_combinatorial_matrix.ts`: 192-State Combinatorial Filter & Transition Matrix
+  - `test_insertion_and_cross_reference_linting.ts`: In-Body CSL Compliance, Footnote Governance & Missing Definition Lint Fixes
+  - `test_all_insertion_entry_points.ts`: Multi-Entry-Point Insertion, Suggest Autocomplete & Capitalization Normalization
+
+---
+
+## 5. Architectural Checklist for Levels of Consultation & Impact Governance
+
+To safeguard vault integrity and preserve established design contracts (e.g. Bucket Scoping Governance, Note Boundaries, and Non-Destructive Writing Flows), all future architectural and behavioral changes must be evaluated against this **3-Level Consultation Checklist**:
+
+```mermaid
+flowchart TD
+    Change[Proposed Request / Change] --> Eval{Impact Level Assessment}
+    Eval -->|Level 1: Local / Non-Breaking| Auto[Level 1: Autonomous Execution\nRun tests & build]
+    Eval -->|Level 2: Informational / Soft UI| Info[Level 2: Non-Destructive Fallback\nRender Warning/Info cards in UI]
+    Eval -->|Level 3: Structural / Vault-Wide| Consult[Level 3: MANDATORY User Consultation\nProvide checklist & await explicit approval]
+```
+
+### 5.1 Level 1: Autonomous Execution (Safe / Local / Non-Breaking)
+* **Scope**: Local implementation details, standard bugfixes, style alignment, automated test suite expansions, internal performance optimizations.
+* **Examples**:
+  - Fixing string trimming, regex edge cases, cursor offsets, or capitalizations (e.g. `capitalizeName` with surname particle preservation).
+  - Adding unit and integration test assertions to `tests/`.
+  - Polishing CSS dimensions, chip heights, modal button paddings without layout shift.
+  - Adding click-outside dismiss listeners to UI popovers and floating islands.
+  - Zero-emoji enforcement and icon unification (`setIcon(el, "...")`).
+* **Protocol**: Execute directly, verify with `bun run test:all`, build with `bun run build`, and document changes concisely.
+
+### 5.2 Level 2: Informed Non-Destructive Enhancements (Soft Fallbacks / Warning Cards)
+* **Scope**: UI states where prerequisites are missing, ambiguous user inputs, or soft guardrails where an un-scoped action should be halted safely without mutating files.
+* **Examples**:
+  - When the user selects a global multi-file compilation scope while on "All Citations" (`ALL_PROJECTS_ID`): Render an **Informational/Warning Card** in the modal (`"'All Citations' is currently selected. Please select a specific Citation Bucket from the side panel before compiling your corpus. Global multi-document compilation and unified sequential numeric indexing (e.g. IEEE [1..N], Vancouver (1..N)) are governed by Citation Buckets."`) explaining bucket scoping instead of mutating un-scoped vault files.
+  - Rendering dynamic search inputs when collections $\ge 6$.
+  - Dynamic filter chips indicating active states (`State 1 Clean` $\to$ `State 2 Collection` $\to$ `State 3 Types` $\to$ `State 4 Both`).
+* **Protocol**: Implement safe, non-destructive UI feedback, keep action buttons disabled/clean, and report the UI behavior to the user.
+
+### 5.3 Level 3: Mandatory Prior Consultation (Structural / Breaking / Vault-Wide Actions)
+* **Scope**: Any change that alters architectural boundaries, deletes/bypasses scoping governance, modifies storage schemas, or risks vault-wide document mutations.
+* **Mandatory Consultation Trigger Checklist**:
+  - [ ] **Bucket Scoping Bypass**: Running batch file modifications or un-scoped corpus compilations across the entire vault without an explicit Citation Bucket.
+  - [ ] **Storage / Schema Changes**: Adding, removing, or renaming serialized properties in `settings.json`, `.references/*.md` YAML frontmatter, or cache files (e.g. removing `activeCollectionId`).
+  - [ ] **Document Mutation Semantics**: Modifying how `<!--NOTE_START-->` / `<!--NOTE_END-->` boundaries are parsed or rewritten.
+  - [ ] **Breaking UI Redesigns**: Removing established subpanels, modals, or primary entry points.
+* **Protocol**: **STOP and consult the user first**. Present:
+  1. The exact structural change proposed.
+  2. The rationale and trade-offs.
+  3. The specific files and storage models affected.
+  4. Await explicit approval before modifying codebase files.

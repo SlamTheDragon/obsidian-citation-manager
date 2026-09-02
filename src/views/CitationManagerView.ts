@@ -111,6 +111,23 @@ export class CitationManagerView extends ItemView {
       })
     );
 
+    // Close filter island on click outside
+    this.registerDomEvent(document, 'click', (evt: MouseEvent) => {
+      if (!this.isFilterIslandOpen) return;
+      const target = evt.target as Node | null;
+      if (!target) return;
+      const filterSection = this.containerEl.querySelector('.citation-filter-section-wrapper');
+      if (filterSection && !filterSection.contains(target)) {
+        this.isFilterIslandOpen = false;
+        const island = filterSection.querySelector('.citation-filter-island-container') as HTMLElement | null;
+        if (island) {
+          island.style.display = 'none';
+          island.removeClass('animated-expand');
+        }
+        filterSection.querySelectorAll('.citation-filter-pill-btn').forEach(btn => btn.removeClass('active'));
+      }
+    });
+
     this.lastActiveMarkdownView = this.app.workspace.getActiveViewOfType(MarkdownView);
     this.lastActiveFilePath = this.lastActiveMarkdownView?.file?.path || null;
     await this.refreshData();

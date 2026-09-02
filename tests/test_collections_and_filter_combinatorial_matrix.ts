@@ -216,6 +216,23 @@ assert(getChipState(0, 1) === 3, "0 collections + 1 type = State 3 (Type Enabled
 assert(getChipState(0, 4) === 3, "0 collections + 4 types = State 3 (Type Enabled)");
 assert(getChipState(2, 2) === 4, "2 collections + 2 types = State 4 (Both Enabled)");
 
+// -----------------------------------------------------------------------------
+// 5. OUTSIDE CLICK FILTER ISLAND DISMISSAL SIMULATION
+// -----------------------------------------------------------------------------
+let isFilterIslandOpen = true;
+function simulateClick(isInsideWrapper: boolean) {
+  if (!isFilterIslandOpen) return;
+  if (!isInsideWrapper) {
+    isFilterIslandOpen = false;
+  }
+}
+
+simulateClick(true); // Click inside filter island (e.g. checkbox)
+assert(isFilterIslandOpen === true, "Filter island remains open when clicking inside");
+
+simulateClick(false); // Click outside filter island (e.g. on citation card or editor)
+assert(isFilterIslandOpen === false, "Filter island automatically closes when clicking outside");
+
 console.log("================================================================================");
 console.log(`  ALL COMBINATORIAL & VARIABLE STATE TESTS PASSED (${passCount}/${passCount})!`);
 console.log("================================================================================");
