@@ -278,10 +278,19 @@ export class ProjectIndexer {
                 if (!referenceUsageMap[key]) referenceUsageMap[key] = [];
                 referenceUsageMap[key].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
               } else {
-                unresolvedCitations.push({ rawCitation: '@' + key, file: file.path, line: lineIdx + 1 });
                 const fuzzyMatch = LintEngine.findFuzzyRef(key, allReferences);
                 if (fuzzyMatch) {
-                  const id = file.path + '::' + (lineIdx + 1) + '::@' + key + '::typo';
+                  const isCaseMismatch = key.toLowerCase() === fuzzyMatch.citekey.toLowerCase();
+                  if (isCaseMismatch) {
+                    groupRefs.push(fuzzyMatch);
+                    inBodyKeysInFile.add(fuzzyMatch.citekey.toLowerCase());
+                    if (!referenceUsageMap[fuzzyMatch.citekey]) referenceUsageMap[fuzzyMatch.citekey] = [];
+                    referenceUsageMap[fuzzyMatch.citekey].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
+                  } else {
+                    unresolvedCitations.push({ rawCitation: '@' + key, file: file.path, line: lineIdx + 1 });
+                  }
+
+                  const id = file.path + '::' + (lineIdx + 1) + '::@' + key + '::' + (isCaseMismatch ? 'case' : 'typo');
                   if (!dismissed.has(id)) {
                     lintWarnings.push({
                       id,
@@ -291,16 +300,20 @@ export class ProjectIndexer {
                       lineContent: displayLine,
                       rawCitation: '@' + key,
                       citekey: key,
-                      severity: 'warning',
-                      shortTitle: 'Possible Citekey Typo',
-                      explanation: 'Found "@' + key + '" which closely matches library entry "@' + fuzzyMatch.citekey + '".',
+                      severity: isCaseMismatch ? 'info' : 'warning',
+                      shortTitle: isCaseMismatch ? 'Citekey Capitalization Mismatch' : 'Possible Citekey Typo',
+                      explanation: isCaseMismatch
+                        ? 'Citekey "@' + key + '" has different capitalization than library entry "@' + fuzzyMatch.citekey + '".'
+                        : 'Found "@' + key + '" which closely matches library entry "@' + fuzzyMatch.citekey + '".',
                       suggestedFix: '@' + fuzzyMatch.citekey,
                       fixOptions: [
-                        { label: 'Fix Typo -> @' + fuzzyMatch.citekey, action: 'replace', replacementText: '@' + fuzzyMatch.citekey },
+                        { label: 'Fix ' + (isCaseMismatch ? 'Capitalization' : 'Typo') + ' -> @' + fuzzyMatch.citekey, action: 'replace', replacementText: '@' + fuzzyMatch.citekey },
                         { label: 'Dismiss', action: 'dismiss' }
                       ],
                       type: 'author_typo_fuzzy',
-                      message: 'Possible typo in @' + key + '. Did you mean @' + fuzzyMatch.citekey + '?',
+                      message: isCaseMismatch
+                        ? 'Citekey @' + key + ' differs in case from @' + fuzzyMatch.citekey + '.'
+                        : 'Possible typo in @' + key + '. Did you mean @' + fuzzyMatch.citekey + '?',
                     });
                   }
                 } else {
@@ -434,7 +447,14 @@ export class ProjectIndexer {
             } else {
               const fuzzyMatch = LintEngine.findFuzzyRef(key, allReferences);
               if (fuzzyMatch) {
-                const id = file.path + '::' + (lineIdx + 1) + '::[^' + key + ']::typo';
+                const isCaseMismatch = key.toLowerCase() === fuzzyMatch.citekey.toLowerCase();
+                if (isCaseMismatch) {
+                  inBodyKeysInFile.add(fuzzyMatch.citekey.toLowerCase());
+                  if (!referenceUsageMap[fuzzyMatch.citekey]) referenceUsageMap[fuzzyMatch.citekey] = [];
+                  referenceUsageMap[fuzzyMatch.citekey].push({ filePath: file.path, fileName: file.basename, lineNumber: lineIdx + 1, lineContent: displayLine });
+                }
+
+                const id = file.path + '::' + (lineIdx + 1) + '::[^' + key + ']::' + (isCaseMismatch ? 'case' : 'typo');
                 if (!dismissed.has(id)) {
                   lintWarnings.push({
                     id,
@@ -444,13 +464,17 @@ export class ProjectIndexer {
                     lineContent: displayLine,
                     rawCitation: '[^' + key + ']',
                     citekey: key,
-                    severity: 'warning',
-                    shortTitle: 'Possible Footnote Typo',
-                    explanation: 'Footnote marker [^' + key + '] closely matches library entry [^' + fuzzyMatch.citekey + '].',
+                    severity: isCaseMismatch ? 'info' : 'warning',
+                    shortTitle: isCaseMismatch ? 'Footnote Capitalization Mismatch' : 'Possible Footnote Typo',
+                    explanation: isCaseMismatch
+                      ? 'Footnote marker [^' + key + '] has different capitalization than library entry [^' + fuzzyMatch.citekey + '].'
+                      : 'Footnote marker [^' + key + '] closely matches library entry [^' + fuzzyMatch.citekey + '].',
                     suggestedFix: '[^' + fuzzyMatch.citekey + ']',
-                    fixOptions: [{ label: 'Fix Typo -> [^' + fuzzyMatch.citekey + ']', action: 'replace', replacementText: '[^' + fuzzyMatch.citekey + ']' }, { label: 'Dismiss', action: 'dismiss' }],
+                    fixOptions: [{ label: 'Fix ' + (isCaseMismatch ? 'Capitalization' : 'Typo') + ' -> [^' + fuzzyMatch.citekey + ']', action: 'replace', replacementText: '[^' + fuzzyMatch.citekey + ']' }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'author_typo_fuzzy',
-                    message: 'Possible typo in [^' + key + ']. Did you mean [^' + fuzzyMatch.citekey + ']?',
+                    message: isCaseMismatch
+                      ? 'Footnote marker [^' + key + '] differs in case from [^' + fuzzyMatch.citekey + '].'
+                      : 'Possible typo in [^' + key + ']. Did you mean [^' + fuzzyMatch.citekey + ']?',
                   });
                 }
               } else {
@@ -765,7 +789,8 @@ export class ProjectIndexer {
             } else {
               const fuzzyMatch = LintEngine.findFuzzyRef(key, allReferences);
               if (fuzzyMatch) {
-                const id = file.path + '::def::' + key + '::typo';
+                const isCaseMismatch = key.toLowerCase() === fuzzyMatch.citekey.toLowerCase();
+                const id = file.path + '::def::' + key + '::' + (isCaseMismatch ? 'case' : 'typo');
                 if (!dismissed.has(id)) {
                   const lineIdx = rawLines.findIndex(l => l.includes('[^' + key + ']:'));
                   lintWarnings.push({
@@ -777,13 +802,17 @@ export class ProjectIndexer {
                     rawCitation: currentDefLine,
                     citekey: key,
                     definitionSnippet: currentDefText,
-                    suggestedFix: '[^' + fuzzyMatch.citekey + ']: ' + CitationEngine.formatFootnoteDefinition(fuzzyMatch, targetStyle, 1).replace(/^\\[\\^[^\\]]+\\]:\\s*/, ''),
-                    severity: 'warning',
-                    shortTitle: 'Possible Footnote Def Typo',
-                    explanation: 'Footnote definition key [^' + key + '] closely matches library reference [^' + fuzzyMatch.citekey + '].',
-                    fixOptions: [{ label: 'Fix Key -> [^' + fuzzyMatch.citekey + ']', action: 'replace', replacementText: '[^' + fuzzyMatch.citekey + ']: ' + currentDefText }, { label: 'Dismiss', action: 'dismiss' }],
+                    suggestedFix: '[^' + fuzzyMatch.citekey + ']: ' + CitationEngine.formatFootnoteDefinition(fuzzyMatch, targetStyle, 1).replace(/^\[\^[^\\]]+\]:\s*/, ''),
+                    severity: isCaseMismatch ? 'info' : 'warning',
+                    shortTitle: isCaseMismatch ? 'Footnote Def Capitalization Mismatch' : 'Possible Footnote Def Typo',
+                    explanation: isCaseMismatch
+                      ? 'Footnote definition key [^' + key + '] has different capitalization than library entry [^' + fuzzyMatch.citekey + '].'
+                      : 'Footnote definition key [^' + key + '] closely matches library reference [^' + fuzzyMatch.citekey + '].',
+                    fixOptions: [{ label: 'Fix ' + (isCaseMismatch ? 'Capitalization' : 'Key') + ' -> [^' + fuzzyMatch.citekey + ']', action: 'replace', replacementText: '[^' + fuzzyMatch.citekey + ']: ' + currentDefText }, { label: 'Dismiss', action: 'dismiss' }],
                     type: 'author_typo_fuzzy',
-                    message: 'Possible typo in [^' + key + ']: definition. Did you mean [^' + fuzzyMatch.citekey + ']?',
+                    message: isCaseMismatch
+                      ? 'Footnote definition [^' + key + ']: differs in case from [^' + fuzzyMatch.citekey + '].'
+                      : 'Possible typo in [^' + key + ']: definition. Did you mean [^' + fuzzyMatch.citekey + ']?',
                   });
                 }
               } else {

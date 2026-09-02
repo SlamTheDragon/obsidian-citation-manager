@@ -48,6 +48,12 @@ assert(fuzzy1 !== null && fuzzy1.citekey === "Vaswani2017", "Fuzzy matcher recov
 const fuzzy2 = LintEngine.findFuzzyRef("Devln2019", testLib);
 assert(fuzzy2 !== null && fuzzy2.citekey === "Devlin2019", "Fuzzy matcher recovered Devlin2019 from Devln2019");
 
+const fuzzyCaseLower = LintEngine.findFuzzyRef("vaswani2017", testLib);
+assert(fuzzyCaseLower !== null && fuzzyCaseLower.citekey === "Vaswani2017", "Fuzzy matcher recovered Vaswani2017 from all-lowercase vaswani2017");
+
+const fuzzyCaseUpper = LintEngine.findFuzzyRef("VASWANI2017", testLib);
+assert(fuzzyCaseUpper !== null && fuzzyCaseUpper.citekey === "Vaswani2017", "Fuzzy matcher recovered Vaswani2017 from all-uppercase VASWANI2017");
+
 const fuzzyNone = LintEngine.findFuzzyRef("UnknownAuthor2025", testLib);
 assert(fuzzyNone === null, "Fuzzy matcher returns null when distance > 2");
 

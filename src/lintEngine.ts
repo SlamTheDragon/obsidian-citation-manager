@@ -39,13 +39,24 @@ export class LintEngine {
   }
 
   /**
-   * Finds nearest library citekey with edit distance <= 2
+   * Finds nearest library citekey with edit distance <= 2 (including case-mismatches and typos)
    */
   static findFuzzyRef(queryKey: string, allReferences: Map<string, ReferenceMetadata>): ReferenceMetadata | null {
+    if (allReferences.has(queryKey)) return allReferences.get(queryKey)!;
+
     const cleanQuery = queryKey.toLowerCase().replace(/[^a-z0-9]/g, '');
     let candidate: ReferenceMetadata | null = null;
     let minDistance = 3;
 
+    // 1. Direct case-insensitive match (Capitalization discrepancy, e.g. vaswani2017 vs Vaswani2017)
+    for (const ref of allReferences.values()) {
+      const cleanRefKey = ref.citekey.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanQuery === cleanRefKey) {
+        return ref;
+      }
+    }
+
+    // 2. Levenshtein fuzzy match (edit distance 1 or 2)
     for (const ref of allReferences.values()) {
       const cleanRefKey = ref.citekey.toLowerCase().replace(/[^a-z0-9]/g, '');
       const dist = LintEngine.levenshteinDistance(cleanQuery, cleanRefKey);
