@@ -29,7 +29,7 @@ export class CollectionEditorModal extends Modal {
 
     const card = contentEl.createDiv({ cls: "citation-modal-section-card" });
 
-    new Setting(card)
+    const titleSetting = new Setting(card)
       .setName("Collection Title")
       .setDesc("A clear name for this citation group (e.g. 'Methodology Papers', 'Background Literature').")
       .addText(text => {
@@ -38,7 +38,8 @@ export class CollectionEditorModal extends Modal {
         text.onChange(val => { this.name = val; });
       });
 
-    new Setting(card)
+    const descCard = contentEl.createDiv({ cls: "citation-modal-section-card citation-modal-vertical-card" });
+    const descSetting = new Setting(descCard)
       .setName("Description")
       .setDesc("Optional summary describing the purpose or scope of this collection.")
       .addTextArea(area => {
@@ -46,6 +47,7 @@ export class CollectionEditorModal extends Modal {
         area.setValue(this.description);
         area.onChange(val => { this.description = val; });
       });
+    descSetting.setClass("citation-modal-vertical-setting");
 
     const buttonRow = contentEl.createDiv({ cls: "modal-button-container citation-modal-buttons" });
     const cancelBtn = buttonRow.createEl("button", { text: "Cancel" });

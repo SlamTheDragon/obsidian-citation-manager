@@ -143,13 +143,17 @@ assert(cols.rightCol.length === 0, "In-modal search excludes non-matching right 
 refB.collectionId = col2.id;
 assert(refB.collectionId === col2.id, "Single Move Modal assigned Smith2020 to col2");
 
-// Verify card action grouping structure
+// Verify flipped card action grouping structure
 const cardActions = {
-  leftGroup: ["move", "delete"],
-  rightGroup: ["insert", "notes", "edit"]
+  leftGroup: ["insert", "notes", "edit"],
+  rightGroup: ["move", "delete"]
 };
-assert(cardActions.leftGroup.includes("move") && cardActions.leftGroup.includes("delete"), "Move and Delete buttons grouped on the left");
-assert(cardActions.rightGroup.includes("insert") && cardActions.rightGroup.includes("notes") && cardActions.rightGroup.includes("edit"), "Insert, Notes, and Edit buttons grouped on the right");
+assert(cardActions.leftGroup.includes("insert") && cardActions.leftGroup.includes("notes") && cardActions.leftGroup.includes("edit"), "Insert, Notes, and Edit buttons grouped on the left");
+assert(cardActions.rightGroup.includes("move") && cardActions.rightGroup.includes("delete"), "Move and Delete buttons grouped on the right");
+
+// Verify General / Default collection is blacklisted from collections subpanel and filter checklist
+const userVisibleCols = collectionsStore.filter(c => !c.isDefault && c.id !== DEFAULT_COLLECTION_ID);
+assert(!userVisibleCols.some(c => c.id === 'default'), "General collection is blacklisted from visible collections list and filters");
 
 // -----------------------------------------------------------------------------
 // BRANCH 6: Safe Collection Deletion & Citation Preservation

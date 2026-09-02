@@ -41,7 +41,22 @@ export class MoveToCollectionModal extends Modal {
     const listLabel = contentEl.createDiv({ cls: "citation-transfer-instruction" });
     listLabel.createSpan({ text: "Select destination collection:" });
 
+    const searchRow = contentEl.createDiv({ cls: "citation-transfer-search-row" });
+    const searchInput = searchRow.createEl("input", {
+      type: "text",
+      placeholder: "Search collections by title or description...",
+      cls: "citation-transfer-search-input citation-move-search-input"
+    });
+
     const listContainer = contentEl.createDiv({ cls: "citation-move-collection-list" });
+
+    searchInput.addEventListener("input", () => {
+      const q = searchInput.value.toLowerCase().trim();
+      listContainer.querySelectorAll(".citation-move-collection-item").forEach((el: HTMLElement) => {
+        const searchText = el.getAttribute("data-search-text") || "";
+        el.style.display = (!q || searchText.includes(q)) ? "flex" : "none";
+      });
+    });
 
     for (const col of this.collections) {
       const isCurrent = (this.ref.collectionId || DEFAULT_COLLECTION_ID) === col.id;
@@ -50,6 +65,7 @@ export class MoveToCollectionModal extends Modal {
       const item = listContainer.createDiv({
         cls: `citation-move-collection-item ${isCurrent ? 'current-active' : ''}`
       });
+      item.setAttribute("data-search-text", `${col.name.toLowerCase()} ${(col.description || '').toLowerCase()}`);
 
       const iconEl = item.createSpan({ cls: "item-icon" });
       setIcon(iconEl, col.isDefault ? "folder" : "folder-open");

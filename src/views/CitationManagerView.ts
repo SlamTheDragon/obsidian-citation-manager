@@ -93,6 +93,19 @@ export class CitationManagerView extends ItemView {
     );
 
     this.registerEvent(
+      this.app.workspace.on('file-open', (file) => {
+        if (file) {
+          this.lastActiveFilePath = file.path;
+          const mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          if (mdView) {
+            this.lastActiveMarkdownView = mdView;
+          }
+          this.updateActiveDocBanner();
+        }
+      })
+    );
+
+    this.registerEvent(
       this.app.metadataCache.on('changed', () => {
         this.refreshDataDebounced(60);
       })
@@ -417,12 +430,12 @@ export class CitationManagerView extends ItemView {
       this.renderUI();
     });
 
-    // Action Button 2: Bibliography Toggle (Quotation mark icon 'quote-glyph')
+    // Action Button 2: Bibliography Toggle
     const bibBtn = row.createEl("button", { 
       cls: `citation-merged-btn merged-btn-right-end ${this.currentSubpanel === 'bib' ? 'active' : ''}`, 
       title: "Generate Bibliography" 
     });
-    setIcon(bibBtn, "quote-glyph");
+    setIcon(bibBtn, "log-out");
     bibBtn.addEventListener("click", () => {
       this.currentSubpanel = this.currentSubpanel === 'bib' ? 'citations' : 'bib';
       this.renderUI();
@@ -451,128 +464,177 @@ export class CitationManagerView extends ItemView {
   private renderDynamicFilterSection(wrapper: HTMLElement, cardsContainer: HTMLElement, project: ProjectRecord | null) {
     wrapper.empty();
 
-    const hasCol = this.selectedCollectionFilters.size > 0;
-    const hasType = this.selectedTypeFilters.size > 0;
-    const isCleanState = !hasCol && !hasType;
-
     const chipsRow = wrapper.createDiv({ cls: "citation-dynamic-filter-chips-row" });
-
-    if (isCleanState) {
-      // (State 1 - Clean)
-      // Filters [filter / sliders-horizontal icon]
-      const filterBtn = chipsRow.createEl("button", {
-        cls: `citation-filter-pill-btn ${this.isFilterIslandOpen ? 'active' : ''}`,
-        title: "Open Collection & Type Filters"
-      });
-      setIcon(filterBtn.createSpan({ cls: "btn-icon" }), "sliders-horizontal");
-      filterBtn.createSpan({ text: " Filters" });
-      filterBtn.addEventListener("click", () => {
-        this.isFilterIslandOpen = !this.isFilterIslandOpen;
-        this.renderDynamicFilterSection(wrapper, cardsContainer, project);
-      });
-    } else {
-      // (States 2, 3, 4 - Active Filters)
-      // Edit Filters [Pencil Icon]
-      const editBtn = chipsRow.createEl("button", {
-        cls: `citation-filter-pill-btn ${this.isFilterIslandOpen ? 'active' : ''}`,
-        title: "Edit Active Filters"
-      });
-      setIcon(editBtn.createSpan({ cls: "btn-icon" }), "pencil");
-      editBtn.createSpan({ text: " Edit Filters" });
-      editBtn.addEventListener("click", () => {
-        this.isFilterIslandOpen = !this.isFilterIslandOpen;
-        this.renderDynamicFilterSection(wrapper, cardsContainer, project);
-      });
-
-      // Clear Filters [X Icon]
-      const clearBtn = chipsRow.createEl("button", {
-        cls: "citation-filter-pill-btn btn-clear-filters",
-        title: "Clear All Active Filters"
-      });
-      setIcon(clearBtn.createSpan({ cls: "btn-icon" }), "x");
-      clearBtn.createSpan({ text: " Clear Filters" });
-      clearBtn.addEventListener("click", () => {
-        this.selectedCollectionFilters.clear();
-        this.selectedTypeFilters.clear();
-        this.renderDynamicFilterSection(wrapper, cardsContainer, project);
-        this.renderCardsOnly(cardsContainer, project);
-      });
-
-      // Collection Active Chips
-      for (const colId of this.selectedCollectionFilters) {
-        const col = this.settings.collections?.find(c => c.id === colId) || { name: colId };
-        const chip = chipsRow.createSpan({ cls: "citation-filter-active-chip col-chip" });
-        chip.createSpan({ cls: "chip-label", text: col.name });
-        const removeX = chip.createSpan({ cls: "chip-remove-icon" });
-        setIcon(removeX, "x");
-        chip.addEventListener("click", () => {
-          this.selectedCollectionFilters.delete(colId);
-          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
-          this.renderCardsOnly(cardsContainer, project);
-        });
-      }
-
-      // Type Active Chips
-      const typeLabels: Record<string, string> = {
-        journal: "Journal",
-        conference: "Conference",
-        book: "Book",
-        webpage: "Webpage",
-        blog: "Blog",
-        video: "Video",
-        preprint: "Preprint",
-        report: "Report",
-        standard: "Standard",
-        thesis: "Thesis",
-        other: "Other",
-      };
-
-      for (const typeId of this.selectedTypeFilters) {
-        const label = typeLabels[typeId] || typeId;
-        const chip = chipsRow.createSpan({ cls: "citation-filter-active-chip type-chip-active" });
-        chip.createSpan({ cls: "chip-label", text: label });
-        const removeX = chip.createSpan({ cls: "chip-remove-icon" });
-        setIcon(removeX, "x");
-        chip.addEventListener("click", () => {
-          this.selectedTypeFilters.delete(typeId);
-          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
-          this.renderCardsOnly(cardsContainer, project);
-        });
-      }
+    const islandContainer = wrapper.createDiv({ cls: "citation-filter-island-container" });
+    if (!this.isFilterIslandOpen) {
+      islandContainer.style.display = "none";
     }
 
-    // Animated Expanding Two-Column Filter Island
-    if (this.isFilterIslandOpen) {
-      const island = wrapper.createDiv({ cls: "citation-filter-island-container animated-expand" });
-      const grid = island.createDiv({ cls: "citation-filter-island-grid" });
+    const updateChipsRow = () => {
+      chipsRow.empty();
+      const hasCol = this.selectedCollectionFilters.size > 0;
+      const hasType = this.selectedTypeFilters.size > 0;
+      const isCleanState = !hasCol && !hasType;
 
+      if (isCleanState) {
+        // (State 1 - Clean)
+        // Filters [sliders-horizontal icon]
+        const filterBtn = chipsRow.createEl("button", {
+          cls: `citation-filter-pill-btn ${this.isFilterIslandOpen ? 'active' : ''}`,
+          title: "Open Collection & Type Filters"
+        });
+        setIcon(filterBtn.createSpan({ cls: "btn-icon" }), "sliders-horizontal");
+        filterBtn.createSpan({ text: " Filters" });
+        filterBtn.addEventListener("click", () => {
+          this.isFilterIslandOpen = !this.isFilterIslandOpen;
+          if (this.isFilterIslandOpen) {
+            islandContainer.style.display = "block";
+            islandContainer.addClass("animated-expand");
+            filterBtn.addClass("active");
+          } else {
+            islandContainer.style.display = "none";
+            islandContainer.removeClass("animated-expand");
+            filterBtn.removeClass("active");
+          }
+        });
+      } else {
+        // (States 2, 3, 4 - Active Filters)
+        // Edit Filters [Pencil Icon]
+        const editBtn = chipsRow.createEl("button", {
+          cls: `citation-filter-pill-btn ${this.isFilterIslandOpen ? 'active' : ''}`,
+          title: "Edit Active Filters"
+        });
+        setIcon(editBtn.createSpan({ cls: "btn-icon" }), "pencil");
+        editBtn.createSpan({ text: " Edit Filters" });
+        editBtn.addEventListener("click", () => {
+          this.isFilterIslandOpen = !this.isFilterIslandOpen;
+          if (this.isFilterIslandOpen) {
+            islandContainer.style.display = "block";
+            islandContainer.addClass("animated-expand");
+            editBtn.addClass("active");
+          } else {
+            islandContainer.style.display = "none";
+            islandContainer.removeClass("animated-expand");
+            editBtn.removeClass("active");
+          }
+        });
+
+        // Clear Filters [X Icon]
+        const clearBtn = chipsRow.createEl("button", {
+          cls: "citation-filter-pill-btn btn-clear-filters",
+          title: "Clear All Active Filters"
+        });
+        setIcon(clearBtn.createSpan({ cls: "btn-icon" }), "x");
+        clearBtn.createSpan({ text: " Clear Filters" });
+        clearBtn.addEventListener("click", () => {
+          this.selectedCollectionFilters.clear();
+          this.selectedTypeFilters.clear();
+          updateChipsRow();
+          renderIslandContent();
+          this.renderCardsOnly(cardsContainer, project);
+        });
+
+        // Collection Active Chips
+        for (const colId of this.selectedCollectionFilters) {
+          const col = this.settings.collections?.find(c => c.id === colId) || { name: colId };
+          const chip = chipsRow.createSpan({ cls: "citation-filter-active-chip col-chip" });
+          chip.createSpan({ cls: "chip-label", text: col.name });
+          const removeX = chip.createSpan({ cls: "chip-remove-icon" });
+          setIcon(removeX, "x");
+          chip.addEventListener("click", () => {
+            this.selectedCollectionFilters.delete(colId);
+            updateChipsRow();
+            renderIslandContent();
+            this.renderCardsOnly(cardsContainer, project);
+          });
+        }
+
+        // Type Active Chips
+        const typeLabels: Record<string, string> = {
+          journal: "Journal",
+          conference: "Conference",
+          book: "Book",
+          webpage: "Webpage",
+          blog: "Blog",
+          video: "Video",
+          preprint: "Preprint",
+          report: "Report",
+          standard: "Standard",
+          thesis: "Thesis",
+          other: "Other",
+        };
+
+        for (const typeId of this.selectedTypeFilters) {
+          const label = typeLabels[typeId] || typeId;
+          const chip = chipsRow.createSpan({ cls: "citation-filter-active-chip type-chip-active" });
+          chip.createSpan({ cls: "chip-label", text: label });
+          const removeX = chip.createSpan({ cls: "chip-remove-icon" });
+          setIcon(removeX, "x");
+          chip.addEventListener("click", () => {
+            this.selectedTypeFilters.delete(typeId);
+            updateChipsRow();
+            renderIslandContent();
+            this.renderCardsOnly(cardsContainer, project);
+          });
+        }
+      }
+    };
+
+    const renderIslandContent = () => {
+      islandContainer.empty();
+      const grid = islandContainer.createDiv({ cls: "citation-filter-island-grid" });
       const allRefsList = Array.from(this.referencesMap.values());
+
+      // Filter out General / default collection
+      const userCols = (this.settings.collections || []).filter(c => !c.isDefault && c.id !== DEFAULT_COLLECTION_ID);
 
       // Column 1: Collections Checklist
       const colCol = grid.createDiv({ cls: "filter-island-col" });
       colCol.createEl("h5", { cls: "filter-col-header", text: "Collections" });
+
+      if (userCols.length >= 6) {
+        const searchInput = colCol.createEl("input", {
+          type: "text",
+          placeholder: "Search collections...",
+          cls: "filter-island-col-search"
+        });
+        searchInput.addEventListener("input", () => {
+          const q = searchInput.value.toLowerCase().trim();
+          colList.querySelectorAll(".filter-checklist-item").forEach((itemEl: HTMLElement) => {
+            const name = itemEl.getAttribute("data-col-name") || "";
+            itemEl.style.display = (!q || name.includes(q)) ? "flex" : "none";
+          });
+        });
+      }
+
       const colList = colCol.createDiv({ cls: "filter-checklist" });
 
-      for (const col of this.settings.collections || []) {
-        const count = allRefsList.filter(r => (r.collectionId || DEFAULT_COLLECTION_ID) === col.id).length;
-        const item = colList.createDiv({ cls: "filter-checklist-item" });
-        const checkbox = item.createEl("input", { type: "checkbox" });
-        checkbox.checked = this.selectedCollectionFilters.has(col.id);
-        const label = item.createEl("span", { cls: "checklist-text", text: col.name });
-        item.createEl("span", { cls: "checklist-count", text: `(${count})` });
+      if (userCols.length === 0) {
+        colList.createDiv({ cls: "citation-empty-note", text: "No custom collections yet." });
+      } else {
+        for (const col of userCols) {
+          const count = allRefsList.filter(r => (r.collectionId || DEFAULT_COLLECTION_ID) === col.id).length;
+          const item = colList.createDiv({ cls: "filter-checklist-item" });
+          item.setAttribute("data-col-name", col.name.toLowerCase());
+          const checkbox = item.createEl("input", { type: "checkbox" });
+          checkbox.checked = this.selectedCollectionFilters.has(col.id);
+          const label = item.createEl("span", { cls: "checklist-text", text: col.name });
+          item.createEl("span", { cls: "checklist-count", text: `(${count})` });
 
-        const toggleCol = () => {
-          if (this.selectedCollectionFilters.has(col.id)) {
-            this.selectedCollectionFilters.delete(col.id);
-          } else {
-            this.selectedCollectionFilters.add(col.id);
-          }
-          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
-          this.renderCardsOnly(cardsContainer, project);
-        };
+          const toggleCol = () => {
+            if (this.selectedCollectionFilters.has(col.id)) {
+              this.selectedCollectionFilters.delete(col.id);
+            } else {
+              this.selectedCollectionFilters.add(col.id);
+            }
+            updateChipsRow();
+            checkbox.checked = this.selectedCollectionFilters.has(col.id);
+            this.renderCardsOnly(cardsContainer, project);
+          };
 
-        checkbox.addEventListener("change", toggleCol);
-        label.addEventListener("click", toggleCol);
+          checkbox.addEventListener("change", toggleCol);
+          label.addEventListener("click", toggleCol);
+        }
       }
 
       // Column 2: Publication Types Checklist
@@ -606,14 +668,18 @@ export class CitationManagerView extends ItemView {
           } else {
             this.selectedTypeFilters.add(t.id);
           }
-          this.renderDynamicFilterSection(wrapper, cardsContainer, project);
+          updateChipsRow();
+          checkbox.checked = this.selectedTypeFilters.has(t.id);
           this.renderCardsOnly(cardsContainer, project);
         };
 
         checkbox.addEventListener("change", toggleType);
         label.addEventListener("click", toggleType);
       }
-    }
+    };
+
+    updateChipsRow();
+    renderIslandContent();
   }
 
   // --- SUBPANEL 4: CITATION COLLECTIONS / GROUPS SUBPANEL ---
@@ -622,8 +688,9 @@ export class CitationManagerView extends ItemView {
 
     // 1. Top Create Collection Island
     const topActionCard = wrapper.createDiv({ cls: "citation-card citation-top-action-card" });
-    const createColBtn = topActionCard.createEl("button", { cls: "citation-big-cta-btn", text: "+ Create Collection" });
+    const createColBtn = topActionCard.createEl("button", { cls: "citation-big-cta-btn" });
     setIcon(createColBtn.createSpan({ cls: "btn-icon" }), "folder-plus");
+    createColBtn.createSpan({ text: " Create Collection" });
     createColBtn.addEventListener("click", () => {
       new CollectionEditorModal(this.app, null, async (newCol) => {
         this.settings.collections.push(newCol);
@@ -641,7 +708,18 @@ export class CitationManagerView extends ItemView {
     const cardsContainer = wrapper.createDiv({ cls: "citation-reference-list-container" });
     const allRefsList = Array.from(this.referencesMap.values());
 
-    for (const col of this.settings.collections || []) {
+    // Exclude General (Default) collection
+    const userCols = (this.settings.collections || []).filter(c => !c.isDefault && c.id !== DEFAULT_COLLECTION_ID);
+
+    if (userCols.length === 0) {
+      const emptyBox = cardsContainer.createDiv({ cls: "citation-empty-clean" });
+      setIcon(emptyBox.createDiv({ cls: "empty-icon" }), "folder");
+      emptyBox.createEl("h3", { text: "No custom collections yet" });
+      emptyBox.createEl("p", { text: "Click [Create Collection] above to organize citations into groups." });
+      return;
+    }
+
+    for (const col of userCols) {
       const count = allRefsList.filter(r => (r.collectionId || DEFAULT_COLLECTION_ID) === col.id).length;
 
       const card = cardsContainer.createDiv({ cls: "citation-card citation-collection-card" });
@@ -650,13 +728,8 @@ export class CitationManagerView extends ItemView {
       // Card Header
       const cardHeader = card.createDiv({ cls: "citation-card-header" });
       const folderIcon = cardHeader.createSpan({ cls: "collection-folder-icon" });
-      setIcon(folderIcon, col.isDefault ? "folder" : "folder-open");
+      setIcon(folderIcon, "folder-open");
       cardHeader.createSpan({ cls: "citation-key-pill", text: col.name });
-
-      if (col.isDefault) {
-        cardHeader.createSpan({ cls: "citation-default-badge", text: "DEFAULT" });
-      }
-
       cardHeader.createSpan({ cls: "citation-usage-pill used", text: `${count} citation(s)` });
 
       // Title & Description
@@ -701,36 +774,34 @@ export class CitationManagerView extends ItemView {
         }).open();
       });
 
-      // Delete Button (Protected for default collection)
-      if (!col.isDefault) {
-        const deleteBtn = actionsLeft.createEl("button", { cls: "citation-card-btn btn-danger", title: "Delete Collection" });
-        setIcon(deleteBtn.createSpan({ cls: "btn-icon" }), "trash-2");
-        deleteBtn.addEventListener("click", (e) => {
-          e.stopPropagation();
-          new ConfirmModal(
-            this.app,
-            `Delete Collection: ${col.name}`,
-            `Delete collection "${col.name}"? Bare citations will remain safe and be moved to General collection.`,
-            "Delete Collection",
-            true,
-            async () => {
-              for (const ref of this.referencesMap.values()) {
-                if (ref.collectionId === col.id) {
-                  ref.collectionId = DEFAULT_COLLECTION_ID;
-                  await this.storageManager.saveReference(ref);
-                }
+      // Delete Button (Safe deletion)
+      const deleteBtn = actionsLeft.createEl("button", { cls: "citation-card-btn btn-danger", title: "Delete Collection" });
+      setIcon(deleteBtn.createSpan({ cls: "btn-icon" }), "trash-2");
+      deleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        new ConfirmModal(
+          this.app,
+          `Delete Collection: ${col.name}`,
+          `Delete collection "${col.name}"? Bare citations will remain safe and be moved to General collection.`,
+          "Delete Collection",
+          true,
+          async () => {
+            for (const ref of this.referencesMap.values()) {
+              if (ref.collectionId === col.id) {
+                ref.collectionId = DEFAULT_COLLECTION_ID;
+                await this.storageManager.saveReference(ref);
               }
-              this.settings.collections = this.settings.collections.filter(c => c.id !== col.id);
-              if (this.selectedCollectionFilters.has(col.id)) {
-                this.selectedCollectionFilters.delete(col.id);
-              }
-              await this.onSaveSettings();
-              await this.refreshData();
-              new Notice(`Deleted collection "${col.name}"`);
             }
-          ).open();
-        });
-      }
+            this.settings.collections = this.settings.collections.filter(c => c.id !== col.id);
+            if (this.selectedCollectionFilters.has(col.id)) {
+              this.selectedCollectionFilters.delete(col.id);
+            }
+            await this.onSaveSettings();
+            await this.refreshData();
+            new Notice(`Deleted collection "${col.name}"`);
+          }
+        ).open();
+      });
 
       // Clicking card anywhere opens the transfer modal
       card.addEventListener("click", () => {
@@ -1525,13 +1596,26 @@ export class CitationManagerView extends ItemView {
   private async insertCitationIntoActiveEditor(ref: ReferenceMetadata, project: ProjectRecord | null) {
     const t0 = performance.now();
     let mdView = this.app.workspace.getActiveViewOfType(MarkdownView);
-    if (!mdView && this.lastActiveMarkdownView) {
+    if (!mdView) {
+      const leaves = this.app.workspace.getLeavesOfType("markdown");
+      if (leaves.length > 0) {
+        const matched = leaves.find(l => (l.view as MarkdownView)?.file?.path === this.lastActiveFilePath) || leaves[0];
+        if (matched && matched.view instanceof MarkdownView) {
+          mdView = matched.view;
+        }
+      }
+    }
+    if (!mdView && this.lastActiveMarkdownView && this.lastActiveMarkdownView.file) {
       mdView = this.lastActiveMarkdownView;
     }
 
     if (!mdView) {
       new Notice("Please open a note in the editor first.");
       return;
+    }
+
+    if (mdView.leaf) {
+      this.app.workspace.setActiveLeaf(mdView.leaf, { focus: true });
     }
 
     const editor = mdView.editor;
@@ -1542,7 +1626,7 @@ export class CitationManagerView extends ItemView {
     const style: CitationStyle = project?.citationStyle || 'apa7';
 
     const cursor = editor.getCursor();
-    const lineText = editor.getLine(cursor.line);
+    const lineText = editor.getLine(cursor.line) || "";
     const docText = editor.getValue();
     const existingFnMatches = docText.match(/^\[\^[^\]]+\]:/gm) || [];
     const footnoteIndex = existingFnMatches.length + 1;
@@ -1564,8 +1648,10 @@ export class CitationManagerView extends ItemView {
         { line: cursor.line, ch: overload.replaceStartCh },
         { line: cursor.line, ch: overload.replaceEndCh }
       );
+      editor.setCursor({ line: cursor.line, ch: overload.replaceStartCh + overload.replacementText.length });
     } else {
       editor.replaceRange(overload.replacementText, cursor);
+      editor.setCursor({ line: cursor.line, ch: cursor.ch + overload.replacementText.length });
     }
 
     const updatedDocText = editor.getValue();
