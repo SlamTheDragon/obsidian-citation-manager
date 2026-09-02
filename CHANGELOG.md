@@ -35,6 +35,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Planned for [1.0.2]
 - Modal form field sequence and layout unification across `PDFImportModal`, `ReferenceEditorModal`, and metadata resolvers.
+- add support for Medlars & RefWorks import
+- add bibTex library export option with filtering for collections/selected citations
+- fix import citations library modal spacing
+- flip export for publication and [copy to clipboard] and [append to note] buttons in bibliography generation
+- fix used citation indication chip within citation card styling to make citation indicators clearer, just like how it was written in collections card
+- remove "hold shift to append" for citation overloading (this doesn't really work)
+- fix margins of modal islands on some modals
 
 ---
 

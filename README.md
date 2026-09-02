@@ -4,14 +4,53 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Academic Standards](https://img.shields.io/badge/CSL-APA7%20%7C%20IEEE%20%7C%20Harvard%20%7C%20Chicago%20%7C%20Vancouver-green.svg)](https://citationstyles.org/)
 
-A project-centric academic reference manager, live citation indexer, diagnostic linter, and publication export plugin for [Obsidian](https://obsidian.md). Uses a local `.references/` folder to store notes.
+A local-first academic reference manager, live citation indexer, diagnostic linter, and publication export plugin for [Obsidian](https://obsidian.md).
+
+---
+
+## Features
+
+**Modular by Design** </br>
+Draft your research in separate markdown files. Seamlessly manage citations across the vault.
+
+**Local First** </br>
+All citations are stored in your vault. Supports a wide, local-first ecosystems.
+
+**Drafting Made Easy** </br>
+Forget manual formatting. This plugin manages formatting and lints your work for formatting problems. Just insert a reference and focus with writing.
+
+---
+
+## How To Use: A Quick Start
+
+**Corpus Buckets**
+- Make a bucket and register your draft markdown files
+- Import individual references, PDFs, or a reference library from a wide variety of options
+- Use imported citations in your drafts.
+
+**Citation Collections**
+- Group your imported citations with citation collections
+- Filter your citations and collections easily
+
+**Drafting Integrations**
+- Native integration with Obsidian Footnotes Plugin and [Surfing](https://github.com/PKM-er/Obsidian-Surfing)
+- Add notes to your citations when you need it
+
+**Publication**
+- Export your corpus bucket with a clean, formatted citation and bibliography file, ready to be imported on Google Docs or Microsoft Word
+- Directly manage your citation format guided by popular citation standards
 
 ---
 
 ## Key Highlights
 
-- **Local-First and Markdown Native**: Stores all reference records and notes as Markdown files in `.references/` with YAML frontmatter. Uses no cloud databases and no external servers.
-- **5 Academic Standards**: Full CSL implementations for **APA 7th Edition**, **IEEE [1]**, **Harvard (Author Year)**, **Chicago 17th Author-Date**, and **Vancouver (1)**.
+- **Local-First and Markdown Native**: Stores all reference records and notes as Markdown files in a set folder.
+- **5 Academic Standards**: Full CSL implementations for
+    - **APA 7th Edition**
+    - **IEEE [1]**
+    - **Harvard (Author Year)**
+    - **Chicago 17th Author-Date**
+    - **Vancouver (1)**
 - **Citation Buckets**: Group notes by manuscript scope. Each bucket controls its citation standard, linked files, and sequential numeric indexing.
 - **Citation Collections**: Organize literature across buckets with color-coded groups and multi-filter controls.
 - **In-Editor Autocomplete**: Suggests citations at the cursor when you type `[@`, `\cite{`, or `((`.
@@ -19,50 +58,6 @@ A project-centric academic reference manager, live citation indexer, diagnostic 
 - **Obsidian Footnotes Companion**: Draft notes with `[^citekey]` footnote callouts. Converts footnotes to target citation styles during export.
 - **Surfing and Web Viewer Support**: Opens external study sources (DOI, arXiv, URL) directly in Surfing tabs or in the native Obsidian Web Viewer.
 - **Publication Export Pipeline**: Cleans internal tags, converts footnotes into citations, creates sorted bibliographies, and exports standalone notes.
-
----
-
-## Architectural Workflow
-
-```mermaid
-flowchart LR
-    subgraph S1["1. Ingestion"]
-        direction TB
-        I1["<b>Search Island</b><br/>DOI / arXiv / URL / ISBN"]
-        I2["<b>+ New Citation</b><br/>Manual or quick resolution"]
-        I3["<b>PDF Dropzone</b><br/>Auto DOI scan &amp; match"]
-    end
-
-    subgraph S2["2. Scope"]
-        direction TB
-        B1["<b>Citation Buckets</b><br/>Manuscript style isolation"]
-        B2["<b>Collections</b><br/>Cross-bucket group tags"]
-        B3["<b>Linked Notes</b><br/>Direct file binding"]
-    end
-
-    subgraph S3["3. Drafting"]
-        direction TB
-        D1["<b>Autocomplete</b><br/><code>[@</code>, <code>\\cite{</code>, <code>((</code>"]
-        D2["<b>Insert Modal</b><br/>Multi-citation chips"]
-        D3["<b>Footnotes</b><br/><code>[^citekey]</code> drafting"]
-    end
-
-    subgraph S4["4. Diagnostics"]
-        direction TB
-        L1["<b>Telemetry</b><br/>Usage &amp; instance counters"]
-        L2["<b>Linter Accordion</b><br/>Format mismatches"]
-        L3["<b>Batch Fix Modal</b><br/>1-Click repair"]
-    end
-
-    subgraph S5["5. Export"]
-        direction TB
-        E1["<b>In-App Browser</b><br/>Surfing &amp; Web Viewer"]
-        E2["<b>Live Bibliography</b><br/>Auto-sorted reference list"]
-        E3["<b>Export Pipeline</b><br/>Clean standalone notes"]
-    end
-
-    S1 --> S2 --> S3 --> S4 --> S5
-```
 
 ---
 
@@ -106,12 +101,12 @@ flowchart LR
 
 ### 3. Drafting and Insertion
 - **In-Editor Suggestions**: Type `[@`, `\cite{`, or `((` to open the autocomplete popup. Select an entry to insert it in your bucket's active style.
-- **Multi-Citation Modal (`Ctrl/Cmd + Shift + I`)**: Search references. Hold `Shift` to select multiple papers. The engine groups and sorts them automatically:
+- **Citation Overloading**: Search references and append on cursor. The engine groups and sorts them automatically:
   - APA 7: `(Carter et al., 2026; Li, 2024; Norman, 2013)`
   - IEEE: `[1, 3, 5]`
   - Vancouver: `(1, 3, 5)`
 
-### 4. Diagnostic Linter Engine
+### 4. Diagnostic Linting
 - **Continuous Verification**: Scans linked documents for format deviations, orphan footnote definitions, and unresolved citekeys.
 - **Batch Fix Modal**: Shows issues in expandable accordions with before-and-after previews. Select checkboxes and click **Apply Selected Fixes** to repair issues in one step.
 
@@ -135,19 +130,6 @@ flowchart LR
 
 ---
 
-## Technical Documentation
-
-Technical specifications and guides are available in the [`docs/`](./docs/) directory:
-
-- [**Environment & Runtime Guide**](./docs/ENVIRONMENT.md): Node.js LTS, NVM configuration, and Bun execution matrix.
-- [**Architecture & Subsystem Decomposition**](./docs/ARCHITECTURE.md): Class layout, data flows, and state machines.
-- [**Schema Specifications**](./docs/SCHEMAS.md): TypeScript and JSON schemas for references, buckets, collections, and settings.
-- [**CSL Academic Standards Guide**](./docs/STANDARDS.md): Formatting rules for APA 7, IEEE, Harvard, Chicago, and Vancouver.
-- [**Diagnostic Linter Rules**](./docs/LINTING_RULES.md): Rule list, severity ratings, and automated repair logic.
-- [**Contributing Guide**](./docs/CONTRIBUTING.md): Environment setup, Bun test suite, and coding rules.
-- [**Release & Community Discovery Guide**](./docs/RELEASE_AND_DISCOVERY.md): Version bumping, GitHub Actions release pipeline, and Obsidian directory submission.
-
----
 
 ## External & Internal APIs Used
 
@@ -178,7 +160,11 @@ This project is licensed under the [MIT License](./LICENSE).
 
 ---
 
-## Development
+## Development & Technical Documentation
+
+This is a one-off development solution for an internal project and may not see continuous support in the foreseeable future.
+
+Documentations are provided if you wish to contribute
 
 ```bash
 # Run all 30 automated test suites
@@ -193,3 +179,21 @@ bun run package
 # Watch mode for active development
 bun run dev
 ```
+
+---
+
+Technical specifications and guides are available in the [`docs/`](./docs/) directory:
+
+- [**Environment & Runtime Guide**](./docs/ENVIRONMENT.md): Node.js LTS, NVM configuration, and Bun execution matrix.
+- [**Architecture & Subsystem Decomposition**](./docs/ARCHITECTURE.md): Class layout, data flows, and state machines.
+- [**Schema Specifications**](./docs/SCHEMAS.md): TypeScript and JSON schemas for references, buckets, collections, and settings.
+- [**CSL Academic Standards Guide**](./docs/STANDARDS.md): Formatting rules for APA 7, IEEE, Harvard, Chicago, and Vancouver.
+- [**Diagnostic Linter Rules**](./docs/LINTING_RULES.md): Rule list, severity ratings, and automated repair logic.
+- [**Contributing Guide**](./docs/CONTRIBUTING.md): Environment setup, Bun test suite, and coding rules.
+- [**Release & Community Discovery Guide**](./docs/RELEASE_AND_DISCOVERY.md): Version bumping, GitHub Actions release pipeline, and Obsidian directory submission.
+
+---
+
+### Vibecoding
+
+Configure your agent's SKILL.md in [`.agents/`](./.agents/) directory. 
