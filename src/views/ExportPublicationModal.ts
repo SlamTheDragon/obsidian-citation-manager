@@ -245,7 +245,7 @@ export class ExportPublicationModal extends Modal {
         .setName("Export Copy to Destination Folder")
         .setDesc(`Writes compiled document to /${pubFolder}/${this.targetFile.name}. Strips citation frontmatter. Source note remains unmodified.`)
         .addButton(btn => btn
-          .setButtonText(`Export to ${pubFolder}/`)
+          .setButtonText(`Export`)
           .setCta()
           .onClick(async () => {
             btn.setDisabled(true);

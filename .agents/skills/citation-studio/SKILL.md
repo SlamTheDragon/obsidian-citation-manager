@@ -303,3 +303,17 @@ flowchart TD
   - GitHub Actions runs `bun run package` dynamically on CI/Release runs and attaches the assets (`main.js`, `manifest.json`, `styles.css`, `citation-manager.zip`) to GitHub Releases.
 * **Atomic Version Bumping**:
   - `scripts/version-bump.mjs` synchronizes semantic versions atomically across `package.json`, `public/manifest.json`, and `versions.json`.
+
+---
+
+## 7. Agent Handover & Consultation Checklist
+
+### 7.1 Cross-Session Agent Handover Contract
+* When transferring context or finalizing milestones:
+  - Verify all 26 automated test suites run cleanly (`bun run test:all`).
+  - Verify zero TypeScript compiler diagnostics (`bun run tsc --noEmit`).
+  - Package release assets dynamically (`bun run package`).
+  - Document git commit hash, `public/` asset states, and release tag steps.
+
+### 7.2 Interactive Clarification Protocol
+* If user intent is ambiguous, use `ask_question` with structured options instead of unstructured prose.
