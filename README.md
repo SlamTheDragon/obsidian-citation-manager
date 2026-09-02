@@ -155,6 +155,7 @@ Detailed architectural specifications and developer guides are available in the 
 - [**CSL Academic Standards Guide**](./docs/STANDARDS.md): Authoritative formatting rules for APA 7, IEEE, Harvard, Chicago, and Vancouver.
 - [**Diagnostic Linter Rules**](./docs/LINTING_RULES.md): Catalog of diagnostic checks, severity ratings, and automated repair transforms.
 - [**Contributing Guide**](./docs/CONTRIBUTING.md): Environment setup, Bun test suite matrix, and code standards.
+- [**Release & Community Discovery Guide**](./docs/RELEASE_AND_DISCOVERY.md): Automated version bumping, GitHub Actions release pipeline, and Obsidian community directory submission.
 
 ---
 

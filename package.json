@@ -7,6 +7,9 @@
     "dev": "node esbuild.config.mjs",
     "build": "node esbuild.config.mjs production",
     "package": "node scripts/package.mjs",
+    "version:patch": "node scripts/version-bump.mjs patch",
+    "version:minor": "node scripts/version-bump.mjs minor",
+    "version:major": "node scripts/version-bump.mjs major",
     "test": "bun --preload ./tests/obsidian_mock.ts ./tests/run_all_tests.ts",
     "test:all": "bun --preload ./tests/obsidian_mock.ts ./tests/run_all_tests.ts"
   },
