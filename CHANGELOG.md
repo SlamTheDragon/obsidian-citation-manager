@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - fix used citation indication chip within citation card styling to make citation indicators clearer, just like how it was written in collections card
 - remove "hold shift to append" for citation overloading (this doesn't really work)
 - fix margins of modal islands on some modals
+- erroneous citekey generation from import library file entry point
+- citation card corpus title needs to be bigger than authors
 
 ---
 
