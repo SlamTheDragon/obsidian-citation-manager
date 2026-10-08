@@ -34,7 +34,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - Corrected dot-folder PDF resolution in `.references/attachments/` bypassing Obsidian's internal hidden-file mask.
 
 ### Planned for [1.0.2]
-- Modal form field sequence and layout unification across `PDFImportModal`, `ReferenceEditorModal`, and metadata resolvers.
+- Modal form field sequence and layout unification across `PDFImportModal`, `ReferenceEditorModal`, and metadata resolvers. (because it seems that each import modal has its own implementation leading to swapped designs and whatnot)
 - add support for Medlars & RefWorks import
 - add bibTex library export option with filtering for collections/selected citations
 - fix import citations library modal spacing
@@ -44,6 +44,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 - fix margins of modal islands on some modals
 - erroneous citekey generation from import library file entry point
 - citation card corpus title needs to be bigger than authors
+- bibtex or similar import method paste has a breaking citekey generation
+- missing sort chip beside filters, need a similar sub panel popup implementation for this, only one item can be seen at a time
+- nitpick: citation collections subpanel's card items states title twice. Should only be once. The top section should display the first 2 citekeys in the group instead, and any more than it should display ", etc..."
+- in filters: the column's width should be constricted and prevent text overflows
 
 ---
 
